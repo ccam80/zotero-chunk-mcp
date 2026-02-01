@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: zotero-chunk-rag
+Version: 0.1.0
+Summary: Chunk-level semantic search for Zotero libraries
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: chromadb>=0.4.0
+Requires-Dist: google-genai>=1.0.0
+Requires-Dist: pymupdf>=1.23.0
+Requires-Dist: fastmcp>=2.0.0
+Requires-Dist: tqdm>=4.0.0
+Requires-Dist: pydantic>=2.0.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0.0; extra == "dev"

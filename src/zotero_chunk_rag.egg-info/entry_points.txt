@@ -1,0 +1,2 @@
+[console_scripts]
+zotero-chunk-rag = zotero_chunk_rag.server:mcp.run
