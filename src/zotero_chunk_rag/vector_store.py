@@ -1,9 +1,20 @@
 """ChromaDB vector storage with chunk management."""
+import logging
 import chromadb
 from chromadb.config import Settings
 from pathlib import Path
+from typing import TYPE_CHECKING
 from .models import Chunk, StoredChunk
 from .interfaces import EmbedderProtocol
+
+if TYPE_CHECKING:
+    from .models import ExtractedTable
+
+logger = logging.getLogger(__name__)
+
+
+class EmbeddingDimensionMismatchError(Exception):
+    """Raised when embedder dimensions don't match existing index."""
 
 
 class VectorStore:
@@ -25,9 +36,37 @@ class VectorStore:
             path=str(self.db_path),
             settings=Settings(anonymized_telemetry=False)
         )
+
+        # Get embedder dimensions
+        embedder_dims = getattr(embedder, 'dimensions', None)
+
+        # Check if collection exists and has data
+        try:
+            existing = self.client.get_collection("chunks")
+            existing_count = existing.count()
+            if existing_count > 0 and embedder_dims is not None:
+                # Check stored dimension in metadata
+                stored_dims = existing.metadata.get("embedding_dimensions")
+                if stored_dims is not None and stored_dims != embedder_dims:
+                    raise EmbeddingDimensionMismatchError(
+                        f"Embedding dimension mismatch: index has {stored_dims} dimensions "
+                        f"but current embedder uses {embedder_dims} dimensions. "
+                        f"Delete the index and reindex with --force, or switch back to "
+                        f"the original embedding provider.\n"
+                        f"Index path: {db_path}"
+                    )
+        except (ValueError, chromadb.errors.NotFoundError):
+            # Collection doesn't exist yet, that's fine
+            pass
+
+        # Create or get collection with dimension metadata
+        metadata = {"hnsw:space": "cosine"}
+        if embedder_dims is not None:
+            metadata["embedding_dimensions"] = embedder_dims
+
         self.collection = self.client.get_or_create_collection(
             name="chunks",
-            metadata={"hnsw:space": "cosine"}
+            metadata=metadata
         )
         self.embedder = embedder
 
@@ -54,14 +93,25 @@ class VectorStore:
                 "doc_id": doc_id,
                 "doc_title": doc_meta.get("title", ""),
                 "authors": doc_meta.get("authors", ""),
+                "authors_lower": doc_meta.get("authors", "").lower(),  # For case-insensitive search
                 "year": doc_meta.get("year") or 0,
                 "citation_key": doc_meta.get("citation_key", ""),
                 "publication": doc_meta.get("publication", ""),
+                "doi": doc_meta.get("doi", ""),
+                "tags": doc_meta.get("tags", ""),
+                "tags_lower": doc_meta.get("tags", "").lower(),  # For case-insensitive search
+                "collections": doc_meta.get("collections", ""),
+                "pdf_hash": doc_meta.get("pdf_hash", ""),  # Feature 6: for update detection
+                "quality_grade": doc_meta.get("quality_grade", ""),  # Feature 11: extraction quality
                 "page_num": c.page_num,
                 "chunk_index": c.chunk_index,
                 "total_chunks": len(chunks),
                 "char_start": c.char_start,
                 "char_end": c.char_end,
+                "section": c.section,
+                "section_confidence": c.section_confidence,
+                "journal_quartile": doc_meta.get("journal_quartile", ""),
+                "chunk_type": "text",
             }
             for c in chunks
         ]
@@ -72,6 +122,140 @@ class VectorStore:
             embeddings=embeddings,
             metadatas=metadatas
         )
+
+    def add_tables(
+        self,
+        doc_id: str,
+        doc_meta: dict,
+        tables: list["ExtractedTable"]
+    ) -> None:
+        """
+        Add table chunks for a document.
+
+        Tables are stored as separate chunks with markdown representation.
+        Chunk IDs use format: {doc_id}_table_{page:04d}_{table_idx:02d}
+
+        Args:
+            doc_id: Unique document identifier (Zotero item key)
+            doc_meta: Document metadata (title, authors, year, etc.)
+            tables: List of ExtractedTable objects to store
+        """
+        if not tables:
+            return
+
+        ids = [
+            f"{doc_id}_table_{t.page_num:04d}_{t.table_index:02d}"
+            for t in tables
+        ]
+        texts = [t.to_markdown() for t in tables]
+
+        # Use RETRIEVAL_DOCUMENT task type
+        embeddings = self.embedder.embed(texts, task_type="RETRIEVAL_DOCUMENT")
+
+        metadatas = [
+            {
+                "doc_id": doc_id,
+                "doc_title": doc_meta.get("title", ""),
+                "authors": doc_meta.get("authors", ""),
+                "authors_lower": doc_meta.get("authors", "").lower(),
+                "year": doc_meta.get("year") or 0,
+                "citation_key": doc_meta.get("citation_key", ""),
+                "publication": doc_meta.get("publication", ""),
+                "doi": doc_meta.get("doi", ""),
+                "tags": doc_meta.get("tags", ""),
+                "tags_lower": doc_meta.get("tags", "").lower(),
+                "collections": doc_meta.get("collections", ""),
+                "journal_quartile": doc_meta.get("journal_quartile", ""),
+                "pdf_hash": doc_meta.get("pdf_hash", ""),  # Feature 6: for update detection
+                "quality_grade": doc_meta.get("quality_grade", ""),  # Feature 11: extraction quality
+                "page_num": t.page_num,
+                "chunk_index": -1,  # Marker for non-text chunks
+                "chunk_type": "table",
+                "table_index": t.table_index,
+                "table_caption": t.caption or "",  # None -> empty string for ChromaDB
+                "table_num_rows": t.num_rows,
+                "table_num_cols": t.num_cols,
+                # Section detection doesn't apply to tables
+                "section": "table",
+                "section_confidence": 1.0,
+            }
+            for t in tables
+        ]
+
+        self.collection.add(
+            ids=ids,
+            documents=texts,
+            embeddings=embeddings,
+            metadatas=metadatas
+        )
+
+    def add_figures(
+        self,
+        doc_id: str,
+        doc_meta: dict,
+        figures: list,
+    ) -> None:
+        """Add figure chunks to the store.
+
+        Figures are stored as separate chunks with caption as text.
+        Chunk IDs use format: {doc_id}_fig_{page:03d}_{fig_idx:02d}
+
+        Args:
+            doc_id: Document ID (Zotero item key)
+            doc_meta: Document-level metadata
+            figures: List of ExtractedFigure objects
+        """
+        if not figures:
+            return
+
+        ids = []
+        documents = []
+        metadatas = []
+
+        for fig in figures:
+            chunk_id = f"{doc_id}_fig_{fig.page_num:03d}_{fig.figure_index:02d}"
+
+            # Use caption for embedding, or fallback text for orphans
+            text = fig.to_searchable_text()
+
+            metadata = {
+                "doc_id": doc_id,
+                "doc_title": doc_meta.get("title", ""),
+                "authors": doc_meta.get("authors", ""),
+                "authors_lower": doc_meta.get("authors", "").lower(),
+                "year": doc_meta.get("year") or 0,
+                "citation_key": doc_meta.get("citation_key", ""),
+                "publication": doc_meta.get("publication", ""),
+                "doi": doc_meta.get("doi", ""),
+                "tags": doc_meta.get("tags", ""),
+                "tags_lower": doc_meta.get("tags", "").lower(),
+                "collections": doc_meta.get("collections", ""),
+                "journal_quartile": doc_meta.get("journal_quartile", ""),
+                "pdf_hash": doc_meta.get("pdf_hash", ""),
+                "quality_grade": doc_meta.get("quality_grade", ""),
+                "chunk_type": "figure",
+                "page_num": fig.page_num,
+                "chunk_index": -1,  # Marker for non-text chunks
+                "figure_index": fig.figure_index,
+                "caption": fig.caption or "",  # Empty string for orphans
+                "image_path": str(fig.image_path) if fig.image_path else "",
+                # Section detection doesn't apply to figures
+                "section": "figure",
+                "section_confidence": 1.0,
+            }
+
+            ids.append(chunk_id)
+            documents.append(text)
+            metadatas.append(metadata)
+
+        if ids:
+            embeddings = self.embedder.embed(documents, task_type="RETRIEVAL_DOCUMENT")
+            self.collection.add(
+                ids=ids,
+                documents=documents,
+                embeddings=embeddings,
+                metadatas=metadatas,
+            )
 
     def search(
         self,
@@ -155,12 +339,53 @@ class VectorStore:
         self.collection.delete(where={"doc_id": {"$eq": doc_id}})
 
     def get_indexed_doc_ids(self) -> set[str]:
-        """Get set of all indexed document IDs."""
-        results = self.collection.get(include=["metadatas"])
-        if not results['metadatas']:
+        """Get set of all indexed document IDs.
+
+        Memory-efficient: extracts doc_id from chunk IDs without loading metadata.
+        Handles text chunks ({doc_id}_chunk_{index:04d}),
+        table chunks ({doc_id}_table_{page:04d}_{table_idx:02d}),
+        and figure chunks ({doc_id}_fig_{page:03d}_{fig_idx:02d}).
+        """
+        results = self.collection.get(include=[])  # IDs only, no documents/metadata
+        if not results['ids']:
             return set()
-        return {m['doc_id'] for m in results['metadatas']}
+
+        doc_ids = set()
+        for chunk_id in results['ids']:
+            # Handle text chunks, table chunks, and figure chunks
+            if '_chunk_' in chunk_id:
+                parts = chunk_id.rsplit('_chunk_', 1)
+            elif '_table_' in chunk_id:
+                parts = chunk_id.rsplit('_table_', 1)
+            elif '_fig_' in chunk_id:
+                parts = chunk_id.rsplit('_fig_', 1)
+            else:
+                continue
+            if len(parts) == 2:
+                doc_ids.add(parts[0])
+        return doc_ids
 
     def count(self) -> int:
         """Return total number of chunks."""
         return self.collection.count()
+
+    def get_document_meta(self, doc_id: str) -> dict | None:
+        """Get metadata for a document's first chunk.
+
+        Useful for checking stored metadata (e.g., pdf_hash) without
+        loading full document content.
+
+        Args:
+            doc_id: Document ID to look up
+
+        Returns:
+            Metadata dict from first chunk, or None if not found
+        """
+        results = self.collection.get(
+            where={"doc_id": {"$eq": doc_id}},
+            limit=1,
+            include=["metadatas"]
+        )
+        if results["metadatas"]:
+            return results["metadatas"][0]
+        return None

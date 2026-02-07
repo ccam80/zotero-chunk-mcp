@@ -1,0 +1,24 @@
+| The co and Jacque from the rig | ntribut met et ht atri | ion of the left and rig al. [18]. Even in the l um [17]. Potse et al. | ht atria to the ast third of t discovered t | P-wave w he P-wav hat a jigg | as analyzed by Lo e, one-third of the ing morphology o | 354 ewe et al. [17] signal stems f the P-wave, |
+| --- | --- | --- | --- | --- | --- | --- |
+| which was a similar wa or averagin | observ y in h g [19]. | ed in computer simu ealthy volunteers wh Loewe et al. invest | lations, was en carefully igated the in | not an ar preventi fluence o | tefact but could be ng smoothing thro f the earliest site | observed in ugh filtering of activation |
+| in the right | atriu | m (i.e., the sinus no | de exit site) | on the m | orphology of the | P-wave [20] |
+| and could | demon | strate that small sh | ifts in the e | arliest ex | citation site and i | ts proximity |
+| to the inter- | atrial | connections can sig | nificantly ch | ange the | terminal phase of | the P-wave. |
+| Andlauer e | t al. d | issected the differe | ntial effects | of atrial | dilation and hyp | ertrophy on |
+| the morpho | logy o | f the P-wave [21] a | nd showed t | hat left at | rial dilation did n | ot influence |
+| P-wave du thus P-wav A liter tients suffer | ration e Term ature s ing fro | significantly, but ins inal Force in lead V urvey of simulations m paroxysmal atria | tead had a s 1 (PTF-V1). of the P-wa l fibrillation | trong eff ve and in (AFib) w | ect on P-wave am particular of the P as published by Fi | plitude and -wave in pa- los et al. [43]. |
+| All the effec wave of AF that there is Nagel | ts des ib pati still a et al. | cribed in the literatur ents are outlined. De way to go before th analyzed the inter- | e that have a spite the ver ese results c and intra-p | n influen y large n an be rou atient va | ce on the morpho umber of articles, tinely used in clin riability of the P- | logy of the P- we conclude ical practice. wave in the |
+| Physionet E (see also Se | CG da ction | tabase, aiming at the 2.5). Figure 1 show | optimization s several ex | of a sim amples o | ulated database of f P-waves with v | P-waves [84] arious atrial |
+| shapes, sev 2.4. Modelin | eral or g Rhyt | ientations of the atri hmic Features and He | a inside the art Rate Vari | torso and ability | a variety of body | shapes. |
+| Model | ing of | a heart beat most o | ften starts | with a sti | mulation either f | rom an area |
+| around the Section 2.1) | sinus . Mod | node (atria) or fro eling of the sinus no | m the mod de is an inte | el of the resting re | Purkinje tree (ve search topic that | ntricles, see goes beyond |
+| the scope o The EC and also the | f this a G flu morp | rticle. ctuates from beat to hology of the P-, QR | beat even in S- and T-wa | the healt ve are not | hy state. Both the completely perio | RR interval dic. The fluc- |
+| tuations of (HRV), as r | the RR eview | interval are well kn ed by Rajendra et al | own and ana . [85]. HRV i | lyzed by s high in | means of heart ra normal hearts an | te variability d low when |
+| there is a ca in both the measure in | rdiac time daily c | problem. The variati domain and frequen linical practice. On | on in the bea cy domain. the modeling | t-to-beat Not ma side, on | RR interval is usu ny clinicians mak ly few articles des | ally studied e use of this cribe simula- |
+| tions of bet “missing lin 2.5. Modelin | a-adre k” bet g Inter | nergic and vagal ton ween computerized - and Intra-Patient V | es on the sin modeling o ariability | us node [ f the hear | 86]. It seems as if t t and HRV interp | here is still a retation [87]. |
+| The va This can be | riety explai | of ECG morphologi ned by different geo | es observed metries of th | in a coho e heart [8 | rt of healthy hum 8] , different rotati | ans is large. on inside the |
+| thorax [6], a contribute t | nd dif o the | ferent shapes of the t variability (see, for e | orso. Moreo xample, the | ver, differ discussio | ences in electroph n about the QRS | ysiology also morphology |
+| and the Pur As alr | kinje t eady m | ree in Section 2.1). entioned in Section | 2.3, Nagel | et al. inv | estigated the inte | r- and intra- |
+| patient vari | ability | of the P-wave [84] | . The beat-to | -beat va | riability of the P- | wave in case |
+| of atrial fibr 5 mm) in th | illatio e loca | n was investigated b tion of the earliest a | y Pezzuto e ctivation site | t al. [42]. lead to | Already small va changes in the mo | riations (1 to rphology of |
+| the P-wave | . This | effect was significan | tly enhance | d if slow | conducting regio | ns were near |

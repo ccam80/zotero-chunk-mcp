@@ -1,8 +1,18 @@
 """
 All dataclasses for the system. No dependencies on implementation modules.
 """
+from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .indexer import IndexResult
+
+# Section detection confidence levels
+CONFIDENCE_SCHEME_MATCH = 1.0   # Heading matched a known scheme pattern
+CONFIDENCE_GAP_FILL = 0.7      # Inferred from gap-filling heuristic
+CONFIDENCE_FALLBACK = 0.5      # Default when detection fails
 
 
 # =============================================================================
@@ -19,6 +29,10 @@ class ZoteroItem:
     pdf_path: Path | None     # Resolved filesystem path to PDF
     citation_key: str = ""    # BetterBibTeX citation key
     publication: str = ""     # Journal/conference name
+    journal_quartile: str | None = None  # SCImago quartile (Q1/Q2/Q3/Q4)
+    doi: str = ""             # Digital Object Identifier
+    tags: str = ""            # Semicolon-separated Zotero tags
+    collections: str = ""     # Semicolon-separated collection names
 
 
 # =============================================================================
@@ -45,6 +59,77 @@ class Chunk:
     page_num: int             # Primary page (1-indexed)
     char_start: int           # Start offset in full document
     char_end: int             # End offset in full document
+    section: str = "unknown"  # Document section (abstract, introduction, methods, etc.)
+    section_confidence: float = 1.0  # Confidence of section assignment (0.0-1.0)
+
+
+@dataclass
+class SectionSpan:
+    """A detected section span within a document."""
+    label: str                # Section category label
+    char_start: int           # Start offset in concatenated text
+    char_end: int             # End offset in concatenated text
+    heading_text: str         # The matched heading line, or "" for preamble/unknown
+    confidence: float         # 0.0-1.0, use CONFIDENCE_* constants
+
+
+# =============================================================================
+# TABLE EXTRACTION MODELS
+# =============================================================================
+
+@dataclass
+class ExtractedTable:
+    """A table extracted from a PDF page."""
+    page_num: int                              # 1-indexed
+    table_index: int                           # Index within page (0-based)
+    bbox: tuple[float, float, float, float]    # (x0, y0, x1, y1) bounding box
+    headers: list[str]                         # Column headers (may be empty)
+    rows: list[list[str]]                      # Data rows
+    caption: str | None = ""                   # Detected caption text (None for orphans)
+    caption_position: str = ""                 # "above" | "below" | ""
+
+    @property
+    def num_rows(self) -> int:
+        """Number of data rows (excludes header)."""
+        return len(self.rows)
+
+    @property
+    def num_cols(self) -> int:
+        """Number of columns."""
+        return len(self.headers) if self.headers else (len(self.rows[0]) if self.rows else 0)
+
+    def to_markdown(self) -> str:
+        """Convert table to markdown format for embedding."""
+        lines = []
+
+        # Add caption if present
+        if self.caption:
+            lines.append(f"**{self.caption}**\n")
+
+        # Headers
+        if self.headers:
+            lines.append("| " + " | ".join(self.headers) + " |")
+            lines.append("| " + " | ".join(["---"] * len(self.headers)) + " |")
+
+        # Rows
+        for row in self.rows:
+            # Pad row to match header count if needed
+            padded = row + [""] * (self.num_cols - len(row))
+            lines.append("| " + " | ".join(padded[:self.num_cols]) + " |")
+
+        return "\n".join(lines)
+
+    def to_dict(self) -> dict:
+        """Convert to dict for JSON serialization."""
+        return {
+            "page": self.page_num,
+            "table_index": self.table_index,
+            "headers": self.headers,
+            "rows": self.rows,
+            "caption": self.caption,
+            "num_rows": self.num_rows,
+            "num_cols": self.num_cols,
+        }
 
 
 # =============================================================================
@@ -78,6 +163,10 @@ class RetrievalResult:
     chunk_index: int
     citation_key: str = ""
     publication: str = ""
+    section: str = "unknown"
+    section_confidence: float = 1.0  # Confidence of section detection (0.0-1.0)
+    journal_quartile: str | None = None
+    composite_score: float | None = None  # Reranked score (similarity × section × journal)
     context_before: list[str] = field(default_factory=list)
     context_after: list[str] = field(default_factory=list)
 
@@ -93,3 +182,123 @@ class SearchResponse:
     query: str
     results: list[RetrievalResult]
     total_hits: int
+
+
+# =============================================================================
+# INDEXING REPORT MODELS
+# =============================================================================
+
+@dataclass
+class IndexReport:
+    """Complete indexing run report."""
+    total_items: int
+    indexed: int
+    skipped: int
+    failed: int
+    empty: int
+    already_indexed: int
+    results: list[IndexResult]
+    extraction_stats: dict  # OCR pages, text pages, etc.
+    quality_distribution: dict[str, int]  # Grade -> count
+
+    def to_dict(self) -> dict:
+        """Convert to JSON-serializable dict."""
+        return {
+            "summary": {
+                "total_items": self.total_items,
+                "indexed": self.indexed,
+                "skipped": self.skipped,
+                "failed": self.failed,
+                "empty": self.empty,
+                "already_indexed": self.already_indexed,
+            },
+            "extraction_stats": self.extraction_stats,
+            "quality_distribution": self.quality_distribution,
+            "failures": [
+                {"item_key": r.item_key, "title": r.title, "reason": r.reason,
+                 "quality_grade": r.quality_grade}
+                for r in self.results if r.status == "failed"
+            ],
+            "empty_documents": [
+                {"item_key": r.item_key, "title": r.title, "reason": r.reason}
+                for r in self.results if r.status == "empty"
+            ],
+            "indexed_documents": [
+                {"item_key": r.item_key, "title": r.title,
+                 "n_chunks": r.n_chunks, "n_tables": r.n_tables,
+                 "quality_grade": r.quality_grade}
+                for r in self.results if r.status == "indexed"
+            ],
+        }
+
+    def to_markdown(self) -> str:
+        """Generate markdown report."""
+        lines = [
+            "# Indexing Report",
+            "",
+            "## Summary",
+            "",
+            f"- **Total items processed:** {self.total_items}",
+            f"- **Newly indexed:** {self.indexed}",
+            f"- **Already in index:** {self.already_indexed}",
+            f"- **Empty (no text):** {self.empty}",
+            f"- **Skipped (unchanged):** {self.skipped}",
+            f"- **Failed:** {self.failed}",
+            "",
+        ]
+
+        if self.extraction_stats:
+            lines.extend([
+                "## Extraction Statistics",
+                "",
+                f"- Total pages: {self.extraction_stats.get('total_pages', 0)}",
+                f"- Text pages: {self.extraction_stats.get('text_pages', 0)}",
+                f"- OCR pages: {self.extraction_stats.get('ocr_pages', 0)}",
+                f"- Empty pages: {self.extraction_stats.get('empty_pages', 0)}",
+                "",
+            ])
+
+        if self.quality_distribution and any(self.quality_distribution.values()):
+            lines.extend([
+                "## Quality Distribution",
+                "",
+                "| Grade | Count |",
+                "|-------|-------|",
+            ])
+            for grade in ["A", "B", "C", "D", "F"]:
+                count = self.quality_distribution.get(grade, 0)
+                lines.append(f"| {grade} | {count} |")
+            lines.append("")
+
+        failures = [r for r in self.results if r.status == "failed"]
+        if failures:
+            lines.extend([
+                "## Failures",
+                "",
+                "| Item Key | Title | Error |",
+                "|----------|-------|-------|",
+            ])
+            for r in failures:
+                title = r.title[:40] + "..." if len(r.title) > 40 else r.title
+                # Escape pipes in title and reason
+                title = title.replace("|", "\\|")
+                reason = r.reason.replace("|", "\\|") if r.reason else ""
+                lines.append(f"| `{r.item_key}` | {title} | {reason} |")
+            lines.append("")
+
+        empty_docs = [r for r in self.results if r.status == "empty"]
+        if empty_docs:
+            lines.extend([
+                "## Empty Documents (No Extractable Text)",
+                "",
+                "| Item Key | Title | Reason |",
+                "|----------|-------|--------|",
+            ])
+            for r in empty_docs:
+                title = r.title[:40] + "..." if len(r.title) > 40 else r.title
+                title = title.replace("|", "\\|")
+                reason = r.reason.replace("|", "\\|") if r.reason else ""
+                lines.append(f"| `{r.item_key}` | {title} | {reason} |")
+            lines.append("")
+
+        return "\n".join(lines)

@@ -18,10 +18,12 @@ All tools are provided by the `zotero-chunk-rag` MCP server:
 
 | Tool | Purpose |
 |------|---------|
-| `search_topic` | Find N most relevant papers for a topic. Returns per-paper avg/best scores, best passage, citation key. |
-| `search_papers` | Passage-level semantic search. Returns specific text chunks with context, metadata, and citation keys. |
-| `get_passage_context` | Expand context around a specific passage (use after search_papers). |
-| `get_index_stats` | Check index coverage (total documents and chunks). |
+| `search_topic` | Find N most relevant papers for a topic. Returns per-paper avg/best scores (both raw and composite), best passage, citation key. |
+| `search_papers` | Passage-level semantic search. Returns specific text chunks with context, metadata, relevance_score, composite_score, and citation keys. |
+| `search_tables` | Search for tables in indexed papers by content. Returns tables as markdown with caption, dimensions, relevance_score, composite_score, and citation keys. Accepts optional `journal_weights` parameter. |
+| `get_passage_context` | Expand context around a specific passage (use after search_papers). For tables, use with `table_page` and `table_index` to find referencing text. |
+| `get_index_stats` | Check index coverage (total documents, chunks, tables). |
+| `get_reranking_config` | Get current section/journal weights and valid override values. |
 
 ## Accepted Request Types
 
@@ -128,9 +130,37 @@ Always include per reference:
 1. **Use `search_topic` for breadth** -- it deduplicates by paper and gives you both average and best-chunk scores
 2. **Use `search_papers` for depth** -- when you need the actual passage text with surrounding context
 3. **Expand selectively** -- only call `get_passage_context` when the initial context is insufficient to judge relevance
-4. **Discard low relevance** -- skip results with scores below 0.5
+4. **Discard low relevance** -- skip results with composite_score below 0.3 (or relevance_score below 0.5 if reranking disabled)
 5. **Summarise immediately** -- don't accumulate raw passages; write your summary as you process each result
 6. **Return promptly** -- complete analysis and return to caller
+
+## Using Section Weights
+
+Adjust `section_weights` to focus searches on specific paper sections:
+
+**For methodology questions:**
+```python
+search_papers("electrode impedance measurement protocol",
+              section_weights={"methods": 1.0, "results": 0.5, "introduction": 0.2})
+```
+
+**For findings/evidence:**
+```python
+search_papers("HRV correlates with stress",
+              section_weights={"results": 1.0, "conclusion": 1.0, "discussion": 0.8})
+```
+
+**To exclude references section:**
+```python
+search_papers("...", section_weights={"references": 0})
+```
+
+Setting a section weight to 0 completely excludes chunks from that section. This is useful for:
+- Excluding `references` to avoid bibliography noise
+- Excluding `preamble` to skip title pages and author lists
+- Excluding `appendix` when supplementary material isn't relevant
+
+Valid sections: abstract, introduction, background, methods, results, discussion, conclusion, references, appendix, preamble, table, unknown.
 
 ## When Coverage Is Insufficient
 

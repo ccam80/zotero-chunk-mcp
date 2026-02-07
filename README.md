@@ -49,6 +49,12 @@ Alternatively, set `GEMINI_API_KEY` as an environment variable and omit the fiel
 | `chunk_size` | `400` | Target chunk size in tokens (estimated at 4 characters per token). |
 | `chunk_overlap` | `100` | Overlap between consecutive chunks in tokens. |
 | `gemini_api_key` | `null` | Gemini API key. Falls back to the `GEMINI_API_KEY` environment variable if null. |
+| `rerank_enabled` | `true` | Enable composite score reranking. Set to `false` for raw similarity ranking. |
+| `rerank_alpha` | `0.7` | Similarity exponent (0-1). Lower values give metadata weights more influence. |
+| `rerank_section_weights` | `null` | Override default section weights (see below). |
+| `rerank_journal_weights` | `null` | Override default journal quartile weights. |
+| `embedding_timeout` | `120.0` | Timeout in seconds for embedding API calls. |
+| `embedding_max_retries` | `3` | Maximum retries for failed embedding calls. |
 
 #### Embedding dimensions
 
@@ -100,7 +106,7 @@ Add to your Claude Code settings (`~/.claude/settings.json`) under `mcpServers`:
 }
 ```
 
-Restart Claude Code. The four tools (`search_papers`, `search_topic`, `get_passage_context`, `get_index_stats`) will be available in every session.
+Restart Claude Code. The six tools (`search_papers`, `search_topic`, `search_tables`, `get_passage_context`, `get_reranking_config`, `get_index_stats`) will be available in every session.
 
 ---
 
@@ -126,24 +132,85 @@ To force a complete re-index (for example after changing `chunk_size` or `embedd
 python scripts\index_library.py --force -v
 ```
 
+### Result reranking
+
+Search results are reranked using a composite score that combines semantic similarity with document metadata:
+
+```
+composite_score = similarity^α × section_weight × journal_weight
+```
+
+Where:
+- **similarity**: Cosine similarity from vector search (0-1)
+- **α (alpha)**: Exponent that compresses similarity range (default 0.7). Lower values give metadata more influence.
+- **section_weight**: Weight based on document section (Results: 1.0, Methods: 0.85, Introduction: 0.5, etc.)
+- **journal_weight**: Weight based on SCImago journal quartile (Q1: 1.0, Q2: 0.85, Q3: 0.65, Q4: 0.45)
+
+This reranking ensures that:
+1. Results from high-impact sections (Results, Conclusions) rank higher than boilerplate (Introduction, References)
+2. Papers from higher-ranked journals receive a boost
+3. Semantic relevance remains the primary factor, with metadata providing tiebreaking
+
+Reranking can be disabled by setting `"rerank_enabled": false` in config.json.
+
+#### Default section weights
+
+| Section | Weight | Description |
+|---------|--------|-------------|
+| `results` | 1.0 | Experimental findings |
+| `conclusion` | 1.0 | Summary and conclusions |
+| `table` | 0.9 | Extracted tables (from `search_tables`) |
+| `methods` | 0.85 | Methodology and procedures |
+| `abstract` | 0.75 | Paper abstract |
+| `background` | 0.7 | Literature review / related work |
+| `unknown` | 0.7 | Undetected sections |
+| `discussion` | 0.65 | Interpretation of results |
+| `introduction` | 0.5 | Background and motivation |
+| `preamble` | 0.3 | Title page, author info |
+| `appendix` | 0.3 | Supplementary material |
+| `references` | 0.1 | Bibliography |
+
+Override any weight by passing `section_weights={"section_name": weight}` to search tools.
+
+#### Understanding scores
+
+- **relevance_score** (0-1): Raw cosine similarity. Higher = more semantically similar to query.
+- **composite_score** (0-1): Weighted product of similarity, section weight, and journal weight.
+
+A result with `relevance_score=0.8`, `section=results` (1.0), `journal_quartile=Q1` (1.0) would have:
+```
+composite_score = 0.8^0.7 × 1.0 × 1.0 ≈ 0.86
+```
+
+A result with `relevance_score=0.8`, `section=introduction` (0.5), `journal_quartile=Q4` (0.45) would have:
+```
+composite_score = 0.8^0.7 × 0.5 × 0.45 ≈ 0.19
+```
+
 ### Asking questions
 
-The MCP server exposes four tools to Claude Code:
+The MCP server exposes six tools to Claude Code:
 
 #### `search_topic`
 
-Find the most relevant papers for a topic, deduplicated by document. Each paper is scored by both its average chunk relevance (overall topical fit) and its best single chunk (strongest individual passage). Results are sorted by average score.
+Find the most relevant papers for a topic, deduplicated by document. Each paper is scored by both its average chunk relevance (overall topical fit) and its best single chunk (strongest individual passage). Results are sorted by average composite score.
 
 Parameters:
 - `query` (string, required) -- Natural language topic description.
 - `num_papers` (int, default 10) -- Number of distinct papers to return (max 50).
 - `year_min` / `year_max` (int, optional) -- Filter by publication year range.
+- `section_weights` (dict, optional) -- Override default section weights.
+- `journal_weights` (dict, optional) -- Override default journal quartile weights. Use "unknown" for papers without quartile data.
 
 Each result includes:
 - `doc_title`, `authors`, `year`, `publication` -- Bibliographic metadata.
 - `citation_key` -- BetterBibTeX citation key for LaTeX `\cite{}`.
-- `avg_score` -- Average relevance across all matching chunks in the paper.
-- `best_chunk_score` -- Score of the single most relevant chunk.
+- `journal_quartile` -- SCImago quartile (Q1/Q2/Q3/Q4) or null.
+- `avg_score` -- Average raw similarity across all matching chunks.
+- `best_chunk_score` -- Raw similarity of the single most relevant chunk.
+- `avg_composite_score` -- Average reranked score across matching chunks.
+- `best_composite_score` -- Reranked score of the best chunk.
+- `best_passage_section` -- Section label of the best matching passage.
 - `num_relevant_chunks` -- How many chunks in this paper matched.
 - `best_passage`, `best_passage_page`, `best_passage_context` -- The strongest passage with context.
 
@@ -156,6 +223,8 @@ Parameters:
 - `top_k` (int, default 10) -- Number of chunk results to return (max 50).
 - `context_chunks` (int, default 1) -- How many adjacent chunks to include before and after each hit (0-3).
 - `year_min` / `year_max` (int, optional) -- Filter results by publication year range.
+- `section_weights` (dict, optional) -- Override default section weights. Set a section to 0 to exclude it.
+- `journal_weights` (dict, optional) -- Override default journal quartile weights.
 
 Each result includes:
 - `passage` -- The matched chunk text.
@@ -164,6 +233,11 @@ Each result includes:
 - `doc_title`, `authors`, `year`, `publication`, `page` -- Bibliographic metadata.
 - `citation_key` -- BetterBibTeX citation key.
 - `doc_id`, `chunk_index` -- Identifiers for follow-up with `get_passage_context`.
+- `relevance_score` -- Raw cosine similarity (0-1).
+- `composite_score` -- Reranked score incorporating section and journal weights.
+- `section` -- Document section label (abstract, methods, results, etc.).
+- `section_confidence` -- Confidence of section detection (0-1).
+- `journal_quartile` -- SCImago quartile (Q1/Q2/Q3/Q4) or null.
 
 #### `get_passage_context`
 
@@ -174,7 +248,18 @@ Parameters:
 - `chunk_index` (int, required) -- Chunk index from a search result.
 - `window` (int, default 2) -- Chunks before/after to include (1-5).
 
-Returns the requested chunks with page numbers, citation key, plus a `merged_text` field containing all passages concatenated.
+Returns:
+- `doc_id`, `doc_title`, `citation_key` -- Document identifiers.
+- `section` -- Section label of the center chunk.
+- `section_confidence` -- Confidence of section detection.
+- `journal_quartile` -- SCImago quartile or null.
+- `center_chunk_index`, `window` -- Position and expansion parameters.
+- `passages` -- List of chunks, each with `chunk_index`, `page`, `section`, `text`, `is_center`.
+- `merged_text` -- All passages concatenated.
+
+#### `get_reranking_config`
+
+Returns the current reranking configuration: section weights, journal quartile weights, alpha exponent, and valid section/quartile names. Useful for understanding how results are ranked and what override values are valid.
 
 #### `get_index_stats`
 
@@ -200,6 +285,105 @@ You: Show me more context around that Heathers quote.
 Claude: [calls get_passage_context with the doc_id and chunk_index, window=4]
        The full surrounding argument reads...
 ```
+
+### OCR for scanned PDFs
+
+For PDFs that contain scanned images instead of text (common with older papers), enable OCR to extract searchable text:
+
+1. Install Tesseract OCR engine:
+   - **Windows**: Download from https://github.com/UB-Mannheim/tesseract/wiki
+   - **macOS**: `brew install tesseract`
+   - **Linux**: `sudo apt install tesseract-ocr`
+
+2. Install Python bindings:
+   ```bash
+   pip install pytesseract Pillow
+   ```
+
+3. Enable in config.json:
+   ```json
+   {
+       "ocr_enabled": true,
+       "ocr_language": "eng",
+       "ocr_dpi": 300
+   }
+   ```
+
+   Or use the CLI flag:
+   ```bash
+   python scripts/index_library.py --ocr
+   ```
+
+**OCR settings:**
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `ocr_enabled` | `false` | Enable OCR for image-only pages |
+| `ocr_language` | `"eng"` | Tesseract language code(s) |
+| `ocr_dpi` | `300` | Render resolution (higher = better quality, slower) |
+| `ocr_timeout` | `30.0` | Per-page timeout in seconds |
+| `ocr_min_text_chars` | `50` | Pages with fewer chars trigger OCR |
+
+**Notes:**
+- OCR is only applied to pages that lack extractable text
+- Processing time increases significantly with OCR enabled
+- Re-index with `--force` after enabling OCR to process previously skipped PDFs
+
+### Table extraction
+
+Extract and search tables from PDFs separately from text:
+
+```json
+{
+    "tables_enabled": true,
+    "tables_min_rows": 2,
+    "tables_min_cols": 2
+}
+```
+
+Or use CLI:
+```bash
+python scripts/index_library.py --tables
+```
+
+**Table settings:**
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `tables_enabled` | `false` | Enable table extraction |
+| `tables_min_rows` | `2` | Minimum rows for valid table |
+| `tables_min_cols` | `2` | Minimum columns for valid table |
+| `tables_caption_distance` | `50.0` | Points to search for caption |
+
+**Searching tables:**
+
+Use the `search_tables` tool to find tables by content:
+
+```python
+search_tables("survival rates by treatment group")
+```
+
+Parameters:
+- `query` (string, required) -- Natural language search query for table content.
+- `top_k` (int, default 10) -- Number of tables to return (max 30).
+- `year_min` / `year_max` (int, optional) -- Filter by publication year range.
+- `journal_weights` (dict, optional) -- Override default journal quartile weights.
+
+Each result includes:
+- `table_markdown` -- Full table as markdown
+- `caption` -- Table caption if detected
+- `num_rows`, `num_cols` -- Table dimensions
+- `doc_title`, `authors`, `year`, `citation_key` -- Bibliographic info
+- `journal_quartile` -- SCImago quartile (Q1/Q2/Q3/Q4) or null
+- `page` -- Page number where table appears
+- `relevance_score` -- Semantic similarity to query (0-1)
+- `composite_score` -- Reranked score incorporating section (0.9 for tables) and journal weights
+
+**Notes:**
+- Requires PyMuPDF 1.23+ for `find_tables()` support
+- Tables are stored as markdown for semantic search
+- Captions are detected if they follow "Table N:" pattern
+- Use `get_passage_context` with `table_page` and `table_index` to find text referencing a table
 
 ---
 

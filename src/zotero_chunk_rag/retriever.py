@@ -60,6 +60,10 @@ class Retriever:
                 elif adj_idx > center_idx:
                     context_after.append(adj.text)
 
+            # Handle journal_quartile - empty string from DB means None
+            jq = hit.metadata.get("journal_quartile", "")
+            journal_quartile = jq if jq else None
+
             results.append(RetrievalResult(
                 chunk_id=hit.id,
                 text=hit.text,
@@ -72,6 +76,9 @@ class Retriever:
                 chunk_index=hit.metadata["chunk_index"],
                 citation_key=hit.metadata.get("citation_key", ""),
                 publication=hit.metadata.get("publication", ""),
+                section=hit.metadata.get("section", "unknown"),
+                section_confidence=hit.metadata.get("section_confidence", 1.0),
+                journal_quartile=journal_quartile,
                 context_before=context_before,
                 context_after=context_after,
             ))

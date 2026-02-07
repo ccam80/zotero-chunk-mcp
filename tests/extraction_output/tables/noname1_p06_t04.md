@@ -1,0 +1,12 @@
+| 3. Modelin 3.1. Ischemia Loewe | g Diseases a and Infarctio at al. gave a | nd the Co n n outline | rrespon of how c | ding ECG omputer mo | deling can | 355 support comprehension |
+| --- | --- | --- | --- | --- | --- | --- |
+| of cardiac is several exam of the ten T | chemia and ples of ische usscher–Pan | discussed mic regio filov cell | the link ns togeth model w | to the corre er with the c hich reflect | sponding E orrespond the degre | CG [28]. Figure 2 shows ing ECG. The parameters e and temporal stage of |
+| the occlusio | n were sum | marized | by Wilh | elms et al. [ | 25]. They | considered the cellular |
+| effects due | to hyperkale | mia, acid | osis and | hypoxia as | well as du | e to cellular uncoupling |
+| After clarify how severa | ing the origi l ischemic s | n of ST-seg cenarios w | ment ele ill not s | vation (and how any ST | depression -segment | ), they also demonstrated change [26]. Thus, they |
+| were able to | explain the | large gro | up of no | n-ST-segme | nt elevatio | n myocardial infarctions |
+| (NSTEMI). | Potyagaylo | et al. sho | wed tha | t these scen | arios are | not only electrically but |
+| also magne | tically “silen | t” [89]. L | oewe at | al.—using | computer | modeling—investigated |
+| whether ad ST segment | ditional elect could lead t | rodes, opt o better d | imized e iagnosis | lectrode pla of patients | cement or with acute | improved analysis of the ischemia. They suggest |
+| the deviatio Figure 2. Exa anterior desc ECG lead V4 | n from basel mples of isch ending corona for ischemia o | ine at the emic regio ry artery an f varying tr | K-point ns with v d the rela ansmural | as being sup arying transm ted levels of h extent in tem | erior to J- ural extent yperkalemi poral stage 2 | point analysis [27]. due to occlusion of the left a, acidosis, and hypoxia (A) (B) and varying duration of |
+| a transmural during the ac The QRS com Ledez | ischemia (C). tion potential plex was not ma et al. crea | Ventricular plateau (t = optimized ted popul | transmem 200 ms) fo in this stu ations of | brane voltage r ischemia of dy. (Images r control and | and body s varying tra eproduced ischemic c | urface potential distribution nsmural extent in stage 2 (D) with permission from [28].) ell strands and observed |

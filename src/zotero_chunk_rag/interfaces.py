@@ -4,7 +4,7 @@ Allows parallel development against interfaces.
 """
 from typing import Protocol
 from pathlib import Path
-from .models import ZoteroItem, PageText, Chunk, StoredChunk, RetrievalResult
+from .models import ZoteroItem, PageText, Chunk, StoredChunk, RetrievalResult, SectionSpan
 
 
 class ZoteroClientProtocol(Protocol):
@@ -22,8 +22,12 @@ class ZoteroClientProtocol(Protocol):
 class PDFExtractorProtocol(Protocol):
     """Interface for PDF text extraction."""
 
-    def extract(self, pdf_path: Path) -> list[PageText]:
-        """Extract text from PDF, returning per-page content."""
+    def extract(self, pdf_path: Path) -> tuple[list[PageText], dict]:
+        """Extract text from PDF, returning per-page content and stats.
+
+        Returns:
+            Tuple of (pages, stats) where stats contains extraction metadata.
+        """
         ...
 
 
@@ -86,4 +90,93 @@ class RetrieverProtocol(Protocol):
         filters: dict | None = None
     ) -> list[RetrievalResult]:
         """Search and expand context."""
+        ...
+
+
+class RerankerProtocol(Protocol):
+    """Interface for result reranking."""
+
+    def rerank(
+        self,
+        results: list[RetrievalResult],
+        section_weights: dict[str, float] | None = None,
+        journal_weights: dict[str, float] | None = None,
+    ) -> list[RetrievalResult]:
+        """Rerank results by composite score."""
+        ...
+
+    def score_result(
+        self,
+        result: RetrievalResult,
+        section_weights: dict[str, float] | None = None,
+        journal_weights: dict[str, float] | None = None,
+    ) -> float:
+        """Calculate composite score for a single result."""
+        ...
+
+
+class JournalRankerProtocol(Protocol):
+    """Interface for journal quality lookup."""
+
+    def lookup(self, publication: str) -> str | None:
+        """Look up journal quartile (Q1/Q2/Q3/Q4 or None)."""
+        ...
+
+    @property
+    def loaded(self) -> bool:
+        """Check if lookup table is loaded."""
+        ...
+
+
+class SectionDetectorProtocol(Protocol):
+    """Interface for document section detection."""
+
+    def detect_sections(self, pages: list[PageText]) -> list[SectionSpan]:
+        """Detect document sections from page text."""
+        ...
+
+    def assign_section(self, char_start: int, spans: list[SectionSpan]) -> str:
+        """Find the section label for a given character position."""
+        ...
+
+
+class OCRExtractorProtocol(Protocol):
+    """Interface for OCR extraction."""
+
+    def is_image_only_page(self, page) -> bool:
+        """Check if a page needs OCR (has images but no text)."""
+        ...
+
+    def ocr_page(self, page) -> str:
+        """Extract text from a page using OCR."""
+        ...
+
+    def get_image_only_pages(self, pdf_path: Path) -> list[int]:
+        """Get indices of pages needing OCR (0-indexed)."""
+        ...
+
+    @staticmethod
+    def is_available() -> bool:
+        """Check if OCR dependencies are available."""
+        ...
+
+
+class TableExtractorProtocol(Protocol):
+    """Interface for table extraction from PDFs."""
+
+    def extract_tables(self, pdf_path: Path) -> list:
+        """Extract all tables from a PDF.
+
+        Returns:
+            List of ExtractedTable objects
+        """
+        ...
+
+    def get_table_count(self, pdf_path: Path) -> int:
+        """Quick count of tables without full extraction."""
+        ...
+
+    @staticmethod
+    def is_available() -> bool:
+        """Check if table extraction is available."""
         ...

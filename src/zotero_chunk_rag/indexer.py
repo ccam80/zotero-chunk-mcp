@@ -1,16 +1,58 @@
 """Indexing pipeline orchestration."""
+import hashlib
+import json
 import logging
+from dataclasses import dataclass, field
 from pathlib import Path
 from tqdm import tqdm
 from .config import Config
 from .zotero_client import ZoteroClient
 from .pdf_extractor import PDFExtractor
 from .chunker import Chunker
-from .embedder import Embedder
+from .embedder import create_embedder
 from .vector_store import VectorStore
+from .journal_ranker import JournalRanker
 from .models import ZoteroItem
+from .ocr_extractor import OCRExtractor
+from .table_extractor import TableExtractor
+from .figure_extractor import FigureExtractor
 
 logger = logging.getLogger(__name__)
+
+
+def _config_hash(config: Config) -> str:
+    """Hash of config values that affect indexed content.
+
+    Changes to these values require re-indexing.
+    """
+    data = (
+        f"{config.chunk_size}:"
+        f"{config.chunk_overlap}:"
+        f"{config.embedding_provider}:"
+        f"{config.embedding_dimensions}:"
+        f"{config.embedding_model}:"
+        f"{config.section_gap_fill_min_chars}:"
+        f"{config.section_gap_fill_min_fraction}:"
+        f"{config.ocr_enabled}:"
+        f"{config.ocr_language}:"
+        f"{config.ocr_dpi}:"
+        f"{config.tables_enabled}:"
+        f"{config.figures_enabled}"
+    )
+    return hashlib.sha256(data.encode()).hexdigest()[:16]
+
+
+@dataclass
+class IndexResult:
+    """Outcome of indexing a single document."""
+    item_key: str
+    title: str
+    status: str          # "indexed", "failed", "empty", "skipped"
+    reason: str = ""
+    n_chunks: int = 0
+    n_tables: int = 0
+    scanned_pages_skipped: int = 0  # Pages detected as scanned but OCR unavailable
+    quality_grade: str = ""  # A/B/C/D/F quality grade per document
 
 
 class Indexer:
@@ -23,33 +65,161 @@ class Indexer:
     def __init__(self, config: Config):
         self.config = config
         self.zotero = ZoteroClient(config.zotero_data_dir)
-        self.extractor = PDFExtractor()
+
+        # Set up OCR extractor based on config
+        # "auto" mode: use OCR if Tesseract is available, skip gracefully if not
+        ocr_extractor = None
+        self.ocr_available = False
+        self.ocr_mode = config.ocr_enabled  # True, False, or "auto"
+
+        if config.ocr_enabled == "auto":
+            # Auto-detect Tesseract availability
+            if OCRExtractor.is_available():
+                logger.info("Tesseract detected - OCR enabled for scanned pages")
+                ocr_extractor = OCRExtractor(
+                    language=config.ocr_language,
+                    dpi=config.ocr_dpi,
+                    timeout=config.ocr_timeout,
+                    min_text_chars=config.ocr_min_text_chars,
+                )
+                self.ocr_available = True
+            else:
+                logger.info(
+                    "Tesseract not found - scanned pages will be skipped. "
+                    "Install Tesseract for OCR support: "
+                    "https://github.com/tesseract-ocr/tesseract"
+                )
+        elif config.ocr_enabled:
+            # Explicitly enabled - OCRExtractor will raise if unavailable
+            ocr_extractor = OCRExtractor(
+                language=config.ocr_language,
+                dpi=config.ocr_dpi,
+                timeout=config.ocr_timeout,
+                min_text_chars=config.ocr_min_text_chars,
+            )
+            self.ocr_available = True
+
+        self.extractor = PDFExtractor(ocr_extractor=ocr_extractor)
+
+        # Set up table extractor if enabled
+        self.table_extractor = None
+        if config.tables_enabled:
+            self.table_extractor = TableExtractor(
+                min_rows=config.tables_min_rows,
+                min_cols=config.tables_min_cols,
+                caption_search_distance=config.tables_caption_distance,
+            )
+        self.tables_enabled = config.tables_enabled
+
+        # Set up figure extractor if enabled
+        self.figure_extractor = None
+        if config.figures_enabled:
+            # Store figures alongside the database
+            figures_dir = config.chroma_db_path.parent / "figures"
+            self.figure_extractor = FigureExtractor(images_dir=figures_dir)
+            self.figure_extractor.MIN_WIDTH = config.figures_min_size
+            self.figure_extractor.MIN_HEIGHT = config.figures_min_size
+        self.figures_enabled = config.figures_enabled
+
         self.chunker = Chunker(
             chunk_size=config.chunk_size,
-            overlap=config.chunk_overlap
+            overlap=config.chunk_overlap,
+            gap_fill_min_chars=config.section_gap_fill_min_chars,
+            gap_fill_min_fraction=config.section_gap_fill_min_fraction,
         )
-        self.embedder = Embedder(
-            model=config.embedding_model,
-            dimensions=config.embedding_dimensions,
-            api_key=config.gemini_api_key
-        )
+        # Use factory to create appropriate embedder based on config
+        self.embedder = create_embedder(config)
         self.store = VectorStore(config.chroma_db_path, self.embedder)
+        self.journal_ranker = JournalRanker()
+        self._empty_docs_path = config.chroma_db_path / "empty_docs.json"
+        self._config_hash_path = config.chroma_db_path / "config_hash.txt"
 
-    def index_all(self, force_reindex: bool = False, limit: int | None = None) -> dict:
+    # ------------------------------------------------------------------
+    # Empty-doc tracking (keyed by item_key -> pdf file hash)
+    # ------------------------------------------------------------------
+
+    def _load_empty_docs(self) -> dict[str, str]:
+        """Load {item_key: pdf_hash} for docs that previously yielded no chunks."""
+        if self._empty_docs_path.exists():
+            return json.loads(self._empty_docs_path.read_text())
+        return {}
+
+    def _save_empty_docs(self, mapping: dict[str, str]) -> None:
+        self._empty_docs_path.write_text(json.dumps(mapping, indent=2))
+
+    @staticmethod
+    def _pdf_hash(path: Path) -> str:
+        """Fast hash of first 64 KiB of a PDF (enough to detect replacement)."""
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            h.update(f.read(65536))
+        return h.hexdigest()
+
+    def _needs_reindex(self, item: ZoteroItem) -> tuple[bool, str]:
+        """Check if a document needs (re)indexing based on PDF hash.
+
+        Feature 6: Hash-based PDF update detection.
+
+        Returns:
+            (needs_reindex, reason) where reason is:
+            - "new": Document not in index
+            - "changed": PDF hash differs from stored hash
+            - "no_hash": Document indexed without hash (legacy), needs reindex
+            - "current": Document is up-to-date, no reindex needed
+        """
+        existing_meta = self.store.get_document_meta(item.item_key)
+        if not existing_meta:
+            return True, "new"
+
+        stored_hash = existing_meta.get("pdf_hash")
+        if not stored_hash:
+            # Old document indexed without hash - needs reindex to add hash
+            return True, "no_hash"
+
+        current_hash = self._pdf_hash(item.pdf_path)
+        if stored_hash != current_hash:
+            return True, "changed"
+
+        return False, "current"
+
+    # ------------------------------------------------------------------
+    # Main pipeline
+    # ------------------------------------------------------------------
+
+    def index_all(
+        self,
+        force_reindex: bool = False,
+        limit: int | None = None,
+        item_key: str | None = None,
+        title_pattern: str | None = None,
+    ) -> dict:
         """
         Index all PDFs in Zotero library.
 
         Args:
-            force_reindex: If True, reindex all documents
-            limit: Max documents to index (for testing)
+            force_reindex: Delete and re-index matching items
+            limit: Maximum number of items to index
+            item_key: If provided, only index this specific Zotero item key
+            title_pattern: If provided, only index items matching this regex pattern
 
         Returns:
-            Stats dict with counts
+            Dict with 'results' (list[IndexResult]) and summary counts.
         """
         items = self.zotero.get_all_items_with_pdfs()
-
-        # Filter to items with valid PDFs
         items = [i for i in items if i.pdf_path and i.pdf_path.exists()]
+
+        # Apply filters
+        if item_key:
+            items = [i for i in items if i.item_key == item_key]
+            if not items:
+                logger.error(f"No item found with key: {item_key}")
+                return {"results": [], "indexed": 0, "failed": 0, "empty": 0, "skipped": 0, "already_indexed": 0}
+
+        if title_pattern:
+            import re
+            pattern = re.compile(title_pattern, re.IGNORECASE)
+            items = [i for i in items if pattern.search(i.title)]
+            logger.info(f"Filtered to {len(items)} items matching pattern '{title_pattern}'")
 
         if limit:
             items = items[:limit]
@@ -59,60 +229,236 @@ class Indexer:
             item_keys = {i.item_key for i in items}
             for doc_id in existing & item_keys:
                 self.store.delete_document(doc_id)
-            indexed = set()
+            indexed_ids = set()
+            empty_docs: dict[str, str] = {}
         else:
-            indexed = self.store.get_indexed_doc_ids()
-        to_index = [i for i in items if i.item_key not in indexed]
+            indexed_ids = self.store.get_indexed_doc_ids()
+            empty_docs = self._load_empty_docs()
+
+        # Check for config mismatch
+        current_hash = _config_hash(self.config)
+        stored_hash = None
+        if self._config_hash_path.exists():
+            stored_hash = self._config_hash_path.read_text().strip()
+
+        if stored_hash and stored_hash != current_hash and not force_reindex:
+            logger.warning(
+                "Config has changed since last index (chunk_size, overlap, embedding, or section settings). "
+                "Run with --force to re-index, otherwise results may be inconsistent."
+            )
 
         logger.info(f"Found {len(items)} items with PDFs")
-        logger.info(f"Already indexed: {len(indexed)}, to index: {len(to_index)}")
 
-        stats = {"indexed": 0, "failed": 0, "skipped": len(indexed)}
+        results: list[IndexResult] = []
+        to_index: list[ZoteroItem] = []
+        reindex_reasons: dict[str, str] = {}  # item_key -> reason for reindex tracking
+
+        for item in items:
+            # Feature 6: Check if document needs (re)indexing based on PDF hash
+            if item.item_key in indexed_ids:
+                needs_reindex, reason = self._needs_reindex(item)
+                if needs_reindex:
+                    # PDF changed or no hash stored - delete old chunks and reindex
+                    self.store.delete_document(item.item_key)
+                    indexed_ids.discard(item.item_key)
+                    reindex_reasons[item.item_key] = reason
+                    logger.info(f"Reindexing {item.item_key}: {reason}")
+                else:
+                    continue  # Up-to-date — silently skip
+
+            # Check empty-doc cache; re-attempt if PDF changed
+            if item.item_key in empty_docs:
+                current_hash = self._pdf_hash(item.pdf_path)
+                if current_hash == empty_docs[item.item_key]:
+                    results.append(IndexResult(
+                        item.item_key, item.title, "skipped",
+                        reason="no extractable text (unchanged PDF)"))
+                    continue
+                else:
+                    # PDF replaced — remove stale cache entry and retry
+                    del empty_docs[item.item_key]
+                    reindex_reasons[item.item_key] = "changed"
+
+            to_index.append(item)
+
+        reindex_count = len(reindex_reasons)
+        logger.info(
+            f"Already indexed: {len(indexed_ids)}, "
+            f"to reindex (PDF changed): {reindex_count}, "
+            f"skipped (empty/unchanged): "
+            f"{sum(1 for r in results if r.status == 'skipped')}, "
+            f"to index: {len(to_index)}"
+        )
+
+        total_scanned_skipped = 0
+        quality_distribution: dict[str, int] = {"A": 0, "B": 0, "C": 0, "D": 0, "F": 0}
+        aggregated_extraction_stats = {
+            "total_pages": 0,
+            "text_pages": 0,
+            "ocr_pages": 0,
+            "empty_pages": 0,
+        }
 
         for item in tqdm(to_index, desc="Indexing"):
             try:
-                self.index_document(item)
-                stats["indexed"] += 1
+                logger.debug(
+                    f"Starting {item.item_key}: "
+                    f"title={item.title!r}, pdf={item.pdf_path}"
+                )
+                n_chunks, n_tables, reason, extraction_stats, quality_grade = self._index_document_detailed(item)
+                scanned_skipped = extraction_stats.get("scanned_skipped", 0)
+                total_scanned_skipped += scanned_skipped
+
+                # Aggregate extraction stats
+                for key in ["total_pages", "text_pages", "ocr_pages", "empty_pages"]:
+                    aggregated_extraction_stats[key] += extraction_stats.get(key, 0)
+
+                # Track quality distribution
+                if quality_grade in quality_distribution:
+                    quality_distribution[quality_grade] += 1
+
+                if n_chunks > 0:
+                    results.append(IndexResult(
+                        item.item_key, item.title, "indexed",
+                        n_chunks=n_chunks, n_tables=n_tables,
+                        scanned_pages_skipped=scanned_skipped,
+                        quality_grade=quality_grade))
+                else:
+                    empty_docs[item.item_key] = self._pdf_hash(item.pdf_path)
+                    results.append(IndexResult(
+                        item.item_key, item.title, "empty", reason=reason,
+                        scanned_pages_skipped=scanned_skipped,
+                        quality_grade=quality_grade))
+                logger.debug(f"Completed {item.item_key}: {n_chunks} chunks, {n_tables} tables, quality {quality_grade}")
             except Exception as e:
-                logger.error(f"Failed to index {item.item_key}: {e}")
-                stats["failed"] += 1
+                logger.error(f"Failed to index {item.item_key}: {type(e).__name__}: {e}")
+                results.append(IndexResult(
+                    item.item_key, item.title, "failed",
+                    reason=f"{type(e).__name__}: {e}"))
 
-        return stats
+        self._save_empty_docs(empty_docs)
 
-    def index_document(self, item: ZoteroItem) -> int:
+        counts = {
+            "indexed": sum(1 for r in results if r.status == "indexed"),
+            "failed": sum(1 for r in results if r.status == "failed"),
+            "empty": sum(1 for r in results if r.status == "empty"),
+            "skipped": sum(1 for r in results if r.status == "skipped"),
+            "already_indexed": len(indexed_ids),
+            "scanned_pages_skipped": total_scanned_skipped,
+            "quality_distribution": quality_distribution,
+            "extraction_stats": aggregated_extraction_stats,
+        }
+
+        # Report scanned pages warning if any were skipped
+        if total_scanned_skipped > 0 and not self.ocr_available:
+            logger.warning(
+                f"{total_scanned_skipped} scanned page(s) skipped (no text extracted). "
+                f"Install Tesseract for OCR support: "
+                f"https://github.com/tesseract-ocr/tesseract"
+            )
+
+        # Save config hash after successful indexing
+        if counts["indexed"] > 0 or counts["already_indexed"] > 0:
+            self._config_hash_path.write_text(current_hash)
+
+        return {"results": results, **counts}
+
+    def _index_document_detailed(self, item: ZoteroItem) -> tuple[int, int, str, dict, str]:
         """
         Index a single document.
 
         Returns:
-            Number of chunks created
+            (n_chunks, n_tables, reason, extraction_stats, quality_grade)
+            - reason is non-empty only when n_chunks == 0
+            - extraction_stats includes scanned_skipped count
+            - quality_grade is A/B/C/D/F based on extraction quality
         """
         if item.pdf_path is None or not item.pdf_path.exists():
             raise FileNotFoundError(f"PDF not found for {item.item_key}")
 
-        # Extract text
-        pages = self.extractor.extract(item.pdf_path)
+        # Extract text (with optional OCR fallback)
+        pages, extraction_stats = self.extractor.extract(item.pdf_path)
         if not pages:
-            logger.warning(f"No text extracted from {item.item_key}")
-            return 0
+            return 0, 0, "PDF has 0 pages (corrupt or unreadable)", extraction_stats, "F"
+
+        total_chars = sum(len(p.text) for p in pages)
+        scanned_skipped = extraction_stats.get("scanned_skipped", 0)
+
+        # Compute quality score (Feature 11)
+        from .pdf_extractor import compute_quality_score
+        quality = compute_quality_score(pages, extraction_stats, self.config)
+        quality_grade = quality["quality_grade"]
+
+        logger.debug(
+            f"  Extracted {len(pages)} pages, {total_chars} chars "
+            f"(text: {extraction_stats['text_pages']}, "
+            f"ocr: {extraction_stats['ocr_pages']}, "
+            f"empty: {extraction_stats['empty_pages']}, "
+            f"scanned_skipped: {scanned_skipped}, "
+            f"quality: {quality_grade})"
+        )
+
+        if total_chars == 0:
+            if self.ocr_available:
+                return 0, 0, f"{len(pages)} pages but no text (OCR failed to extract text)", extraction_stats, quality_grade
+            else:
+                return 0, 0, f"{len(pages)} pages but no text (scanned PDF - install Tesseract for OCR)", extraction_stats, quality_grade
 
         # Chunk
         chunks = self.chunker.chunk(pages)
         if not chunks:
-            logger.warning(f"No chunks created for {item.item_key}")
-            return 0
+            return 0, 0, f"{len(pages)} pages, {total_chars} chars but no chunks created", extraction_stats, quality_grade
+        logger.debug(f"  Created {len(chunks)} chunks")
 
-        # Store
+        # Look up journal quartile
+        journal_quartile = self.journal_ranker.lookup(item.publication)
+
+        # Store text chunks
+        # Include pdf_hash for update detection (Feature 6)
+        # Include quality_grade for filtering/reporting (Feature 11)
         doc_meta = {
             "title": item.title,
             "authors": item.authors,
             "year": item.year,
             "citation_key": item.citation_key,
             "publication": item.publication,
+            "journal_quartile": journal_quartile or "",
+            "doi": item.doi,
+            "tags": item.tags,
+            "collections": item.collections,
+            "pdf_hash": self._pdf_hash(item.pdf_path),
+            "quality_grade": quality_grade,
         }
         self.store.add_chunks(item.item_key, doc_meta, chunks)
 
-        logger.debug(f"Indexed {item.item_key}: {len(chunks)} chunks")
-        return len(chunks)
+        # Extract and store tables if enabled
+        n_tables = 0
+        if self.table_extractor is not None:
+            tables = self.table_extractor.extract_tables(item.pdf_path)
+            if tables:
+                self.store.add_tables(item.item_key, doc_meta, tables)
+                n_tables = len(tables)
+                logger.debug(f"  Extracted {n_tables} tables")
+
+        # Extract and store figures if enabled
+        n_figures = 0
+        if self.figure_extractor is not None:
+            try:
+                figures = self.figure_extractor.extract_figures(item.pdf_path, item.item_key)
+                if figures:
+                    self.store.add_figures(item.item_key, doc_meta, figures)
+                    n_figures = len(figures)
+                    logger.debug(f"  Extracted {n_figures} figures")
+            except Exception as e:
+                logger.warning(f"Figure extraction failed for {item.item_key}: {e}")
+
+        logger.debug(f"Indexed {item.item_key}: {len(chunks)} chunks, {n_tables} tables, {n_figures} figures, quality {quality_grade}")
+        return len(chunks), n_tables, "", extraction_stats, quality_grade
+
+    def index_document(self, item: ZoteroItem) -> int:
+        """Index a single document. Returns number of chunks created."""
+        n_chunks, _n_tables, _reason, _stats, _quality = self._index_document_detailed(item)
+        return n_chunks
 
     def reindex_document(self, item_key: str) -> int:
         """Re-index a specific document."""
@@ -131,3 +477,7 @@ class Indexer:
             "total_chunks": total_chunks,
             "avg_chunks_per_doc": round(total_chunks / len(doc_ids), 1) if doc_ids else 0,
         }
+
+    def get_library_diagnostics(self) -> dict:
+        """Delegate to ZoteroClient for library-wide diagnostics."""
+        return self.zotero.get_library_diagnostics()
