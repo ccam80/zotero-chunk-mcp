@@ -69,6 +69,7 @@ class ExtractedFigure:
     bbox: tuple[float, float, float, float]
     caption: str | None  # None for orphaned figures (no caption found)
     image_path: Path | None = None  # Path to saved PNG
+    caption_source: str = ""  # "caption_box" | "text_box" | "" (no caption)
 
     def to_searchable_text(self) -> str:
         """Return text for embedding."""
