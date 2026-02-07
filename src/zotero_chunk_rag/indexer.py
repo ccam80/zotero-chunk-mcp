@@ -2,20 +2,17 @@
 import hashlib
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from tqdm import tqdm
 from .config import Config
 from .zotero_client import ZoteroClient
-from .pdf_extractor import PDFExtractor
+from .pdf_processor import extract_document
 from .chunker import Chunker
 from .embedder import create_embedder
 from .vector_store import VectorStore
 from .journal_ranker import JournalRanker
 from .models import ZoteroItem
-from .ocr_extractor import OCRExtractor
-from .table_extractor import TableExtractor
-from .figure_extractor import FigureExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +28,8 @@ def _config_hash(config: Config) -> str:
         f"{config.embedding_provider}:"
         f"{config.embedding_dimensions}:"
         f"{config.embedding_model}:"
-        f"{config.section_gap_fill_min_chars}:"
-        f"{config.section_gap_fill_min_fraction}:"
-        f"{config.ocr_enabled}:"
         f"{config.ocr_language}:"
-        f"{config.ocr_dpi}:"
+        f"{config.table_strategy}:"
         f"{config.tables_enabled}:"
         f"{config.figures_enabled}"
     )
@@ -51,7 +45,6 @@ class IndexResult:
     reason: str = ""
     n_chunks: int = 0
     n_tables: int = 0
-    scanned_pages_skipped: int = 0  # Pages detected as scanned but OCR unavailable
     quality_grade: str = ""  # A/B/C/D/F quality grade per document
 
 
@@ -66,66 +59,12 @@ class Indexer:
         self.config = config
         self.zotero = ZoteroClient(config.zotero_data_dir)
 
-        # Set up OCR extractor based on config
-        # "auto" mode: use OCR if Tesseract is available, skip gracefully if not
-        ocr_extractor = None
-        self.ocr_available = False
-        self.ocr_mode = config.ocr_enabled  # True, False, or "auto"
-
-        if config.ocr_enabled == "auto":
-            # Auto-detect Tesseract availability
-            if OCRExtractor.is_available():
-                logger.info("Tesseract detected - OCR enabled for scanned pages")
-                ocr_extractor = OCRExtractor(
-                    language=config.ocr_language,
-                    dpi=config.ocr_dpi,
-                    timeout=config.ocr_timeout,
-                    min_text_chars=config.ocr_min_text_chars,
-                )
-                self.ocr_available = True
-            else:
-                logger.info(
-                    "Tesseract not found - scanned pages will be skipped. "
-                    "Install Tesseract for OCR support: "
-                    "https://github.com/tesseract-ocr/tesseract"
-                )
-        elif config.ocr_enabled:
-            # Explicitly enabled - OCRExtractor will raise if unavailable
-            ocr_extractor = OCRExtractor(
-                language=config.ocr_language,
-                dpi=config.ocr_dpi,
-                timeout=config.ocr_timeout,
-                min_text_chars=config.ocr_min_text_chars,
-            )
-            self.ocr_available = True
-
-        self.extractor = PDFExtractor(ocr_extractor=ocr_extractor)
-
-        # Set up table extractor if enabled
-        self.table_extractor = None
-        if config.tables_enabled:
-            self.table_extractor = TableExtractor(
-                min_rows=config.tables_min_rows,
-                min_cols=config.tables_min_cols,
-                caption_search_distance=config.tables_caption_distance,
-            )
         self.tables_enabled = config.tables_enabled
-
-        # Set up figure extractor if enabled
-        self.figure_extractor = None
-        if config.figures_enabled:
-            # Store figures alongside the database
-            figures_dir = config.chroma_db_path.parent / "figures"
-            self.figure_extractor = FigureExtractor(images_dir=figures_dir)
-            self.figure_extractor.MIN_WIDTH = config.figures_min_size
-            self.figure_extractor.MIN_HEIGHT = config.figures_min_size
         self.figures_enabled = config.figures_enabled
 
         self.chunker = Chunker(
             chunk_size=config.chunk_size,
             overlap=config.chunk_overlap,
-            gap_fill_min_chars=config.section_gap_fill_min_chars,
-            gap_fill_min_fraction=config.section_gap_fill_min_fraction,
         )
         # Use factory to create appropriate embedder based on config
         self.embedder = create_embedder(config)
@@ -158,8 +97,6 @@ class Indexer:
     def _needs_reindex(self, item: ZoteroItem) -> tuple[bool, str]:
         """Check if a document needs (re)indexing based on PDF hash.
 
-        Feature 6: Hash-based PDF update detection.
-
         Returns:
             (needs_reindex, reason) where reason is:
             - "new": Document not in index
@@ -173,7 +110,6 @@ class Indexer:
 
         stored_hash = existing_meta.get("pdf_hash")
         if not stored_hash:
-            # Old document indexed without hash - needs reindex to add hash
             return True, "no_hash"
 
         current_hash = self._pdf_hash(item.pdf_path)
@@ -251,22 +187,19 @@ class Indexer:
 
         results: list[IndexResult] = []
         to_index: list[ZoteroItem] = []
-        reindex_reasons: dict[str, str] = {}  # item_key -> reason for reindex tracking
+        reindex_reasons: dict[str, str] = {}
 
         for item in items:
-            # Feature 6: Check if document needs (re)indexing based on PDF hash
             if item.item_key in indexed_ids:
                 needs_reindex, reason = self._needs_reindex(item)
                 if needs_reindex:
-                    # PDF changed or no hash stored - delete old chunks and reindex
                     self.store.delete_document(item.item_key)
                     indexed_ids.discard(item.item_key)
                     reindex_reasons[item.item_key] = reason
                     logger.info(f"Reindexing {item.item_key}: {reason}")
                 else:
-                    continue  # Up-to-date — silently skip
+                    continue
 
-            # Check empty-doc cache; re-attempt if PDF changed
             if item.item_key in empty_docs:
                 current_hash = self._pdf_hash(item.pdf_path)
                 if current_hash == empty_docs[item.item_key]:
@@ -275,7 +208,6 @@ class Indexer:
                         reason="no extractable text (unchanged PDF)"))
                     continue
                 else:
-                    # PDF replaced — remove stale cache entry and retry
                     del empty_docs[item.item_key]
                     reindex_reasons[item.item_key] = "changed"
 
@@ -290,7 +222,6 @@ class Indexer:
             f"to index: {len(to_index)}"
         )
 
-        total_scanned_skipped = 0
         quality_distribution: dict[str, int] = {"A": 0, "B": 0, "C": 0, "D": 0, "F": 0}
         aggregated_extraction_stats = {
             "total_pages": 0,
@@ -306,8 +237,6 @@ class Indexer:
                     f"title={item.title!r}, pdf={item.pdf_path}"
                 )
                 n_chunks, n_tables, reason, extraction_stats, quality_grade = self._index_document_detailed(item)
-                scanned_skipped = extraction_stats.get("scanned_skipped", 0)
-                total_scanned_skipped += scanned_skipped
 
                 # Aggregate extraction stats
                 for key in ["total_pages", "text_pages", "ocr_pages", "empty_pages"]:
@@ -321,13 +250,11 @@ class Indexer:
                     results.append(IndexResult(
                         item.item_key, item.title, "indexed",
                         n_chunks=n_chunks, n_tables=n_tables,
-                        scanned_pages_skipped=scanned_skipped,
                         quality_grade=quality_grade))
                 else:
                     empty_docs[item.item_key] = self._pdf_hash(item.pdf_path)
                     results.append(IndexResult(
                         item.item_key, item.title, "empty", reason=reason,
-                        scanned_pages_skipped=scanned_skipped,
                         quality_grade=quality_grade))
                 logger.debug(f"Completed {item.item_key}: {n_chunks} chunks, {n_tables} tables, quality {quality_grade}")
             except Exception as e:
@@ -344,18 +271,9 @@ class Indexer:
             "empty": sum(1 for r in results if r.status == "empty"),
             "skipped": sum(1 for r in results if r.status == "skipped"),
             "already_indexed": len(indexed_ids),
-            "scanned_pages_skipped": total_scanned_skipped,
             "quality_distribution": quality_distribution,
             "extraction_stats": aggregated_extraction_stats,
         }
-
-        # Report scanned pages warning if any were skipped
-        if total_scanned_skipped > 0 and not self.ocr_available:
-            logger.warning(
-                f"{total_scanned_skipped} scanned page(s) skipped (no text extracted). "
-                f"Install Tesseract for OCR support: "
-                f"https://github.com/tesseract-ocr/tesseract"
-            )
 
         # Save config hash after successful indexing
         if counts["indexed"] > 0 or counts["already_indexed"] > 0:
@@ -369,53 +287,58 @@ class Indexer:
 
         Returns:
             (n_chunks, n_tables, reason, extraction_stats, quality_grade)
-            - reason is non-empty only when n_chunks == 0
-            - extraction_stats includes scanned_skipped count
-            - quality_grade is A/B/C/D/F based on extraction quality
         """
         if item.pdf_path is None or not item.pdf_path.exists():
             raise FileNotFoundError(f"PDF not found for {item.item_key}")
 
-        # Extract text (with optional OCR fallback)
-        pages, extraction_stats = self.extractor.extract(item.pdf_path)
-        if not pages:
-            return 0, 0, "PDF has 0 pages (corrupt or unreadable)", extraction_stats, "F"
+        # Determine figures directory
+        figures_dir = None
+        if self.figures_enabled:
+            figures_dir = self.config.chroma_db_path.parent / "figures"
 
-        total_chars = sum(len(p.text) for p in pages)
-        scanned_skipped = extraction_stats.get("scanned_skipped", 0)
+        # Single-call extraction via pdf_processor
+        extraction = extract_document(
+            item.pdf_path,
+            write_images=self.figures_enabled,
+            images_dir=figures_dir,
+            table_strategy=self.config.table_strategy,
+            image_size_limit=self.config.image_size_limit,
+            figures_min_size=self.config.figures_min_size,
+            ocr_language=self.config.ocr_language,
+            config=self.config,
+        )
 
-        # Compute quality score (Feature 11)
-        from .pdf_extractor import compute_quality_score
-        quality = compute_quality_score(pages, extraction_stats, self.config)
-        quality_grade = quality["quality_grade"]
+        if not extraction.pages:
+            return 0, 0, "PDF has 0 pages (corrupt or unreadable)", extraction.stats, "F"
+
+        total_chars = sum(len(p.markdown) for p in extraction.pages)
+        quality_grade = extraction.quality_grade
 
         logger.debug(
-            f"  Extracted {len(pages)} pages, {total_chars} chars "
-            f"(text: {extraction_stats['text_pages']}, "
-            f"ocr: {extraction_stats['ocr_pages']}, "
-            f"empty: {extraction_stats['empty_pages']}, "
-            f"scanned_skipped: {scanned_skipped}, "
+            f"  Extracted {len(extraction.pages)} pages, {total_chars} chars "
+            f"(text: {extraction.stats['text_pages']}, "
+            f"ocr: {extraction.stats['ocr_pages']}, "
+            f"empty: {extraction.stats['empty_pages']}, "
             f"quality: {quality_grade})"
         )
 
         if total_chars == 0:
-            if self.ocr_available:
-                return 0, 0, f"{len(pages)} pages but no text (OCR failed to extract text)", extraction_stats, quality_grade
-            else:
-                return 0, 0, f"{len(pages)} pages but no text (scanned PDF - install Tesseract for OCR)", extraction_stats, quality_grade
+            return 0, 0, f"{len(extraction.pages)} pages but no text", extraction.stats, quality_grade
 
-        # Chunk
-        chunks = self.chunker.chunk(pages)
+        # Chunk using the new interface
+        chunks = self.chunker.chunk(
+            extraction.full_markdown,
+            extraction.pages,
+            extraction.sections,
+        )
         if not chunks:
-            return 0, 0, f"{len(pages)} pages, {total_chars} chars but no chunks created", extraction_stats, quality_grade
+            return 0, 0, f"{len(extraction.pages)} pages, {total_chars} chars but no chunks created", extraction.stats, quality_grade
         logger.debug(f"  Created {len(chunks)} chunks")
 
         # Look up journal quartile
         journal_quartile = self.journal_ranker.lookup(item.publication)
 
         # Store text chunks
-        # Include pdf_hash for update detection (Feature 6)
-        # Include quality_grade for filtering/reporting (Feature 11)
         doc_meta = {
             "title": item.title,
             "authors": item.authors,
@@ -431,29 +354,25 @@ class Indexer:
         }
         self.store.add_chunks(item.item_key, doc_meta, chunks)
 
-        # Extract and store tables if enabled
+        # Store tables if enabled
         n_tables = 0
-        if self.table_extractor is not None:
-            tables = self.table_extractor.extract_tables(item.pdf_path)
-            if tables:
-                self.store.add_tables(item.item_key, doc_meta, tables)
-                n_tables = len(tables)
-                logger.debug(f"  Extracted {n_tables} tables")
+        if self.tables_enabled and extraction.tables:
+            self.store.add_tables(item.item_key, doc_meta, extraction.tables)
+            n_tables = len(extraction.tables)
+            logger.debug(f"  Extracted {n_tables} tables")
 
-        # Extract and store figures if enabled
+        # Store figures if enabled
         n_figures = 0
-        if self.figure_extractor is not None:
+        if self.figures_enabled and extraction.figures:
             try:
-                figures = self.figure_extractor.extract_figures(item.pdf_path, item.item_key)
-                if figures:
-                    self.store.add_figures(item.item_key, doc_meta, figures)
-                    n_figures = len(figures)
-                    logger.debug(f"  Extracted {n_figures} figures")
+                self.store.add_figures(item.item_key, doc_meta, extraction.figures)
+                n_figures = len(extraction.figures)
+                logger.debug(f"  Extracted {n_figures} figures")
             except Exception as e:
-                logger.warning(f"Figure extraction failed for {item.item_key}: {e}")
+                logger.warning(f"Figure storage failed for {item.item_key}: {e}")
 
         logger.debug(f"Indexed {item.item_key}: {len(chunks)} chunks, {n_tables} tables, {n_figures} figures, quality {quality_grade}")
-        return len(chunks), n_tables, "", extraction_stats, quality_grade
+        return len(chunks), n_tables, "", extraction.stats, quality_grade
 
     def index_document(self, item: ZoteroItem) -> int:
         """Index a single document. Returns number of chunks created."""

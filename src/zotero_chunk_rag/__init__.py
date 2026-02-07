@@ -1,7 +1,9 @@
 """Zotero Chunk-Level RAG System."""
 from .models import (
     ZoteroItem,
-    PageText,
+    PageExtraction,
+    DocumentExtraction,
+    ExtractedFigure,
     Chunk,
     StoredChunk,
     RetrievalResult,
@@ -10,7 +12,9 @@ from .models import (
 
 __all__ = [
     "ZoteroItem",
-    "PageText",
+    "PageExtraction",
+    "DocumentExtraction",
+    "ExtractedFigure",
     "Chunk",
     "StoredChunk",
     "RetrievalResult",

@@ -28,20 +28,12 @@ class Config:
     oversample_multiplier: int
     oversample_topic_factor: int  # Additional factor for search_topic
     stats_sample_limit: int
-    # Section detection
-    section_gap_fill_min_chars: int
-    section_gap_fill_min_fraction: float
-    # OCR settings
-    ocr_enabled: bool | str  # True, False, or "auto" (default)
+    # OCR settings (language passed through to pymupdf-layout)
     ocr_language: str
-    ocr_dpi: int
-    ocr_timeout: float
-    ocr_min_text_chars: int
     # Table extraction settings
     tables_enabled: bool
-    tables_min_rows: int
-    tables_min_cols: int
-    tables_caption_distance: float
+    table_strategy: str  # pymupdf4llm table detection strategy
+    image_size_limit: float  # minimum image size as page fraction
     # Figure extraction settings
     figures_enabled: bool
     figures_min_size: int  # Minimum width/height to filter out icons/logos
@@ -88,20 +80,12 @@ class Config:
             oversample_multiplier=data.get("oversample_multiplier", 3),
             oversample_topic_factor=data.get("oversample_topic_factor", 5),
             stats_sample_limit=data.get("stats_sample_limit", 10000),
-            # Section detection
-            section_gap_fill_min_chars=data.get("section_gap_fill_min_chars", 2000),
-            section_gap_fill_min_fraction=data.get("section_gap_fill_min_fraction", 0.30),
-            # OCR settings - "auto" detects Tesseract availability at runtime
-            ocr_enabled=data.get("ocr_enabled", "auto"),
+            # OCR settings — language passed through to pymupdf-layout
             ocr_language=data.get("ocr_language", "eng"),
-            ocr_dpi=data.get("ocr_dpi", 300),
-            ocr_timeout=data.get("ocr_timeout", 30.0),
-            ocr_min_text_chars=data.get("ocr_min_text_chars", 50),
             # Table extraction settings
             tables_enabled=data.get("tables_enabled", False),
-            tables_min_rows=data.get("tables_min_rows", 2),
-            tables_min_cols=data.get("tables_min_cols", 2),
-            tables_caption_distance=data.get("tables_caption_distance", 50.0),
+            table_strategy=data.get("table_strategy", "lines_strict"),
+            image_size_limit=data.get("image_size_limit", 0.05),
             # Figure extraction settings
             figures_enabled=data.get("figures_enabled", False),
             figures_min_size=data.get("figures_min_size", 100),
@@ -128,33 +112,5 @@ class Config:
             errors.append("GEMINI_API_KEY not set (required for embedding_provider='gemini')")
         elif self.embedding_provider not in ("gemini", "local"):
             errors.append(f"Invalid embedding_provider: {self.embedding_provider}. Must be 'gemini' or 'local'")
-
-        # OCR validation - only validate if explicitly enabled (not "auto")
-        # "auto" mode detects Tesseract at runtime and gracefully skips if unavailable
-        if self.ocr_enabled is True:
-            try:
-                import pytesseract
-                pytesseract.get_tesseract_version()
-            except ImportError:
-                errors.append(
-                    "OCR enabled but pytesseract not installed. "
-                    "Run: pip install pytesseract Pillow"
-                )
-            except Exception as e:
-                errors.append(f"OCR enabled but Tesseract not available: {e}")
-
-        # Table extraction hard requirement
-        if self.tables_enabled:
-            try:
-                import pymupdf
-                version_parts = pymupdf.version[0].split(".")[:2]
-                version = tuple(map(int, version_parts))
-                if version < (1, 23):
-                    errors.append(
-                        f"Table extraction requires PyMuPDF 1.23+, found {pymupdf.version[0]}. "
-                        "Run: pip install --upgrade pymupdf"
-                    )
-            except Exception as e:
-                errors.append(f"Cannot check PyMuPDF version: {e}")
 
         return errors

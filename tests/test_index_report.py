@@ -32,7 +32,6 @@ def sample_index_result():
         reason="",
         n_chunks=25,
         n_tables=3,
-        scanned_pages_skipped=0,
         quality_grade="A",
     )
 
@@ -65,7 +64,6 @@ def empty_index_result():
         reason="No extractable text (scanned PDF)",
         n_chunks=0,
         n_tables=0,
-        scanned_pages_skipped=15,
         quality_grade="F",
     )
 

@@ -40,11 +40,41 @@ class ZoteroItem:
 # =============================================================================
 
 @dataclass
-class PageText:
-    """Text content from a single PDF page."""
-    page_num: int             # 1-indexed
-    text: str
-    char_start: int           # Character offset in concatenated full document
+class PageExtraction:
+    """Extraction results for a single PDF page."""
+    page_num: int          # 1-indexed
+    markdown: str          # Markdown text for this page
+    char_start: int        # Offset in full document markdown
+    tables_on_page: int = 0   # Count of tables detected on this page
+    images_on_page: int = 0   # Count of images detected on this page
+
+
+@dataclass
+class DocumentExtraction:
+    """Complete extraction results for a PDF."""
+    pages: list[PageExtraction]
+    full_markdown: str
+    sections: list[SectionSpan]
+    tables: list[ExtractedTable]
+    figures: list[ExtractedFigure]
+    stats: dict
+    quality_grade: str
+
+
+@dataclass
+class ExtractedFigure:
+    """A figure extracted from a PDF."""
+    page_num: int
+    figure_index: int
+    bbox: tuple[float, float, float, float]
+    caption: str | None  # None for orphaned figures (no caption found)
+    image_path: Path | None = None  # Path to saved PNG
+
+    def to_searchable_text(self) -> str:
+        """Return text for embedding."""
+        if self.caption:
+            return self.caption
+        return f"Figure on page {self.page_num}"
 
 
 # =============================================================================
@@ -96,7 +126,9 @@ class ExtractedTable:
     @property
     def num_cols(self) -> int:
         """Number of columns."""
-        return len(self.headers) if self.headers else (len(self.rows[0]) if self.rows else 0)
+        header_count = len(self.headers) if self.headers else 0
+        row_count = max((len(r) for r in self.rows), default=0) if self.rows else 0
+        return max(header_count, row_count)
 
     def to_markdown(self) -> str:
         """Convert table to markdown format for embedding."""

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import csv
 import sqlite3
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -18,35 +17,10 @@ import pytest
 # =============================================================================
 
 @pytest.fixture
-def sample_pdf_path() -> Path:
-    """Path to a sample PDF for testing."""
-    path = Path(__file__).parent / "fixtures" / "sample.pdf"
-    assert path.exists(), (
-        f"CRITICAL: Test PDF not found: {path}. "
-        "Run 'python tests/fixtures/create_test_pdfs.py' to generate fixtures."
-    )
-    return path
-
-
-@pytest.fixture
-def sample_pdf_with_figures() -> Path:
-    """Path to a PDF containing figures for extraction testing."""
-    path = Path(__file__).parent / "fixtures" / "sample_with_figures.pdf"
-    assert path.exists(), (
-        f"CRITICAL: Test PDF not found: {path}. "
-        "Run 'python tests/fixtures/create_test_pdfs.py' to generate fixtures."
-    )
-    return path
-
-
-@pytest.fixture
-def sample_pdf_scanned() -> Path:
-    """Path to a scanned PDF (image-based) for OCR testing."""
-    path = Path(__file__).parent / "fixtures" / "sample_scanned.pdf"
-    assert path.exists(), (
-        f"CRITICAL: Test PDF not found: {path}. "
-        "Run 'python tests/fixtures/create_test_pdfs.py' to generate fixtures."
-    )
+def real_papers_dir() -> Path:
+    """Path to the directory containing real academic papers for testing."""
+    path = Path(__file__).parent / "fixtures" / "papers"
+    assert path.exists(), f"Real papers directory not found: {path}"
     return path
 
 
@@ -190,18 +164,48 @@ def mock_zotero_db(tmp_path: Path) -> Path:
 # =============================================================================
 
 @pytest.fixture
-def mock_config(temp_db_path: Path):
+def mock_config(temp_db_path: Path, tmp_path: Path):
     """Create a test configuration.
 
     Uses local embeddings to avoid needing API keys in tests.
     """
     from zotero_chunk_rag.config import Config
 
-    # Create a minimal config for testing
-    # Use local embeddings so tests don't require API keys
+    # Create minimal Zotero directory structure for config validation
+    zotero_dir = tmp_path / "zotero"
+    zotero_dir.mkdir(exist_ok=True)
+    (zotero_dir / "zotero.sqlite").touch()
+
     return Config(
+        zotero_data_dir=zotero_dir,
         chroma_db_path=temp_db_path,
+        embedding_model="all-MiniLM-L6-v2",
+        embedding_dimensions=384,
+        chunk_size=400,
+        chunk_overlap=100,
+        gemini_api_key=None,
         embedding_provider="local",
+        embedding_timeout=120.0,
+        embedding_max_retries=3,
+        rerank_alpha=0.7,
+        rerank_section_weights=None,
+        rerank_journal_weights=None,
+        rerank_enabled=True,
+        oversample_multiplier=3,
+        oversample_topic_factor=5,
+        stats_sample_limit=10000,
+        ocr_language="eng",
+        tables_enabled=False,
+        table_strategy="lines_strict",
+        image_size_limit=0.05,
+        figures_enabled=False,
+        figures_min_size=100,
+        quality_threshold_a=2000,
+        quality_threshold_b=1000,
+        quality_threshold_c=500,
+        quality_threshold_d=100,
+        quality_entropy_min=4.0,
+        openalex_email=None,
     )
 
 

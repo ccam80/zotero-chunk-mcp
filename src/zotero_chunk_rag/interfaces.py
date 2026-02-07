@@ -2,9 +2,20 @@
 Protocol definitions for all major components.
 Allows parallel development against interfaces.
 """
-from typing import Protocol
+from __future__ import annotations
+
 from pathlib import Path
-from .models import ZoteroItem, PageText, Chunk, StoredChunk, RetrievalResult, SectionSpan
+from typing import Protocol
+
+from .models import (
+    ZoteroItem,
+    PageExtraction,
+    DocumentExtraction,
+    Chunk,
+    StoredChunk,
+    RetrievalResult,
+    SectionSpan,
+)
 
 
 class ZoteroClientProtocol(Protocol):
@@ -19,23 +30,24 @@ class ZoteroClientProtocol(Protocol):
         ...
 
 
-class PDFExtractorProtocol(Protocol):
-    """Interface for PDF text extraction."""
+class PDFProcessorProtocol(Protocol):
+    """Interface for PDF extraction via pymupdf-layout + pymupdf4llm."""
 
-    def extract(self, pdf_path: Path) -> tuple[list[PageText], dict]:
-        """Extract text from PDF, returning per-page content and stats.
-
-        Returns:
-            Tuple of (pages, stats) where stats contains extraction metadata.
-        """
+    def __call__(self, pdf_path: Path, **kwargs) -> DocumentExtraction:
+        """Extract a PDF document, returning structured extraction results."""
         ...
 
 
 class ChunkerProtocol(Protocol):
     """Interface for document chunking."""
 
-    def chunk(self, pages: list[PageText]) -> list[Chunk]:
-        """Split pages into overlapping chunks."""
+    def chunk(
+        self,
+        full_text: str,
+        pages: list[PageExtraction],
+        sections: list[SectionSpan],
+    ) -> list[Chunk]:
+        """Split text into overlapping chunks."""
         ...
 
 
@@ -125,58 +137,4 @@ class JournalRankerProtocol(Protocol):
     @property
     def loaded(self) -> bool:
         """Check if lookup table is loaded."""
-        ...
-
-
-class SectionDetectorProtocol(Protocol):
-    """Interface for document section detection."""
-
-    def detect_sections(self, pages: list[PageText]) -> list[SectionSpan]:
-        """Detect document sections from page text."""
-        ...
-
-    def assign_section(self, char_start: int, spans: list[SectionSpan]) -> str:
-        """Find the section label for a given character position."""
-        ...
-
-
-class OCRExtractorProtocol(Protocol):
-    """Interface for OCR extraction."""
-
-    def is_image_only_page(self, page) -> bool:
-        """Check if a page needs OCR (has images but no text)."""
-        ...
-
-    def ocr_page(self, page) -> str:
-        """Extract text from a page using OCR."""
-        ...
-
-    def get_image_only_pages(self, pdf_path: Path) -> list[int]:
-        """Get indices of pages needing OCR (0-indexed)."""
-        ...
-
-    @staticmethod
-    def is_available() -> bool:
-        """Check if OCR dependencies are available."""
-        ...
-
-
-class TableExtractorProtocol(Protocol):
-    """Interface for table extraction from PDFs."""
-
-    def extract_tables(self, pdf_path: Path) -> list:
-        """Extract all tables from a PDF.
-
-        Returns:
-            List of ExtractedTable objects
-        """
-        ...
-
-    def get_table_count(self, pdf_path: Path) -> int:
-        """Quick count of tables without full extraction."""
-        ...
-
-    @staticmethod
-    def is_available() -> bool:
-        """Check if table extraction is available."""
         ...

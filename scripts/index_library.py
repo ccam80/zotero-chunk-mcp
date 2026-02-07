@@ -19,8 +19,7 @@ def main():
     parser.add_argument("--limit", type=int, help="Limit documents to index")
     parser.add_argument("--item-key", type=str, help="Index only the item with this Zotero key")
     parser.add_argument("--title-pattern", type=str, help="Index only items whose title matches this regex pattern")
-    parser.add_argument("--no-ocr", action="store_true", help="Disable OCR even if Tesseract is available")
-    parser.add_argument("--tables", action="store_true", help="Enable table extraction and indexing (requires PyMuPDF 1.23+)")
+    parser.add_argument("--tables", action="store_true", help="Enable table extraction and indexing")
     parser.add_argument("--report", type=str, metavar="FILE", help="Output indexing report to FILE (.json or .md)")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
@@ -33,8 +32,6 @@ def main():
     config = Config.load(args.config)
 
     # Override config from CLI flags
-    if args.no_ocr:
-        config.ocr_enabled = False
     if args.tables:
         config.tables_enabled = True
 
@@ -87,8 +84,6 @@ def main():
                 if r.n_tables:
                     parts.append(f"{r.n_tables} tables")
                 detail += f"  [{', '.join(parts)}]"
-            if r.scanned_pages_skipped:
-                detail += f"  [⚠ {r.scanned_pages_skipped} scanned page(s) skipped]"
             if r.reason:
                 detail += f"  — {r.reason}"
             print(detail)
@@ -100,12 +95,6 @@ def main():
     print(f"  Empty (no text):  {stats['empty']}")
     print(f"  Skipped (cached): {stats['skipped']}")
     print(f"  Failed:           {stats['failed']}")
-
-    # Report scanned pages skipped
-    scanned_skipped = stats.get('scanned_pages_skipped', 0)
-    if scanned_skipped > 0:
-        print(f"\n⚠ {scanned_skipped} scanned page(s) could not be processed (no OCR available).")
-        print(f"  Install Tesseract for OCR support: https://github.com/tesseract-ocr/tesseract")
 
     final_stats = indexer.get_stats()
     print(f"\nIndex totals:")

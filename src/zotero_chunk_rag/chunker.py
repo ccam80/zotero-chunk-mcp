@@ -1,6 +1,6 @@
 """Document chunking with overlap and page tracking."""
-from .models import PageText, Chunk
-from .section_detector import detect_sections, assign_section_with_confidence
+from .models import PageExtraction, Chunk, SectionSpan
+from .section_classifier import assign_section_with_confidence
 
 
 class Chunker:
@@ -10,41 +10,30 @@ class Chunker:
         self,
         chunk_size: int = 400,
         overlap: int = 100,
-        gap_fill_min_chars: int = 2000,
-        gap_fill_min_fraction: float = 0.30,
     ):
         """
         Args:
             chunk_size: Target chunk size in tokens (estimated as chars/4)
             overlap: Overlap between chunks in tokens
-            gap_fill_min_chars: Minimum gap size in chars for section gap-fill
-            gap_fill_min_fraction: Minimum gap fraction for section gap-fill
         """
         self.chunk_chars = chunk_size * 4
         self.overlap_chars = overlap * 4
-        self.gap_fill_min_chars = gap_fill_min_chars
-        self.gap_fill_min_fraction = gap_fill_min_fraction
 
-    def chunk(self, pages: list[PageText]) -> list[Chunk]:
+    def chunk(
+        self,
+        full_text: str,
+        pages: list[PageExtraction],
+        sections: list[SectionSpan],
+    ) -> list[Chunk]:
         """
-        Split pages into overlapping chunks.
+        Split text into overlapping chunks.
 
         Attempts to break at sentence boundaries when possible.
         Tracks which page each chunk primarily belongs to.
         Assigns document section labels to each chunk.
         """
-        if not pages:
+        if not full_text:
             return []
-
-        # Detect sections for the document
-        section_spans = detect_sections(
-            pages,
-            gap_fill_min_chars=self.gap_fill_min_chars,
-            gap_fill_min_fraction=self.gap_fill_min_fraction,
-        )
-
-        # Concatenate all text
-        full_text = "\n".join(p.text for p in pages)
 
         # Build page boundary index
         page_boundaries = [(p.char_start, p.page_num) for p in pages]
@@ -81,7 +70,7 @@ class Chunker:
                         break
 
                 # Assign section label and confidence
-                section, section_confidence = assign_section_with_confidence(start, section_spans)
+                section, section_confidence = assign_section_with_confidence(start, sections)
 
                 chunks.append(Chunk(
                     text=chunk_text,

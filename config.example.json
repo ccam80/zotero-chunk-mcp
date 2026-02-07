@@ -5,5 +5,11 @@
     "embedding_dimensions": 768,
     "chunk_size": 400,
     "chunk_overlap": 100,
-    "gemini_api_key": YOUR_GEMINI_KEY
+    "gemini_api_key": "YOUR_GEMINI_KEY",
+    "ocr_language": "eng",
+    "table_strategy": "lines_strict",
+    "image_size_limit": 0.05,
+    "tables_enabled": false,
+    "figures_enabled": false,
+    "figures_min_size": 100
 }
