@@ -9,10 +9,8 @@ EXPECTED = {
         "caption_prefixes": ["Figure 1.", "Figure 2.", "Figure 3.", "Figure 4."],
     },
     "noname2.pdf": {
-        # Figures 1, 3, 4 are vector graphics with no raster image xrefs.
-        # Only Figure 2 (page 11) is a raster image detectable by get_image_info.
-        "min_figures": 1,
-        "caption_prefixes": ["Figure 2."],
+        "min_figures": 4,
+        "caption_prefixes": ["Figure 1.","Figure 2.","Figure 3.","Figure 4."],
     },
     "noname3.pdf": {
         # 10+ raster images on pages 2,4,6,7,8,9,10,11,12,14.
