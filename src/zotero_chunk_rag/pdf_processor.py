@@ -92,7 +92,7 @@ def extract_document(
     tables = _extract_tables(page_chunks, pages)
 
     # Extract figures using page_boxes
-    figures = _extract_figures(page_chunks, figures_min_size)
+    figures = _extract_figures(page_chunks, figures_min_size, pages, sections)
 
     # Compute extraction stats
     stats = _compute_stats(pages, page_chunks)
@@ -580,58 +580,93 @@ def _assign_captions_to_elements(
     return result
 
 
-def _find_nearest_caption(
-    element_box: dict,
-    caption_boxes: list[dict],
-    page_text: str,
-    prefix: str = "",
-) -> str | None:
-    """Find the nearest caption box matching the prefix and extract its text."""
-    best_text = None
-    best_dist = float("inf")
-
-    elem_bbox = element_box.get("bbox", (0, 0, 0, 0))
-    if not (isinstance(elem_bbox, (list, tuple)) and len(elem_bbox) == 4):
-        elem_bbox = (0, 0, 0, 0)
-
-    for cb in caption_boxes:
-        pos = cb.get("pos")
-        if not (pos and isinstance(pos, (list, tuple)) and len(pos) == 2):
-            continue
-
-        cap_text = page_text[pos[0]:pos[1]].strip()
-        # Strip markdown formatting for prefix check
-        cap_clean = cap_text.replace("**", "").replace("*", "").replace("_", "").strip()
-
-        if prefix and not cap_clean.lower().startswith(prefix.lower()):
-            continue
-
-        cb_bbox = cb.get("bbox", (0, 0, 0, 0))
-        if not (isinstance(cb_bbox, (list, tuple)) and len(cb_bbox) == 4):
-            continue
-
-        # Vertical distance: check both above and below
-        dist_below = abs(cb_bbox[1] - elem_bbox[3])  # caption below element
-        dist_above = abs(elem_bbox[1] - cb_bbox[3])   # caption above element
-        dist = min(dist_below, dist_above)
-
-        if dist < best_dist:
-            best_dist = dist
-            # Clean up the caption text
-            best_text = cap_clean
-
-    return best_text
-
-
 # ---------------------------------------------------------------------------
 # Figure extraction
 # ---------------------------------------------------------------------------
 
+# Regex matching figure caption leading words (requires period after number
+# to distinguish captions like "Figure 2." from body references like "Figure 2 shows")
+_FIG_CAPTION_RE = re.compile(
+    r"^(?:\*\*)?(?:Figure|Fig\.)\s+\d+\.",
+    re.IGNORECASE,
+)
+
+_MAX_TEXT_BOX_CAPTION_LEN = 800  # Guard against body-text ingestion
+
+
+def _caption_from_text_boxes(
+    picture_box: dict,
+    text_boxes: list[dict],
+    page_text: str,
+    max_distance: float = 80.0,
+) -> str | None:
+    """Find a caption in text-class boxes near a picture box.
+
+    Scans text boxes that start with 'Figure N.' / 'Fig. N.' and are
+    spatially adjacent to the picture. Handles both single-column layouts
+    (caption above/below) and two-column layouts (caption in adjacent column).
+    """
+    pic_bbox = picture_box.get("bbox", (0, 0, 0, 0))
+    if not (isinstance(pic_bbox, (list, tuple)) and len(pic_bbox) == 4):
+        return None
+
+    candidates: list[tuple[float, str]] = []  # (distance, caption_text)
+
+    for tbox in text_boxes:
+        pos = tbox.get("pos")
+        if not (pos and isinstance(pos, (list, tuple)) and len(pos) == 2):
+            continue
+        raw = page_text[pos[0]:pos[1]].strip()
+        # Strip markdown bold markers for the regex check
+        clean = raw.replace("**", "").replace("*", "").replace("_", "").strip()
+        if not _FIG_CAPTION_RE.match(clean):
+            continue
+        if len(clean) > _MAX_TEXT_BOX_CAPTION_LEN:
+            continue
+
+        tb_bbox = tbox.get("bbox", (0, 0, 0, 0))
+        if not (isinstance(tb_bbox, (list, tuple)) and len(tb_bbox) == 4):
+            continue
+
+        # Check vertical adjacency (single-column layout)
+        dist_below = tb_bbox[1] - pic_bbox[3]   # positive = below
+        dist_above = pic_bbox[1] - tb_bbox[3]    # positive = above
+
+        if 0 <= dist_below <= max_distance:
+            candidates.append((dist_below, clean))
+        elif 0 <= dist_above <= max_distance:
+            candidates.append((dist_above + max_distance, clean))  # Prefer below
+        else:
+            # Check horizontal adjacency (two-column layout):
+            # text box is in the adjacent column and overlaps vertically
+            h_gap_right = tb_bbox[0] - pic_bbox[2]  # text is right of picture
+            h_gap_left = pic_bbox[0] - tb_bbox[2]    # text is left of picture
+
+            # Vertical overlap check
+            v_overlap = (
+                min(pic_bbox[3], tb_bbox[3]) - max(pic_bbox[1], tb_bbox[1])
+            )
+
+            if v_overlap > 0 and 0 <= h_gap_right <= max_distance:
+                candidates.append((h_gap_right + 2 * max_distance, clean))
+            elif v_overlap > 0 and 0 <= h_gap_left <= max_distance:
+                candidates.append((h_gap_left + 2 * max_distance, clean))
+
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: x[0])
+    return candidates[0][1]
+
+
 def _extract_figures(
     page_chunks: list[dict],
     min_size: int = 100,
+    pages: list[PageExtraction] | None = None,
+    sections: list[SectionSpan] | None = None,
 ) -> list[ExtractedFigure]:
     """Extract figures using page_boxes (class=picture, class=caption)."""
+    from .section_classifier import assign_section
+
     figures = []
     fig_idx = 0
 
@@ -655,14 +690,50 @@ def _extract_figures(
                 continue
             valid_pboxes.append(pbox)
 
-        # Use nearest-caption matching for figures (usually 1 per page)
+        # Filter out pictures in the references section
+        if sections and pages:
+            page_obj = None
+            for p in pages:
+                if p.page_num == page_num:
+                    page_obj = p
+                    break
+            if page_obj:
+                filtered_pboxes = []
+                for pbox in valid_pboxes:
+                    pos = pbox.get("pos", [0, 0])
+                    fig_char_start = page_obj.char_start + (pos[0] if isinstance(pos, (list, tuple)) and pos else 0)
+                    section_label = assign_section(fig_char_start, sections)
+                    if section_label == "references":
+                        logger.debug("Page %d: skipping picture in references section", page_num)
+                        continue
+                    filtered_pboxes.append(pbox)
+                valid_pboxes = filtered_pboxes
+
+        # Use ordered-caption matching for figures
         fig_captions = _assign_captions_to_elements(
             valid_pboxes, caption_boxes, text, prefix="fig"
         )
 
+        # Fallback: scan text-class boxes for captions the layout engine missed
+        text_boxes = [b for b in boxes if b.get("class") == "text"]
+
         for i, pbox in enumerate(valid_pboxes):
             bbox = pbox.get("bbox", (0, 0, 0, 0))
             caption = fig_captions.get(i)
+
+            # If no caption from caption-class boxes, try text-class boxes
+            if not caption:
+                caption = _caption_from_text_boxes(pbox, text_boxes, text)
+                if caption:
+                    caption_source = "text_box"
+                    logger.debug(
+                        "Page %d: recovered figure caption from text box: %s",
+                        page_num, caption[:60],
+                    )
+                else:
+                    caption_source = ""
+            else:
+                caption_source = "caption_box"
 
             figures.append(ExtractedFigure(
                 page_num=page_num,
@@ -670,8 +741,18 @@ def _extract_figures(
                 bbox=tuple(bbox),
                 caption=caption,
                 image_path=None,
+                caption_source=caption_source,
             ))
             fig_idx += 1
+
+    orphans = [f for f in figures if not f.caption]
+    if orphans:
+        logger.info(
+            "%d/%d figures have no caption: pages %s",
+            len(orphans),
+            len(figures),
+            ", ".join(str(f.page_num) for f in orphans),
+        )
 
     return figures
 

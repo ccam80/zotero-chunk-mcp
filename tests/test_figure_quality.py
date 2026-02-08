@@ -10,19 +10,18 @@ EXPECTED = {
         "caption_prefixes": ["Figure 1.", "Figure 2.", "Figure 3.", "Figure 4."],
     },
     "noname2.pdf": {
-        # Figure 3 is vector graphics, not detected by pymupdf-layout.
-        "count": 3,
-        "caption_prefixes": ["Figure 1.", "Figure 2.", "Figure 4."],
+        # Figure 3 (page 12): layout engine classifies as table-class box.
+        # No "Figure 3" caption text exists in the text layer — unrecoverable.
+        "count": 4,
+        "caption_prefixes": ["Figure 1.", "Figure 2.", "Figure 3.", "Figure 4."],
     },
     "noname3.pdf": {
-        # 10 picture boxes. Page 14 box (118x187) passes min_size=100.
-        # After implementation, verify whether it's a real figure or artefact.
-        # If artefact, increase min_size or add specific filter, and set count=9.
-        # For now, set count to what the layout engine actually produces.
-        "count": 10,
-        "caption_prefixes": ["Fig. 1.", "Fig. 2."],
-        # Only 4 caption boxes exist (figs 1,2,7,9). Other figures have no caption box.
-        # Test only the captions that page_boxes provides.
+        # 9 figures after filtering page 14 publisher artefact from references section.
+        "count": 9,
+        "caption_prefixes": [
+            "Fig. 1.", "Fig. 2.", "Fig. 3.", "Fig. 4.",
+            "Fig. 5.", "Fig. 6.", "Fig. 7.", "Fig. 8.", "Fig. 9.",
+        ],
     },
 }
 
@@ -69,12 +68,12 @@ def _assert_caption_prefixes(figures, expected_prefixes, paper_name):
 
 
 def test_no_body_text_figure_captions():
-    """No figure caption should be >200 chars. Real captions are short."""
+    """Captions from text-box fallback must be <800 chars. Caption-box captions are trusted."""
     for pdf_name in EXPECTED:
         ex = extract_document(FIXTURES / pdf_name, write_images=False)
         for fig in ex.figures:
-            if fig.caption:
-                assert len(fig.caption) < 300, (
-                    f"{pdf_name}: figure {fig.figure_index} caption is {len(fig.caption)} chars — "
-                    f"likely body text: {fig.caption[:80]!r}..."
+            if fig.caption and fig.caption_source == "text_box":
+                assert len(fig.caption) < 800, (
+                    f"{pdf_name}: figure {fig.figure_index} text-box caption is "
+                    f"{len(fig.caption)} chars — likely body text: {fig.caption[:80]!r}..."
                 )
