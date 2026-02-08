@@ -91,3 +91,19 @@ def test_no_body_text_captions():
                 assert table.caption.lower().startswith("table"), (
                     f"{pdf_name}: table {table.table_index} caption looks like body text: {table.caption[:80]!r}"
                 )
+
+
+def test_tables_have_structured_data():
+    """Every table must have proper cell-level data, not raw markdown."""
+    for pdf_name in EXPECTED:
+        ex = extract_document(FIXTURES / pdf_name)
+        for table in ex.tables:
+            for row in table.rows:
+                for cell in row:
+                    assert isinstance(cell, str), (
+                        f"{pdf_name}: table {table.table_index} has non-string cell: {cell!r}"
+                    )
+            for h in table.headers:
+                assert isinstance(h, str), (
+                    f"{pdf_name}: table {table.table_index} has non-string header: {h!r}"
+                )

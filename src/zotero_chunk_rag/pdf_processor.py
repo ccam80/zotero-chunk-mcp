@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 import pymupdf.layout  # noqa: F401 — activates layout engine, MUST be before pymupdf4llm
 import pymupdf4llm
+import pymupdf
 
 from .models import (
     PageExtraction,
@@ -34,6 +35,12 @@ logger = logging.getLogger(__name__)
 # Pattern for filtering page identifiers from section-header boxes (e.g. "R1356")
 _PAGE_ID_RE = re.compile(r"^R?\d+$")
 
+# Pattern for matching table captions
+_TABLE_CAPTION_RE = re.compile(
+    r"^(?:\*\*)?(?:Table|Tab\.)\s+(\d+|[IVXLCDM]+)",
+    re.IGNORECASE,
+)
+
 
 def extract_document(
     pdf_path: Path | str,
@@ -51,13 +58,11 @@ def extract_document(
 
     kwargs: dict = dict(
         page_chunks=True,
-        write_images=write_images,
+        write_images=False,
         table_strategy=table_strategy,
         image_size_limit=image_size_limit,
         show_progress=False,
     )
-    if images_dir is not None:
-        kwargs["image_path"] = str(images_dir)
 
     page_chunks: list[dict] = pymupdf4llm.to_markdown(str(pdf_path), **kwargs)
 
@@ -88,11 +93,22 @@ def extract_document(
     # Detect sections using toc_items or section-header page_boxes
     sections = _detect_sections(page_chunks, full_markdown, pages)
 
-    # Extract tables using page_boxes
-    tables = _extract_tables(page_chunks, pages)
+    # --- STRUCTURED EXTRACTION (use native PyMuPDF) ---
+    doc = pymupdf.open(str(pdf_path))
 
-    # Extract figures using page_boxes
-    figures = _extract_figures(page_chunks, figures_min_size)
+    tables = _extract_tables_native(doc)
+
+    from ._figure_extraction import _extract_figures_native
+    figures = _extract_figures_native(
+        doc,
+        min_size=figures_min_size,
+        write_images=write_images,
+        images_dir=Path(images_dir) if images_dir else None,
+        sections=sections,
+        pages=pages,
+    )
+
+    doc.close()
 
     # Compute extraction stats
     stats = _compute_stats(pages, page_chunks)
@@ -438,50 +454,68 @@ def _build_spans(
 # Table extraction
 # ---------------------------------------------------------------------------
 
-def _extract_tables(
-    page_chunks: list[dict],
-    pages: list[PageExtraction],
-) -> list[ExtractedTable]:
-    """Extract tables using page_boxes (class=table, class=caption)."""
-    tables = []
+def _extract_tables_native(doc: pymupdf.Document) -> list[ExtractedTable]:
+    """Extract tables using PyMuPDF's native find_tables() API.
+
+    Captions are found by scanning ALL text blocks on each page for
+    "Table N" patterns, then matching to tables by vertical order.
+    """
+    from ._figure_extraction import find_all_captions_on_page
+
+    tables: list[ExtractedTable] = []
     table_idx = 0
 
-    for chunk in page_chunks:
-        page_num = chunk.get("metadata", {}).get("page_number", 1)
-        text = chunk.get("text", "")
-        boxes = chunk.get("page_boxes", [])
+    for page_num_0, page in enumerate(doc):
+        page_num = page_num_0 + 1
 
-        table_boxes = [b for b in boxes if b.get("class") == "table"]
-        caption_boxes = [b for b in boxes if b.get("class") == "caption"]
+        tab_finder = page.find_tables()
+        if not tab_finder.tables:
+            continue
 
-        # Pre-assign captions to tables on this page using ordered matching
-        table_captions = _assign_captions_to_elements(
-            table_boxes, caption_boxes, text, prefix="table"
-        )
+        # Find all "Table N" caption blocks on this page
+        caption_hits = find_all_captions_on_page(page, _TABLE_CAPTION_RE)
+        # caption_hits is list of (y_center, text, bbox) sorted by y
 
-        for i, tbox in enumerate(table_boxes):
-            pos = tbox.get("pos")
-            bbox = tuple(tbox.get("bbox", (0, 0, 0, 0)))
+        # Sort tables by vertical position
+        page_tables = []
+        for tab in tab_finder.tables:
+            data = tab.extract()
 
-            if not (pos and isinstance(pos, (list, tuple)) and len(pos) == 2):
+            cleaned_rows = [
+                [cell if cell is not None else "" for cell in row]
+                for row in data
+            ]
+            if not cleaned_rows:
                 continue
-            table_md = text[pos[0]:pos[1]]
 
-            parsed = _parse_pipe_table_from_md(table_md)
-            if parsed is None:
-                continue
-            headers, rows = parsed
+            header_names = tab.header.names if tab.header else []
+            if tab.header and not tab.header.external:
+                headers = [h if h is not None else "" for h in header_names]
+                rows = cleaned_rows[1:]
+            else:
+                headers = [h if h is not None else "" for h in header_names]
+                rows = cleaned_rows
 
-            # Skip header-only tables
             if not rows:
                 continue
 
-            caption = table_captions.get(i)
+            max_cols = max(len(r) for r in rows) if rows else 0
+            if max_cols < 2 and len(headers) < 2:
+                continue
+
+            y_center = (tab.bbox[1] + tab.bbox[3]) / 2
+            page_tables.append((y_center, tab.bbox, headers, rows))
+
+        page_tables.sort(key=lambda x: x[0])
+
+        # Match tables to captions by order
+        for i, (_, bbox, headers, rows) in enumerate(page_tables):
+            caption = caption_hits[i][1] if i < len(caption_hits) else None
 
             tables.append(ExtractedTable(
                 page_num=page_num,
                 table_index=table_idx,
-                bbox=bbox,
+                bbox=tuple(bbox),
                 headers=headers,
                 rows=rows,
                 caption=caption,
@@ -489,191 +523,6 @@ def _extract_tables(
             table_idx += 1
 
     return tables
-
-
-def _parse_pipe_table_from_md(table_md: str) -> tuple[list[str], list[list[str]]] | None:
-    """Parse a pipe-table markdown string into (headers, rows)."""
-    lines = [line for line in table_md.split("\n")
-             if line.strip().startswith("|") and "|" in line.strip()[1:]]
-
-    if len(lines) < 2:
-        return None
-
-    header_cells = [c.strip() for c in lines[0].strip("|").split("|")]
-
-    sep_line = lines[1].strip()
-    has_separator = bool(re.match(r"^\|[\s:]*-+", sep_line))
-
-    if has_separator:
-        headers = header_cells
-        data_start = 2
-    else:
-        headers = []
-        data_start = 0
-
-    rows: list[list[str]] = []
-    for line in lines[data_start:]:
-        if re.match(r"^\|[\s:]*-+", line.strip()):
-            continue
-        cells = [c.strip() for c in line.strip("|").split("|")]
-        rows.append(cells)
-
-    if not headers and not rows:
-        return None
-
-    return headers, rows
-
-
-def _assign_captions_to_elements(
-    element_boxes: list[dict],
-    caption_boxes: list[dict],
-    page_text: str,
-    prefix: str = "",
-) -> dict[int, str]:
-    """Assign captions to elements using ordered matching.
-
-    Sorts both elements and matching captions by vertical position (y-coordinate),
-    then pairs them in order. This avoids the problem where a caption for element N+1
-    is physically closer to element N's bounding box.
-
-    Returns: dict mapping element index (in element_boxes) to caption text.
-    """
-    # Filter captions that match the prefix
-    matching_captions: list[tuple[float, str]] = []  # (y_center, caption_text)
-    for cb in caption_boxes:
-        pos = cb.get("pos")
-        if not (pos and isinstance(pos, (list, tuple)) and len(pos) == 2):
-            continue
-        cap_text = page_text[pos[0]:pos[1]].strip()
-        cap_clean = cap_text.replace("**", "").replace("*", "").replace("_", "").strip()
-        if prefix and not cap_clean.lower().startswith(prefix.lower()):
-            continue
-        cb_bbox = cb.get("bbox", (0, 0, 0, 0))
-        if isinstance(cb_bbox, (list, tuple)) and len(cb_bbox) == 4:
-            y_center = (cb_bbox[1] + cb_bbox[3]) / 2
-        else:
-            y_center = 0
-        matching_captions.append((y_center, cap_clean))
-
-    # Sort captions by y position
-    matching_captions.sort(key=lambda x: x[0])
-
-    # Sort elements by y position, keeping track of original indices
-    elem_y: list[tuple[float, int]] = []
-    for i, ebox in enumerate(element_boxes):
-        bbox = ebox.get("bbox", (0, 0, 0, 0))
-        if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
-            y_center = (bbox[1] + bbox[3]) / 2
-        else:
-            y_center = 0
-        elem_y.append((y_center, i))
-    elem_y.sort(key=lambda x: x[0])
-
-    # Pair in order: first element gets first caption, second gets second, etc.
-    result: dict[int, str] = {}
-    cap_idx = 0
-    for _, orig_idx in elem_y:
-        if cap_idx < len(matching_captions):
-            result[orig_idx] = matching_captions[cap_idx][1]
-            cap_idx += 1
-
-    return result
-
-
-def _find_nearest_caption(
-    element_box: dict,
-    caption_boxes: list[dict],
-    page_text: str,
-    prefix: str = "",
-) -> str | None:
-    """Find the nearest caption box matching the prefix and extract its text."""
-    best_text = None
-    best_dist = float("inf")
-
-    elem_bbox = element_box.get("bbox", (0, 0, 0, 0))
-    if not (isinstance(elem_bbox, (list, tuple)) and len(elem_bbox) == 4):
-        elem_bbox = (0, 0, 0, 0)
-
-    for cb in caption_boxes:
-        pos = cb.get("pos")
-        if not (pos and isinstance(pos, (list, tuple)) and len(pos) == 2):
-            continue
-
-        cap_text = page_text[pos[0]:pos[1]].strip()
-        # Strip markdown formatting for prefix check
-        cap_clean = cap_text.replace("**", "").replace("*", "").replace("_", "").strip()
-
-        if prefix and not cap_clean.lower().startswith(prefix.lower()):
-            continue
-
-        cb_bbox = cb.get("bbox", (0, 0, 0, 0))
-        if not (isinstance(cb_bbox, (list, tuple)) and len(cb_bbox) == 4):
-            continue
-
-        # Vertical distance: check both above and below
-        dist_below = abs(cb_bbox[1] - elem_bbox[3])  # caption below element
-        dist_above = abs(elem_bbox[1] - cb_bbox[3])   # caption above element
-        dist = min(dist_below, dist_above)
-
-        if dist < best_dist:
-            best_dist = dist
-            # Clean up the caption text
-            best_text = cap_clean
-
-    return best_text
-
-
-# ---------------------------------------------------------------------------
-# Figure extraction
-# ---------------------------------------------------------------------------
-
-def _extract_figures(
-    page_chunks: list[dict],
-    min_size: int = 100,
-) -> list[ExtractedFigure]:
-    """Extract figures using page_boxes (class=picture, class=caption)."""
-    figures = []
-    fig_idx = 0
-
-    for chunk in page_chunks:
-        page_num = chunk.get("metadata", {}).get("page_number", 1)
-        text = chunk.get("text", "")
-        boxes = chunk.get("page_boxes", [])
-
-        picture_boxes = [b for b in boxes if b.get("class") == "picture"]
-        caption_boxes = [b for b in boxes if b.get("class") == "caption"]
-
-        # Filter picture boxes first, then assign captions
-        valid_pboxes = []
-        for pbox in picture_boxes:
-            bbox = pbox.get("bbox", (0, 0, 0, 0))
-            if not (isinstance(bbox, (list, tuple)) and len(bbox) == 4):
-                continue
-            width = abs(bbox[2] - bbox[0])
-            height = abs(bbox[3] - bbox[1])
-            if width < min_size or height < min_size:
-                continue
-            valid_pboxes.append(pbox)
-
-        # Use nearest-caption matching for figures (usually 1 per page)
-        fig_captions = _assign_captions_to_elements(
-            valid_pboxes, caption_boxes, text, prefix="fig"
-        )
-
-        for i, pbox in enumerate(valid_pboxes):
-            bbox = pbox.get("bbox", (0, 0, 0, 0))
-            caption = fig_captions.get(i)
-
-            figures.append(ExtractedFigure(
-                page_num=page_num,
-                figure_index=fig_idx,
-                bbox=tuple(bbox),
-                caption=caption,
-                image_path=None,
-            ))
-            fig_idx += 1
-
-    return figures
 
 
 # ---------------------------------------------------------------------------
