@@ -12,8 +12,8 @@ EXPECTED = {
     "noname2.pdf": {
         # Figure 3 (page 12): layout engine classifies as table-class box.
         # No "Figure 3" caption text exists in the text layer — unrecoverable.
-        "count": 3,
-        "caption_prefixes": ["Figure 1.", "Figure 2.", "Figure 4."],
+        "count": 4,
+        "caption_prefixes": ["Figure 1.", "Figure 2.", "Figure 3.", "Figure 4."],
     },
     "noname3.pdf": {
         # 9 figures after filtering page 14 publisher artefact from references section.
