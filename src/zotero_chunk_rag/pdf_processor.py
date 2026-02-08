@@ -6,11 +6,8 @@ ML-based layout detection (tables, figures, headers, footers, OCR).
 from __future__ import annotations
 
 import logging
-import math
 import re
-from collections import Counter
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import pymupdf.layout  # noqa: F401 — activates layout engine, MUST be before pymupdf4llm
 import pymupdf4llm
@@ -25,10 +22,7 @@ from .models import (
     CONFIDENCE_SCHEME_MATCH,
     CONFIDENCE_GAP_FILL,
 )
-from .section_classifier import categorize_heading, categorize_by_position
-
-if TYPE_CHECKING:
-    from .config import Config
+from .section_classifier import categorize_heading
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +35,15 @@ _TABLE_CAPTION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Patterns for caption completeness counting
+_FIG_CAPTION_RE_COMP = re.compile(
+    r"^(?:Figure|Fig\.?)\s+(\d+|[IVXLCDM]+)", re.IGNORECASE,
+)
+_TABLE_CAPTION_RE_COMP = re.compile(
+    r"^(?:\*\*)?(?:Table|Tab\.)\s+(\d+|[IVXLCDM]+)", re.IGNORECASE,
+)
+_CAPTION_NUM_RE = re.compile(r"(\d+)")
+
 
 def extract_document(
     pdf_path: Path | str,
@@ -49,9 +52,7 @@ def extract_document(
     images_dir: Path | str | None = None,
     table_strategy: str = "lines_strict",
     image_size_limit: float = 0.05,
-    figures_min_size: int = 100,
     ocr_language: str = "eng",
-    config: Config | None = None,
 ) -> DocumentExtraction:
     """Extract a PDF document using pymupdf4llm with layout detection."""
     pdf_path = Path(pdf_path)
@@ -93,28 +94,33 @@ def extract_document(
     # Detect sections using toc_items or section-header page_boxes
     sections = _detect_sections(page_chunks, full_markdown, pages)
 
+    # --- Abstract detection ---
+    # If no section is labelled "abstract", check first page for abstract text
+    has_abstract = any(s.label == "abstract" for s in sections)
+    if not has_abstract and pages:
+        abstract_span = _detect_abstract(pages[0], full_markdown)
+        if abstract_span:
+            sections = _insert_abstract(sections, abstract_span)
+
     # --- STRUCTURED EXTRACTION (use native PyMuPDF) ---
     doc = pymupdf.open(str(pdf_path))
 
     tables = _extract_tables_native(doc)
 
-    from ._figure_extraction import _extract_figures_native
-    figures = _extract_figures_native(
+    from ._figure_extraction import extract_figures
+    figures = extract_figures(
         doc,
-        min_size=figures_min_size,
+        page_chunks,
         write_images=write_images,
         images_dir=Path(images_dir) if images_dir else None,
         sections=sections,
         pages=pages,
     )
 
+    # Compute extraction stats (needs open doc for OCR detection)
+    stats = _compute_stats(pages, page_chunks, doc)
+    completeness = _compute_completeness(doc, pages, sections, tables, figures, stats)
     doc.close()
-
-    # Compute extraction stats
-    stats = _compute_stats(pages, page_chunks)
-
-    # Compute quality grade
-    quality_grade = _compute_quality_grade(pages, stats, config)
 
     return DocumentExtraction(
         pages=pages,
@@ -123,7 +129,8 @@ def extract_document(
         tables=tables,
         figures=figures,
         stats=stats,
-        quality_grade=quality_grade,
+        quality_grade=completeness.grade,
+        completeness=completeness,
     )
 
 
@@ -245,15 +252,15 @@ def _sections_from_toc(
     # Sort by global offset
     matched.sort(key=lambda x: x[0])
 
-    # Three-pass classification:
-    # Pass 1: Keyword-match all entries
-    # Pass 2: Resolve deferred level-1 entries by position (using keyword-matched neighbours)
-    # Pass 3: Inherit level-2 entries from their resolved level-1 parent
+    # Two-pass classification:
+    # Pass 1: Keyword match or defer
+    # Pass 2: L2+ entries inherit from keyword-matched L1 parent;
+    #         everything else → unknown
+    labels: list[str] = []
+    confs: list[float] = []
 
     # Build parallel lists: classified labels and the matched entry info
     entries: list[tuple[int, int, str, str]] = matched  # (offset, level, toc_title, heading_text)
-    labels: list[str] = []
-    confs: list[float] = []
 
     # Pass 1: keyword classification
     for global_offset, level, toc_title, heading_text in entries:
@@ -266,50 +273,22 @@ def _sections_from_toc(
             labels.append("__deferred__")
             confs.append(CONFIDENCE_GAP_FILL)
 
-    # Pass 2: resolve deferred level-1 entries iteratively
-    # Process in order so each resolution informs the next
-    for i in range(len(entries)):
-        if labels[i] != "__deferred__" or entries[i][1] != 1:
-            continue
-        prev_cat = _find_resolved_neighbour(labels, i, direction=-1)
-        next_keyword_cat = _find_keyword_neighbour(labels, confs, i, direction=1)
-        frac = entries[i][0] / total_len if total_len > 0 else 0
-        # Use keyword-matched next neighbour for position heuristic, but
-        # if the prev is "methods" and next is "conclusion" (no explicit results),
-        # stay in methods rather than jumping to discussion
-        if prev_cat == "methods" and next_keyword_cat in ("conclusion", "references", None):
-            labels[i] = "methods"
-        else:
-            labels[i] = categorize_by_position(frac, prev_cat, next_keyword_cat)
-
-    # Pass 3: resolve remaining deferred entries
-    # Level-2 entries try to inherit from their level-1 parent first.
-    # If no useful parent, use iterative position-based resolution with
-    # the same "stay in methods" heuristic.
+    # Pass 2: L2+ entries inherit from their keyword-matched L1 parent.
+    # This is structural inheritance (subsection belongs to parent), not
+    # position guessing. L1 entries without keywords stay deferred → unknown.
     for i in range(len(entries)):
         if labels[i] != "__deferred__":
             continue
-
-        # Try level-1 parent inheritance for level-2 entries
-        if entries[i][1] == 2:
-            parent_label = None
+        if entries[i][1] >= 2:  # level 2 or deeper
             for j in range(i - 1, -1, -1):
                 if entries[j][1] == 1 and labels[j] not in ("__deferred__", "unknown", "preamble"):
-                    parent_label = labels[j]
+                    labels[i] = labels[j]
                     break
-            if parent_label:
-                labels[i] = parent_label
-                continue
 
-        # Iterative position-based resolution with momentum
-        prev_cat = _find_resolved_neighbour(labels, i, direction=-1)
-        next_keyword_cat = _find_keyword_neighbour(labels, confs, i, direction=1)
-        frac = entries[i][0] / total_len if total_len > 0 else 0
-
-        if prev_cat == "methods" and next_keyword_cat in ("conclusion", "references", "discussion", None):
-            labels[i] = "methods"
-        else:
-            labels[i] = categorize_by_position(frac, prev_cat, next_keyword_cat)
+    # Remaining deferred → unknown
+    for i in range(len(entries)):
+        if labels[i] == "__deferred__":
+            labels[i] = "unknown"
 
     # Build classified tuples
     classified: list[tuple[int, str, str, float]] = []
@@ -317,28 +296,6 @@ def _sections_from_toc(
         classified.append((entries[i][0], labels[i], entries[i][3], confs[i]))
 
     return _build_spans(classified, total_len)
-
-
-def _find_keyword_neighbour(
-    labels: list[str], confs: list[float], idx: int, direction: int
-) -> str | None:
-    """Find the nearest keyword-matched (confidence=1.0) label in the given direction."""
-    j = idx + direction
-    while 0 <= j < len(labels):
-        if labels[j] != "__deferred__" and confs[j] == CONFIDENCE_SCHEME_MATCH:
-            return labels[j]
-        j += direction
-    return None
-
-
-def _find_resolved_neighbour(labels: list[str], idx: int, direction: int) -> str | None:
-    """Find the nearest non-deferred label in the given direction (-1 or +1)."""
-    j = idx + direction
-    while 0 <= j < len(labels):
-        if labels[j] != "__deferred__":
-            return labels[j]
-        j += direction
-    return None
 
 
 def _sections_from_header_boxes(
@@ -400,23 +357,11 @@ def _sections_from_header_boxes(
         else:
             classified.append((global_offset, "__deferred__", heading_text, CONFIDENCE_GAP_FILL))
 
-    # Resolve deferred
+    # Classify: keyword match or unknown (no TOC levels to inherit from)
     for i, (offset, label, heading_text, conf) in enumerate(classified):
         if label != "__deferred__":
             continue
-        prev_cat = None
-        for j in range(i - 1, -1, -1):
-            if classified[j][1] != "__deferred__":
-                prev_cat = classified[j][1]
-                break
-        next_cat = None
-        for j in range(i + 1, len(classified)):
-            if classified[j][1] != "__deferred__":
-                next_cat = classified[j][1]
-                break
-        frac = offset / total_len if total_len > 0 else 0
-        resolved = categorize_by_position(frac, prev_cat, next_cat)
-        classified[i] = (offset, resolved, heading_text, CONFIDENCE_GAP_FILL)
+        classified[i] = (offset, "unknown", heading_text, CONFIDENCE_GAP_FILL)
 
     return _build_spans(classified, total_len)
 
@@ -448,6 +393,85 @@ def _build_spans(
         ))
 
     return spans
+
+
+def _detect_abstract(first_page: PageExtraction, full_markdown: str) -> SectionSpan | None:
+    """Check if the first page contains an abstract.
+
+    Looks for the word 'abstract' (case-insensitive) in the first page text,
+    either as a heading or as a label preceding a paragraph.
+    """
+    page_text = first_page.markdown
+    lower = page_text.lower()
+
+    import re
+    match = re.search(r"(?:^|\n)\s*(?:#{1,3}\s*)?(?:\*\*)?abstract(?:\*\*)?\.?\s*[\n:]?",
+                       lower)
+    if not match:
+        return None
+
+    abs_start = first_page.char_start + match.start()
+
+    # Abstract ends at the next heading, not end of page.
+    # Scan forward from the match for the next markdown heading or bold number.
+    rest = page_text[match.end():]
+    next_heading = re.search(r"\n\s*(?:#{1,3}\s|\*\*\d)", rest)
+    if next_heading:
+        abs_end = first_page.char_start + match.end() + next_heading.start()
+    else:
+        abs_end = first_page.char_start + len(page_text)
+
+    return SectionSpan(
+        label="abstract",
+        char_start=abs_start,
+        char_end=abs_end,
+        heading_text="Abstract",
+        confidence=CONFIDENCE_SCHEME_MATCH,
+    )
+
+
+def _insert_abstract(
+    sections: list[SectionSpan],
+    abstract: SectionSpan,
+) -> list[SectionSpan]:
+    """Insert an abstract span into the sections list, adjusting boundaries."""
+    result = []
+    inserted = False
+    for s in sections:
+        if not inserted and s.char_start <= abstract.char_start < s.char_end:
+            if abstract.char_start > s.char_start:
+                result.append(SectionSpan(
+                    label=s.label,
+                    char_start=s.char_start,
+                    char_end=abstract.char_start,
+                    heading_text=s.heading_text,
+                    confidence=s.confidence,
+                ))
+            abs_end = min(abstract.char_end, s.char_end)
+            result.append(SectionSpan(
+                label="abstract",
+                char_start=abstract.char_start,
+                char_end=abs_end,
+                heading_text="Abstract",
+                confidence=CONFIDENCE_SCHEME_MATCH,
+            ))
+            if abs_end < s.char_end:
+                result.append(SectionSpan(
+                    label=s.label,
+                    char_start=abs_end,
+                    char_end=s.char_end,
+                    heading_text=s.heading_text,
+                    confidence=s.confidence,
+                ))
+            inserted = True
+        else:
+            result.append(s)
+
+    if not inserted:
+        result.append(abstract)
+        result.sort(key=lambda s: s.char_start)
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -530,63 +554,77 @@ def _extract_tables_native(doc: pymupdf.Document) -> list[ExtractedTable]:
 # ---------------------------------------------------------------------------
 
 def _compute_stats(
-    pages: list[PageExtraction], page_chunks: list[dict]
+    pages: list[PageExtraction], page_chunks: list[dict],
+    doc: pymupdf.Document | None = None,
 ) -> dict:
-    """Compute extraction statistics."""
+    """Compute extraction statistics.
+
+    If doc is provided, detects OCR pages by comparing native text
+    (page.get_text()) with the markdown output. Pages where native
+    text is empty but markdown has content were processed by OCR.
+    """
     total_pages = len(pages)
     text_pages = 0
     empty_pages = 0
+    ocr_pages = 0
 
-    for page in pages:
-        if page.markdown.strip():
+    for i, page in enumerate(pages):
+        md = page.markdown.strip()
+        if md:
             text_pages += 1
+            # Check if this page needed OCR
+            if doc and i < len(doc):
+                native_text = doc[i].get_text().strip()
+                if len(native_text) < 20 and len(md) > 20:
+                    ocr_pages += 1
         else:
             empty_pages += 1
 
     return {
         "total_pages": total_pages,
         "text_pages": text_pages,
-        "ocr_pages": 0,
+        "ocr_pages": ocr_pages,
         "empty_pages": empty_pages,
     }
 
 
-def _compute_quality_grade(
+def _compute_completeness(
+    doc: pymupdf.Document,
     pages: list[PageExtraction],
+    sections: list[SectionSpan],
+    tables: list[ExtractedTable],
+    figures: list[ExtractedFigure],
     stats: dict,
-    config: Config | None = None,
-) -> str:
-    """Compute quality grade for the extraction."""
-    num_pages = len(pages)
-    if num_pages == 0:
-        return "F"
+) -> "ExtractionCompleteness":
+    from .models import ExtractionCompleteness
+    from ._figure_extraction import find_all_captions_on_page
 
-    total_chars = sum(len(p.markdown) for p in pages)
-    chars_per_page = total_chars / num_pages
-    empty_fraction = stats.get("empty_pages", 0) / num_pages
+    fig_nums: set[str] = set()
+    tab_nums: set[str] = set()
 
-    sample_text = "".join(p.markdown for p in pages)[:100000].lower()
-    char_counts = Counter(sample_text)
-    total = len(sample_text)
-    entropy = 0.0
-    if total > 0:
-        for count in char_counts.values():
-            p = count / total
-            entropy -= p * math.log2(p)
+    for page in doc:
+        for _, caption_text, _ in find_all_captions_on_page(page, _FIG_CAPTION_RE_COMP):
+            m = _CAPTION_NUM_RE.search(caption_text)
+            if m:
+                fig_nums.add(m.group(1))
+        for _, caption_text, _ in find_all_captions_on_page(page, _TABLE_CAPTION_RE_COMP):
+            m = _CAPTION_NUM_RE.search(caption_text)
+            if m:
+                tab_nums.add(m.group(1))
 
-    threshold_a = config.quality_threshold_a if config else 2000
-    threshold_b = config.quality_threshold_b if config else 1000
-    threshold_c = config.quality_threshold_c if config else 500
-    threshold_d = config.quality_threshold_d if config else 100
-    entropy_min = config.quality_entropy_min if config else 4.0
+    return ExtractionCompleteness(
+        text_pages=stats.get("text_pages", 0),
+        empty_pages=stats.get("empty_pages", 0),
+        ocr_pages=stats.get("ocr_pages", 0),
+        figures_found=len(figures),
+        figure_captions_found=len(fig_nums),
+        figures_missing=max(0, len(fig_nums) - len(figures)),
+        tables_found=len(tables),
+        table_captions_found=len(tab_nums),
+        tables_missing=max(0, len(tab_nums) - len(tables)),
+        sections_identified=len([s for s in sections if s.label != "preamble"]),
+        unknown_sections=len([s for s in sections if s.label == "unknown"]),
+        has_abstract=any(s.label == "abstract" for s in sections),
+    )
 
-    if chars_per_page > threshold_a and empty_fraction < 0.1 and entropy > entropy_min:
-        return "A"
-    elif chars_per_page > threshold_b and empty_fraction < 0.2:
-        return "B"
-    elif chars_per_page > threshold_c:
-        return "C"
-    elif chars_per_page > threshold_d:
-        return "D"
-    else:
-        return "F"
+

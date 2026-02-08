@@ -59,6 +59,7 @@ class DocumentExtraction:
     figures: list[ExtractedFigure]
     stats: dict
     quality_grade: str
+    completeness: ExtractionCompleteness | None = None
 
 
 @dataclass
@@ -75,6 +76,49 @@ class ExtractedFigure:
         if self.caption:
             return self.caption
         return f"Figure on page {self.page_num}"
+
+
+@dataclass
+class ExtractionCompleteness:
+    """Measures what was captured vs what exists in the document."""
+    text_pages: int
+    empty_pages: int
+    ocr_pages: int
+    figures_found: int
+    figure_captions_found: int      # unique figure numbers from caption blocks on pages
+    figures_missing: int            # captions_found - figures_found
+    tables_found: int
+    table_captions_found: int       # unique table numbers from caption blocks on pages
+    tables_missing: int             # captions_found - tables_found
+    sections_identified: int
+    unknown_sections: int
+    has_abstract: bool
+
+    @property
+    def grade(self) -> str:
+        """Backward-compatible letter grade derived from completeness.
+
+        Unknown sections are NOT penalized — they are honest labels for
+        non-standard headings. Grade is based on figure/table capture.
+
+        A: no missing figures/tables, has sections
+        B: <=1 missing figure or table
+        C: some structured content captured but gaps exist
+        D: text extracted but structured content mostly missing
+        F: no usable text
+        """
+        if self.text_pages == 0:
+            return "F"
+        if (self.figures_missing == 0 and self.tables_missing == 0
+                and self.sections_identified > 0):
+            return "A"
+        if self.figures_missing <= 1 and self.tables_missing <= 1:
+            return "B"
+        if self.figures_found > 0 or self.tables_found > 0:
+            return "C"
+        if self.text_pages > 0:
+            return "D"
+        return "F"
 
 
 # =============================================================================

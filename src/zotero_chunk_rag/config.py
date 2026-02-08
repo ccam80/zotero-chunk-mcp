@@ -31,18 +31,8 @@ class Config:
     # OCR settings (language passed through to pymupdf-layout)
     ocr_language: str
     # Table extraction settings
-    tables_enabled: bool
     table_strategy: str  # pymupdf4llm table detection strategy
     image_size_limit: float  # minimum image size as page fraction
-    # Figure extraction settings
-    figures_enabled: bool
-    figures_min_size: int  # Minimum width/height to filter out icons/logos
-    # Quality metric thresholds
-    quality_threshold_a: int  # chars/page for A grade
-    quality_threshold_b: int  # chars/page for B grade
-    quality_threshold_c: int  # chars/page for C grade
-    quality_threshold_d: int  # chars/page for D grade
-    quality_entropy_min: float  # minimum entropy for A grade
     # OpenAlex settings
     openalex_email: str | None  # Optional email for polite pool (10 req/sec vs 1 req/sec)
 
@@ -83,18 +73,8 @@ class Config:
             # OCR settings — language passed through to pymupdf-layout
             ocr_language=data.get("ocr_language", "eng"),
             # Table extraction settings
-            tables_enabled=data.get("tables_enabled", False),
             table_strategy=data.get("table_strategy", "lines_strict"),
             image_size_limit=data.get("image_size_limit", 0.05),
-            # Figure extraction settings
-            figures_enabled=data.get("figures_enabled", False),
-            figures_min_size=data.get("figures_min_size", 100),
-            # Quality metric thresholds
-            quality_threshold_a=data.get("quality_threshold_a", 2000),
-            quality_threshold_b=data.get("quality_threshold_b", 1000),
-            quality_threshold_c=data.get("quality_threshold_c", 500),
-            quality_threshold_d=data.get("quality_threshold_d", 100),
-            quality_entropy_min=data.get("quality_entropy_min", 4.0),
             # OpenAlex settings
             openalex_email=data.get("openalex_email") or os.environ.get("OPENALEX_EMAIL"),
         )

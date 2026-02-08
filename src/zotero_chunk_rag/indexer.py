@@ -29,9 +29,7 @@ def _config_hash(config: Config) -> str:
         f"{config.embedding_dimensions}:"
         f"{config.embedding_model}:"
         f"{config.ocr_language}:"
-        f"{config.table_strategy}:"
-        f"{config.tables_enabled}:"
-        f"{config.figures_enabled}"
+        f"{config.table_strategy}"
     )
     return hashlib.sha256(data.encode()).hexdigest()[:16]
 
@@ -58,9 +56,6 @@ class Indexer:
     def __init__(self, config: Config):
         self.config = config
         self.zotero = ZoteroClient(config.zotero_data_dir)
-
-        self.tables_enabled = config.tables_enabled
-        self.figures_enabled = config.figures_enabled
 
         self.chunker = Chunker(
             chunk_size=config.chunk_size,
@@ -292,20 +287,16 @@ class Indexer:
             raise FileNotFoundError(f"PDF not found for {item.item_key}")
 
         # Determine figures directory
-        figures_dir = None
-        if self.figures_enabled:
-            figures_dir = self.config.chroma_db_path.parent / "figures"
+        figures_dir = self.config.chroma_db_path.parent / "figures"
 
         # Single-call extraction via pdf_processor
         extraction = extract_document(
             item.pdf_path,
-            write_images=self.figures_enabled,
+            write_images=True,
             images_dir=figures_dir,
             table_strategy=self.config.table_strategy,
             image_size_limit=self.config.image_size_limit,
-            figures_min_size=self.config.figures_min_size,
             ocr_language=self.config.ocr_language,
-            config=self.config,
         )
 
         if not extraction.pages:
@@ -356,14 +347,14 @@ class Indexer:
 
         # Store tables if enabled
         n_tables = 0
-        if self.tables_enabled and extraction.tables:
+        if extraction.tables:
             self.store.add_tables(item.item_key, doc_meta, extraction.tables)
             n_tables = len(extraction.tables)
             logger.debug(f"  Extracted {n_tables} tables")
 
         # Store figures if enabled
         n_figures = 0
-        if self.figures_enabled and extraction.figures:
+        if extraction.figures:
             try:
                 self.store.add_figures(item.item_key, doc_meta, extraction.figures)
                 n_figures = len(extraction.figures)
