@@ -35,12 +35,31 @@ _TABLE_CAPTION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Relaxed table caption regex — no delimiter required after the number.
+# Only used when font-change detection confirms a distinct label font.
+_TABLE_CAPTION_RE_RELAXED = re.compile(
+    r"^(?:\*\*)?(?:Table|Tab\.)\s+(\d+|[IVXLCDM]+)\s+\S",
+    re.IGNORECASE,
+)
+
+# Label-only regex — matches "Table N" on its own line (no description).
+_TABLE_LABEL_ONLY_RE = re.compile(
+    r"^(?:\*\*)?(?:Table|Tab\.?)\s+(\d+|[IVXLCDM]+)\s*$",
+    re.IGNORECASE,
+)
+
 # Patterns for caption completeness counting
 _FIG_CAPTION_RE_COMP = re.compile(
     r"^(?:Figure|Fig\.?)\s+(\d+|[IVXLCDM]+)\s*[.:()\u2014\u2013-]", re.IGNORECASE,
 )
+_FIG_CAPTION_RE_COMP_RELAXED = re.compile(
+    r"^(?:Figure|Fig\.?)\s+(\d+|[IVXLCDM]+)\s+\S", re.IGNORECASE,
+)
 _TABLE_CAPTION_RE_COMP = re.compile(
     r"^(?:\*\*)?(?:Table|Tab\.)\s+(\d+|[IVXLCDM]+)\s*[.:()\u2014\u2013-]", re.IGNORECASE,
+)
+_TABLE_CAPTION_RE_COMP_RELAXED = re.compile(
+    r"^(?:\*\*)?(?:Table|Tab\.)\s+(\d+|[IVXLCDM]+)\s+\S", re.IGNORECASE,
 )
 _CAPTION_NUM_RE = re.compile(r"(\d+)")
 
@@ -599,7 +618,11 @@ def _extract_tables_native(
             continue
 
         # Find all "Table N" caption blocks on this page
-        caption_hits = find_all_captions_on_page(page, _TABLE_CAPTION_RE)
+        caption_hits = find_all_captions_on_page(
+            page, _TABLE_CAPTION_RE,
+            relaxed_re=_TABLE_CAPTION_RE_RELAXED,
+            label_only_re=_TABLE_LABEL_ONLY_RE,
+        )
         # caption_hits is list of (y_center, text, bbox) sorted by y
 
         # Sort tables by vertical position
@@ -712,20 +735,31 @@ def _compute_completeness(
     stats: dict,
 ) -> "ExtractionCompleteness":
     from .models import ExtractionCompleteness
-    from ._figure_extraction import find_all_captions_on_page
+    from ._figure_extraction import find_all_captions_on_page, _FIG_LABEL_ONLY_RE
 
     fig_nums: set[str] = set()
     tab_nums: set[str] = set()
 
     for page in doc:
-        for _, caption_text, _ in find_all_captions_on_page(page, _FIG_CAPTION_RE_COMP):
+        for _, caption_text, _ in find_all_captions_on_page(
+            page, _FIG_CAPTION_RE_COMP,
+            relaxed_re=_FIG_CAPTION_RE_COMP_RELAXED,
+            label_only_re=_FIG_LABEL_ONLY_RE,
+        ):
             m = _CAPTION_NUM_RE.search(caption_text)
             if m:
                 fig_nums.add(m.group(1))
-        for _, caption_text, _ in find_all_captions_on_page(page, _TABLE_CAPTION_RE_COMP):
+        for _, caption_text, _ in find_all_captions_on_page(
+            page, _TABLE_CAPTION_RE_COMP,
+            relaxed_re=_TABLE_CAPTION_RE_COMP_RELAXED,
+            label_only_re=_TABLE_LABEL_ONLY_RE,
+        ):
             m = _CAPTION_NUM_RE.search(caption_text)
             if m:
                 tab_nums.add(m.group(1))
+
+    figures_with_captions = sum(1 for f in figures if f.caption)
+    tables_with_captions = sum(1 for t in tables if t.caption)
 
     return ExtractionCompleteness(
         text_pages=stats.get("text_pages", 0),
@@ -737,6 +771,8 @@ def _compute_completeness(
         tables_found=len(tables),
         table_captions_found=len(tab_nums),
         tables_missing=max(0, len(tab_nums) - len(tables)),
+        figures_with_captions=figures_with_captions,
+        tables_with_captions=tables_with_captions,
         sections_identified=len([s for s in sections if s.label != "preamble"]),
         unknown_sections=len([s for s in sections if s.label == "unknown"]),
         has_abstract=any(s.label == "abstract" for s in sections),

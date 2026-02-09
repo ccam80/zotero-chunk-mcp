@@ -29,6 +29,18 @@ _FIG_CAPTION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Relaxed figure caption regex — no delimiter required after the number.
+# Only used when font-change detection confirms a distinct label font.
+_FIG_CAPTION_RE_RELAXED = re.compile(
+    r"^(?:Figure|Fig\.?)\s+(\d+|[IVXLCDM]+)\s+\S",
+    re.IGNORECASE,
+)
+
+_FIG_LABEL_ONLY_RE = re.compile(
+    r"^(?:Figure|Fig\.?)\s+(\d+|[IVXLCDM]+)\s*$",
+    re.IGNORECASE,
+)
+
 _MAX_CAPTION_LEN = 2000
 _SUPP_PREFIX_RE = re.compile(r"^(?:supplementary|suppl?\.?)\s+", re.IGNORECASE)
 _MIN_FIGURE_AREA = 15000    # ~120x125 pts; filters logos/icons
@@ -98,7 +110,11 @@ def extract_figures(
     # Step 2: Find captions on every page (not just pages with picture boxes)
     for page_num_0, page in enumerate(doc):
         page_num = page_num_0 + 1
-        captions = _find_captions_on_page(page, _FIG_CAPTION_RE)
+        captions = _find_captions_on_page(
+            page, _FIG_CAPTION_RE,
+            relaxed_re=_FIG_CAPTION_RE_RELAXED,
+            label_only_re=_FIG_LABEL_ONLY_RE,
+        )
         if captions:
             page_captions[page_num] = captions
 
@@ -202,13 +218,91 @@ def extract_figures(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+def _block_has_label_font_change(block: dict) -> bool:
+    """Check if a block starts with a caption label in a distinct font.
+
+    Many papers (e.g. medical meta-analyses) format captions as bold or italic
+    "Figure N" followed by normal-weight description text, without any
+    punctuation delimiter. The font change between the label and the body
+    is the only signal distinguishing a caption from a body-text reference.
+
+    Returns True when the first non-whitespace span uses a different font
+    from the second non-whitespace span.
+    """
+    spans: list[dict] = []
+    for line in block.get("lines", []):
+        for span in line.get("spans", []):
+            if span.get("text", "").strip():
+                spans.append(span)
+    if len(spans) < 2:
+        return False
+    return spans[0].get("font") != spans[1].get("font")
+
+
+def _block_label_on_own_line(block: dict, label_only_re: re.Pattern) -> bool:
+    """Check if the block's first line is just a caption label (e.g. 'Table 1').
+
+    Detects captions where label and description are separated by a newline
+    rather than punctuation:
+        Table 1
+        Summary of results...
+    """
+    lines = block.get("lines", [])
+    if len(lines) < 2:
+        return False
+    first_line = ""
+    for span in lines[0].get("spans", []):
+        first_line += span.get("text", "")
+    first_line = first_line.strip()
+    return bool(label_only_re.match(first_line))
+
+
+def _font_name_is_bold(name: str) -> bool:
+    """Check if a font name indicates bold weight."""
+    if name.endswith('.B') or name.endswith('.b'):
+        return True
+    lower = name.lower()
+    return 'bold' in lower or '-bd' in lower
+
+
+def _block_is_bold(block: dict) -> bool:
+    """Check if a block's text is primarily in a bold font.
+
+    Detects bold via flags (bit 4) or font name patterns (.B, -Bold, etc.).
+    Some PDFs encode bold only in the font name, not in flags.
+    """
+    total_chars = 0
+    bold_chars = 0
+    for line in block.get("lines", []):
+        for span in line.get("spans", []):
+            n = len(span.get("text", "").strip())
+            if n == 0:
+                continue
+            total_chars += n
+            flags = span.get("flags", 0)
+            font_name = span.get("font", "")
+            if (flags & 16) or _font_name_is_bold(font_name):
+                bold_chars += n
+    return total_chars > 0 and bold_chars > total_chars * 0.5
+
+
 def _find_captions_on_page(
     page: pymupdf.Page,
     prefix_re: re.Pattern,
+    *,
+    relaxed_re: re.Pattern | None = None,
+    label_only_re: re.Pattern | None = None,
 ) -> list[tuple[float, str]]:
     """Find caption text blocks matching prefix_re, sorted by y-position.
 
     Returns list of (y_center, caption_text).
+
+    When relaxed_re is provided, blocks that don't match prefix_re are
+    tested against relaxed_re (no delimiter required). A match is accepted
+    when any of these structural signals confirm it's a caption:
+    - Font change between label and body text (bold/italic label)
+    - Label on its own line (newline after "Table N" / "Figure N")
+    - Entire block is in bold font (single-font bold captions)
     """
     text_dict = page.get_text("dict")
     hits: list[tuple[float, str]] = []
@@ -232,6 +326,12 @@ def _find_captions_on_page(
         check_text = _SUPP_PREFIX_RE.sub("", block_text)
         if prefix_re.match(check_text):
             hits.append((y_center, block_text))
+        elif relaxed_re and relaxed_re.match(check_text):
+            if (_block_has_label_font_change(block)
+                    or (label_only_re
+                        and _block_label_on_own_line(block, label_only_re))
+                    or _block_is_bold(block)):
+                hits.append((y_center, block_text))
 
     hits.sort(key=lambda x: x[0])
     return hits  # list of (y_center, text)
@@ -240,10 +340,18 @@ def _find_captions_on_page(
 def find_all_captions_on_page(
     page: pymupdf.Page,
     prefix_re: re.Pattern,
+    *,
+    relaxed_re: re.Pattern | None = None,
+    label_only_re: re.Pattern | None = None,
 ) -> list[tuple[float, str, tuple]]:
     """Public API used by table extraction in pdf_processor.py.
 
     Returns list of (y_center, caption_text, bbox) sorted by y-position.
+
+    When relaxed_re is provided, blocks that don't match prefix_re are
+    tested against relaxed_re. A match is accepted when any structural
+    signal confirms it's a caption (font change, label on own line, or
+    bold block).
     """
     text_dict = page.get_text("dict")
     hits: list[tuple[float, str, tuple]] = []
@@ -267,6 +375,12 @@ def find_all_captions_on_page(
         check_text = _SUPP_PREFIX_RE.sub("", block_text)
         if prefix_re.match(check_text):
             hits.append((y_center, block_text, tuple(block_bbox)))
+        elif relaxed_re and relaxed_re.match(check_text):
+            if (_block_has_label_font_change(block)
+                    or (label_only_re
+                        and _block_label_on_own_line(block, label_only_re))
+                    or _block_is_bold(block)):
+                hits.append((y_center, block_text, tuple(block_bbox)))
 
     hits.sort(key=lambda x: x[0])
     return hits

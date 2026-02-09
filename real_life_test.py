@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 import sys
 import tempfile
@@ -111,8 +112,8 @@ CORPUS = [
             "expect_figures": True,
             "expect_sections": ["introduction", "methods", "results", "discussion"],
             "searchable_content": "respiratory sinus arrhythmia coregulation romantic",
-            "table_search_query": "correlation coefficient RSA",
-            "figure_search_query": "coregulation respiratory",
+            "table_search_query": "dyadic physiological model fit comparison",
+            "figure_search_query": "physiological linkage interaction pattern",
         },
     ),
     (
@@ -160,7 +161,7 @@ CORPUS = [
             "expect_sections": ["introduction", "methods", "results", "discussion"],
             "searchable_content": "pulse pressure variation fluid responsiveness",
             "table_search_query": "sensitivity specificity diagnostic",
-            "figure_search_query": "forest plot",
+            "figure_search_query": "sensitivity specificity receiver operating",
         },
     ),
     (
@@ -175,8 +176,8 @@ CORPUS = [
             "expect_figures": True,
             "expect_sections": ["introduction", "methods", "results"],
             "searchable_content": "electrode skin impedance imbalance frequency",
-            "table_search_query": "impedance measurement electrode",
-            "figure_search_query": "impedance frequency",
+            "table_search_query": "component values circuit parasitic inductance",
+            "figure_search_query": "electrode skin contact amplifier schematic",
         },
     ),
     (
@@ -191,8 +192,8 @@ CORPUS = [
             "expect_figures": True,
             "expect_sections": ["introduction", "conclusion"],
             "searchable_content": "low frequency heart rate variability sympathetic",
-            "table_search_query": "autonomic measures",
-            "figure_search_query": "heart rate variability",
+            "table_search_query": "frequency domain sympathetic vagal HRV measures",
+            "figure_search_query": "baroreflex autonomic nervous system regulation",
         },
     ),
 ]
@@ -473,13 +474,28 @@ def run_stress_test():
                 # Store text chunks
                 store.add_chunks(item.item_key, doc_meta, chunks)
 
+                # Build reference map and enrich tables/figures with body-text context
+                # (mirrors production indexer pipeline)
+                from zotero_chunk_rag._reference_matcher import match_references, get_reference_context
+                ref_map = match_references(extraction.full_markdown, chunks, extraction.tables, extraction.figures)
+                for table in extraction.tables:
+                    m_cap = re.search(r"(\d+)", table.caption) if table.caption else None
+                    if m_cap:
+                        ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "table", int(m_cap.group(1)))
+                        table.reference_context = ctx
+                for fig in extraction.figures:
+                    m_cap = re.search(r"(\d+)", fig.caption) if fig.caption else None
+                    if m_cap:
+                        ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "figure", int(m_cap.group(1)))
+                        fig.reference_context = ctx
+
                 # Store tables
                 if extraction.tables:
-                    store.add_tables(item.item_key, doc_meta, extraction.tables)
+                    store.add_tables(item.item_key, doc_meta, extraction.tables, ref_map=ref_map)
 
                 # Store figures
                 if extraction.figures:
-                    store.add_figures(item.item_key, doc_meta, extraction.figures)
+                    store.add_figures(item.item_key, doc_meta, extraction.figures, ref_map=ref_map)
 
                 extractions[item.item_key] = (extraction, chunks, item, gt, short_name)
 
@@ -553,7 +569,8 @@ def run_stress_test():
                     f"Expected tables — found {len(extraction.tables)}",
                     severity="MAJOR",
                 )
-                # Check table content quality (non-empty cells)
+                # Check table content quality and caption assignment
+                _cont_re = re.compile(r'\bcontinued\b', re.IGNORECASE)
                 for i, tab in enumerate(extraction.tables):
                     non_empty = sum(1 for row in tab.rows for cell in row if cell.strip())
                     total_cells = sum(len(row) for row in tab.rows)
@@ -567,6 +584,40 @@ def run_stress_test():
                             f"Caption: '{(tab.caption or 'NONE')[:60]}'",
                             severity="MAJOR" if fill_rate < 0.1 else "MINOR",
                         )
+                    # Missing caption → MAJOR
+                    if not tab.caption:
+                        report.add(
+                            "table-caption-missing",
+                            f"{short_name}/table-{i}",
+                            False,
+                            f"Table {i} on page {tab.page_num}: NO CAPTION",
+                            severity="MAJOR",
+                        )
+                    # Continuation caption → MAJOR (unverified)
+                    elif _cont_re.search(tab.caption):
+                        report.add(
+                            "table-caption-continuation",
+                            f"{short_name}/table-{i}",
+                            False,
+                            f"Table {i} on page {tab.page_num}: unverified continuation "
+                            f"caption '{tab.caption[:60]}'",
+                            severity="MAJOR",
+                        )
+                # Overall table caption rate
+                if extraction.tables:
+                    tabs_with_real_caption = [
+                        t for t in extraction.tables
+                        if t.caption and not _cont_re.search(t.caption)
+                    ]
+                    tab_caption_rate = len(tabs_with_real_caption) / len(extraction.tables)
+                    report.add(
+                        "table-caption-rate",
+                        short_name,
+                        tab_caption_rate == 1.0,
+                        f"{len(tabs_with_real_caption)}/{len(extraction.tables)} tables "
+                        f"have verified captions ({tab_caption_rate:.0%})",
+                        severity="MAJOR" if tab_caption_rate < 0.8 else "MINOR",
+                    )
 
             # --- 3c: Figures extracted ---
             if gt.get("expect_figures"):
@@ -578,18 +629,42 @@ def run_stress_test():
                     f"Expected figures — found {len(extraction.figures)}",
                     severity="MAJOR",
                 )
-                # Check figure captions
-                captioned = [f for f in extraction.figures if f.caption]
-                orphans = [f for f in extraction.figures if not f.caption]
+                # Check individual figure captions
+                _cont_re = re.compile(r'\bcontinued\b', re.IGNORECASE)
+                for i, fig in enumerate(extraction.figures):
+                    if not fig.caption:
+                        report.add(
+                            "figure-caption-missing",
+                            f"{short_name}/fig-{i}",
+                            False,
+                            f"Figure {i} on page {fig.page_num}: NO CAPTION",
+                            severity="MAJOR",
+                        )
+                    elif _cont_re.search(fig.caption):
+                        report.add(
+                            "figure-caption-continuation",
+                            f"{short_name}/fig-{i}",
+                            False,
+                            f"Figure {i} on page {fig.page_num}: unverified continuation "
+                            f"caption '{fig.caption[:60]}'",
+                            severity="MAJOR",
+                        )
+                # Overall figure caption rate
                 if extraction.figures:
-                    caption_rate = len(captioned) / len(extraction.figures)
+                    figs_with_real_caption = [
+                        f for f in extraction.figures
+                        if f.caption and not _cont_re.search(f.caption)
+                    ]
+                    orphans = [f for f in extraction.figures if not f.caption]
+                    fig_caption_rate = len(figs_with_real_caption) / len(extraction.figures)
                     report.add(
                         "figure-caption-rate",
                         short_name,
-                        caption_rate >= 0.5,
-                        f"{len(captioned)}/{len(extraction.figures)} figures have captions ({caption_rate:.0%}). "
+                        fig_caption_rate == 1.0,
+                        f"{len(figs_with_real_caption)}/{len(extraction.figures)} figures "
+                        f"have verified captions ({fig_caption_rate:.0%}). "
                         f"Orphan pages: {[f.page_num for f in orphans]}",
-                        severity="MAJOR" if caption_rate < 0.3 else "MINOR",
+                        severity="MAJOR" if fig_caption_rate < 0.8 else "MINOR",
                     )
 
             # --- 3d: Completeness grade ---

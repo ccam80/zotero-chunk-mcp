@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 import sys
 import tempfile
@@ -112,7 +113,7 @@ CORPUS = [
             "expect_sections": ["introduction", "methods", "results", "discussion"],
             "searchable_content": "respiratory sinus arrhythmia coregulation romantic",
             "table_search_query": "correlation coefficient RSA",
-            "figure_search_query": "coregulation respiratory",
+            "figure_search_query": "RSA dynamics time series",
         },
     ),
     (
@@ -160,7 +161,7 @@ CORPUS = [
             "expect_sections": ["introduction", "methods", "results", "discussion"],
             "searchable_content": "pulse pressure variation fluid responsiveness",
             "table_search_query": "sensitivity specificity diagnostic",
-            "figure_search_query": "forest plot",
+            "figure_search_query": "sensitivity specificity receiver operating",
         },
     ),
     (
@@ -473,13 +474,28 @@ def run_stress_test():
                 # Store text chunks
                 store.add_chunks(item.item_key, doc_meta, chunks)
 
+                # Build reference map and enrich tables/figures with body-text context
+                # (mirrors production indexer pipeline)
+                from zotero_chunk_rag._reference_matcher import match_references, get_reference_context
+                ref_map = match_references(extraction.full_markdown, chunks, extraction.tables, extraction.figures)
+                for table in extraction.tables:
+                    m_cap = re.search(r"(\d+)", table.caption) if table.caption else None
+                    if m_cap:
+                        ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "table", int(m_cap.group(1)))
+                        table.reference_context = ctx
+                for fig in extraction.figures:
+                    m_cap = re.search(r"(\d+)", fig.caption) if fig.caption else None
+                    if m_cap:
+                        ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "figure", int(m_cap.group(1)))
+                        fig.reference_context = ctx
+
                 # Store tables
                 if extraction.tables:
-                    store.add_tables(item.item_key, doc_meta, extraction.tables)
+                    store.add_tables(item.item_key, doc_meta, extraction.tables, ref_map=ref_map)
 
                 # Store figures
                 if extraction.figures:
-                    store.add_figures(item.item_key, doc_meta, extraction.figures)
+                    store.add_figures(item.item_key, doc_meta, extraction.figures, ref_map=ref_map)
 
                 extractions[item.item_key] = (extraction, chunks, item, gt, short_name)
 

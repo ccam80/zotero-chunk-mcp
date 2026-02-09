@@ -95,35 +95,72 @@ class ExtractionCompleteness:
     tables_found: int
     table_captions_found: int       # unique table numbers from caption blocks on pages
     tables_missing: int             # captions_found - tables_found
-    sections_identified: int
-    unknown_sections: int
-    has_abstract: bool
+    figures_with_captions: int = 0  # extracted figures that have a caption assigned
+    tables_with_captions: int = 0   # extracted tables that have a caption assigned
+    sections_identified: int = 0
+    unknown_sections: int = 0
+    has_abstract: bool = False
 
     @property
     def grade(self) -> str:
-        """Backward-compatible letter grade derived from completeness.
+        """Letter grade based on extraction completeness.
 
-        Unknown sections are NOT penalized — they are honest labels for
-        non-standard headings. Grade is based on figure/table capture.
+        F: no text, or 2+ fields completely missed
+        D: any single field completely missed
+        C: >20% of figures or tables lack captions
+        B: some missing but <=20%
+        A: nothing missing, has sections
 
-        A: no missing figures/tables, has sections
-        B: <=1 missing figure or table
-        C: some structured content captured but gaps exist
-        D: text extracted but structured content mostly missing
-        F: no usable text
+        Fields: table captions, figure captions, figures, tables.
+        A field is "completely missed" when we have evidence it should
+        exist (objects found or captions found) but the other side is zero.
         """
         if self.text_pages == 0:
             return "F"
-        if (self.figures_missing == 0 and self.tables_missing == 0
-                and self.sections_identified > 0):
-            return "A"
-        if self.figures_missing <= 1 and self.tables_missing <= 1:
-            return "B"
-        if self.figures_found > 0 or self.tables_found > 0:
-            return "C"
-        if self.text_pages > 0:
+
+        # Count completely missed fields
+        missed_fields = 0
+        if self.tables_found > 0 and self.tables_with_captions == 0:
+            missed_fields += 1  # table captions completely missed
+        if self.figures_found > 0 and self.figures_with_captions == 0:
+            missed_fields += 1  # figure captions completely missed
+        if self.figure_captions_found > 0 and self.figures_found == 0:
+            missed_fields += 1  # figures completely missed
+        if self.table_captions_found > 0 and self.tables_found == 0:
+            missed_fields += 1  # tables completely missed
+
+        if missed_fields >= 2:
+            return "F"
+        if missed_fields >= 1:
             return "D"
-        return "F"
+
+        # Check for any missing items
+        uncaptioned_figs = self.figures_found - self.figures_with_captions
+        uncaptioned_tabs = self.tables_found - self.tables_with_captions
+        any_missing = (
+            self.figures_missing > 0
+            or self.tables_missing > 0
+            or uncaptioned_figs > 0
+            or uncaptioned_tabs > 0
+        )
+
+        if not any_missing and self.sections_identified > 0:
+            return "A"
+
+        # >20% captions missing in any field → C
+        fig_caption_rate = (
+            self.figures_with_captions / self.figures_found
+            if self.figures_found > 0 else 1.0
+        )
+        tab_caption_rate = (
+            self.tables_with_captions / self.tables_found
+            if self.tables_found > 0 else 1.0
+        )
+
+        if fig_caption_rate < 0.8 or tab_caption_rate < 0.8:
+            return "C"
+
+        return "B"
 
 
 # =============================================================================
