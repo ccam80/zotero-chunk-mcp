@@ -25,7 +25,7 @@ from .section_classifier import assign_section
 logger = logging.getLogger(__name__)
 
 _FIG_CAPTION_RE = re.compile(
-    r"^(?:Figure|Fig\.?)\s+(\d+|[IVXLCDM]+)",
+    r"^(?:Figure|Fig\.?)\s+(\d+|[IVXLCDM]+)\s*[.:()\u2014\u2013-]",
     re.IGNORECASE,
 )
 
@@ -64,7 +64,7 @@ def extract_figures(
     # Step 1: Collect picture boxes and table boxes per page
     page_figures: dict[int, list[pymupdf.Rect]] = {}       # page_num -> [rect]
     page_table_boxes: dict[int, list[pymupdf.Rect]] = {}   # page_num -> [rect] (fallback)
-    page_captions: dict[int, list[str]] = {}
+    page_captions: dict[int, list[tuple[float, str]]] = {}
 
     for chunk in page_chunks:
         page_num = chunk.get("metadata", {}).get("page_number", 1)
@@ -85,6 +85,11 @@ def extract_figures(
             if area < _MIN_FIGURE_AREA:
                 continue
             rect = pymupdf.Rect(x0, y0, x1, y1)
+            # Clip to page bounds — layout ML sometimes produces out-of-bounds boxes
+            page_rect = doc[page_num - 1].rect
+            rect = rect & page_rect  # pymupdf Rect intersection
+            if rect.is_empty:
+                continue
             if box.get("class") == "picture":
                 page_figures.setdefault(page_num, []).append(rect)
             elif box.get("class") == "table":
@@ -114,16 +119,58 @@ def extract_figures(
     for page_num in page_figures:
         page_figures[page_num] = _merge_rects(page_figures[page_num])
 
+    # Step 4.5: Split picture boxes that contain multiple figures.
+    # Detection: a caption's y-center falls INSIDE a picture box's y-range.
+    # When found, split the box at each internal caption boundary.
+    for page_num in list(page_figures.keys()):
+        rects = page_figures[page_num]
+        captions = page_captions.get(page_num, [])
+        if len(captions) <= len(rects):
+            continue  # enough boxes for all captions, no split needed
+
+        new_rects: list[pymupdf.Rect] = []
+        used_captions: set[int] = set()
+
+        for rect in sorted(rects, key=lambda r: r.y0):
+            # Find captions whose y_center falls inside this rect
+            internal: list[tuple[int, float, str]] = []
+            for ci, (cy, ctext) in enumerate(captions):
+                if rect.y0 < cy < rect.y1:
+                    internal.append((ci, cy, ctext))
+
+            if not internal:
+                new_rects.append(rect)
+                continue
+
+            # Split the box at each internal caption position.
+            internal.sort(key=lambda x: x[1])
+            split_y = rect.y0
+            for ci, cy, ctext in internal:
+                used_captions.add(ci)
+                sub = pymupdf.Rect(rect.x0, split_y, rect.x1, cy)
+                if not sub.is_empty and abs(sub.y1 - sub.y0) > 20:
+                    new_rects.append(sub)
+                split_y = cy + 40
+
+            # Final region: from last split to bottom of original box
+            final = pymupdf.Rect(rect.x0, split_y, rect.x1, rect.y1)
+            if not final.is_empty and abs(final.y1 - final.y0) > 20:
+                new_rects.append(final)
+
+        if new_rects:
+            page_figures[page_num] = new_rects
+
     # Step 5: Build ExtractedFigure list
     figures: list[ExtractedFigure] = []
     fig_idx = 0
 
     for page_num in sorted(page_figures.keys()):
         rects = sorted(page_figures[page_num], key=lambda r: r.y0)
-        captions = page_captions.get(page_num, [])
+        captions_with_y = page_captions.get(page_num, [])
+        caption_texts = [text for _, text in captions_with_y]
 
         for i, rect in enumerate(rects):
-            caption = captions[i] if i < len(captions) else None
+            caption = caption_texts[i] if i < len(caption_texts) else None
 
             image_path = None
             if write_images and images_dir:
@@ -158,8 +205,11 @@ def extract_figures(
 def _find_captions_on_page(
     page: pymupdf.Page,
     prefix_re: re.Pattern,
-) -> list[str]:
-    """Find all caption text blocks matching prefix_re, sorted by y-position."""
+) -> list[tuple[float, str]]:
+    """Find caption text blocks matching prefix_re, sorted by y-position.
+
+    Returns list of (y_center, caption_text).
+    """
     text_dict = page.get_text("dict")
     hits: list[tuple[float, str]] = []
 
@@ -184,7 +234,7 @@ def _find_captions_on_page(
             hits.append((y_center, block_text))
 
     hits.sort(key=lambda x: x[0])
-    return [text for _, text in hits]
+    return hits  # list of (y_center, text)
 
 
 def find_all_captions_on_page(

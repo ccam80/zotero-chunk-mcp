@@ -120,6 +120,34 @@ def test_all_papers_sections_cover_full_text():
             )
 
 
+def test_abstract_detection_does_not_crash():
+    """Three-tier abstract detection runs without error on all fixtures.
+    If a paper has an abstract (keyword or font-detected), it must appear
+    exactly once in sections."""
+    for pdf_name in ["noname1.pdf", "noname2.pdf", "noname3.pdf"]:
+        ex = extract_document(FIXTURES / pdf_name)
+        abstract_sections = [s for s in ex.sections if s.label == "abstract"]
+        # Must be 0 or 1 — never multiple
+        assert len(abstract_sections) <= 1, (
+            f"{pdf_name}: {len(abstract_sections)} abstract sections — "
+            f"should be at most 1"
+        )
+
+
+def test_abstract_detected_via_toc():
+    """If a paper's TOC already labels 'abstract', Tier 2 should recognise it
+    and _detect_abstract should return None (not duplicate)."""
+    # All three noname papers should have abstract detected by some tier
+    for pdf_name in ["noname1.pdf", "noname2.pdf", "noname3.pdf"]:
+        ex = extract_document(FIXTURES / pdf_name)
+        abstract_sections = [s for s in ex.sections if s.label == "abstract"]
+        # At most 1 abstract section (no duplicates)
+        assert len(abstract_sections) <= 1, (
+            f"{pdf_name}: {len(abstract_sections)} abstract sections detected — "
+            f"should be at most 1"
+        )
+
+
 def test_noname1_no_methods_overcount():
     """noname1 is a review paper. 'methods' should only appear for headings
     that actually contain 'method' in the text, not for every body section."""

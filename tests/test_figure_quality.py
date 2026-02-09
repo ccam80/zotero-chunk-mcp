@@ -107,6 +107,24 @@ def test_no_body_text_figure_captions():
                 )
 
 
+def test_no_body_text_as_figure_caption():
+    """Figure captions must start with 'Figure N.' or 'Fig. N.', never
+    body text like 'Figure 9 shows...'."""
+    import re
+    body_text_re = re.compile(
+        r"^(?:Figure|Fig\.?)\s+\d+\s+(?:show|depict|illustrat|present|display)",
+        re.IGNORECASE,
+    )
+    for pdf_name in EXPECTED:
+        figures = _get_figures(pdf_name)
+        for fig in figures:
+            if fig.caption:
+                assert not body_text_re.match(fig.caption), (
+                    f"{pdf_name}: fig {fig.figure_index} caption is body text: "
+                    f"{fig.caption[:80]!r}"
+                )
+
+
 def test_image_extraction_writes_files(tmp_path):
     """When write_images=True, figures must have real PNG files on disk."""
     pdf_path = str(FIXTURES / "noname1.pdf")

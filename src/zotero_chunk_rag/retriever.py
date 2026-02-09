@@ -76,6 +76,8 @@ class Retriever:
                 chunk_index=hit.metadata["chunk_index"],
                 citation_key=hit.metadata.get("citation_key", ""),
                 publication=hit.metadata.get("publication", ""),
+                tags=hit.metadata.get("tags", ""),
+                collections=hit.metadata.get("collections", ""),
                 section=hit.metadata.get("section", "unknown"),
                 section_confidence=hit.metadata.get("section_confidence", 1.0),
                 journal_quartile=journal_quartile,

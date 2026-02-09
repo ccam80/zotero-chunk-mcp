@@ -32,8 +32,6 @@ def _create_test_config(tmp_path: Path) -> Config:
         oversample_topic_factor=5,
         stats_sample_limit=10000,
         ocr_language="eng",
-        table_strategy="lines_strict",
-        image_size_limit=0.05,
         openalex_email=None,
     )
 

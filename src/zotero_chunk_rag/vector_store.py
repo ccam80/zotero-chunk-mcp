@@ -1,5 +1,6 @@
 """ChromaDB vector storage with chunk management."""
 import logging
+import re
 import chromadb
 from chromadb.config import Settings
 from pathlib import Path
@@ -11,6 +12,16 @@ if TYPE_CHECKING:
     from .models import ExtractedTable
 
 logger = logging.getLogger(__name__)
+
+
+def _ref_chunk_index(ref_map: dict, element_type: str, item) -> int:
+    """Look up chunk_index from ref_map using caption number."""
+    caption = getattr(item, 'caption', None)
+    if caption:
+        m = re.search(r"(\d+)", caption)
+        if m:
+            return ref_map.get((element_type, int(m.group(1))), -1)
+    return -1
 
 
 class EmbeddingDimensionMismatchError(Exception):
@@ -127,7 +138,8 @@ class VectorStore:
         self,
         doc_id: str,
         doc_meta: dict,
-        tables: list["ExtractedTable"]
+        tables: list["ExtractedTable"],
+        ref_map: dict[tuple[str, int], int] | None = None,
     ) -> None:
         """
         Add table chunks for a document.
@@ -169,12 +181,13 @@ class VectorStore:
                 "pdf_hash": doc_meta.get("pdf_hash", ""),  # Feature 6: for update detection
                 "quality_grade": doc_meta.get("quality_grade", ""),  # Feature 11: extraction quality
                 "page_num": t.page_num,
-                "chunk_index": -1,  # Marker for non-text chunks
+                "chunk_index": _ref_chunk_index(ref_map, "table", t) if ref_map else -1,
                 "chunk_type": "table",
                 "table_index": t.table_index,
                 "table_caption": t.caption or "",  # None -> empty string for ChromaDB
                 "table_num_rows": t.num_rows,
                 "table_num_cols": t.num_cols,
+                "reference_context": getattr(t, 'reference_context', '') or "",
                 # Section detection doesn't apply to tables
                 "section": "table",
                 "section_confidence": 1.0,
@@ -194,6 +207,7 @@ class VectorStore:
         doc_id: str,
         doc_meta: dict,
         figures: list,
+        ref_map: dict[tuple[str, int], int] | None = None,
     ) -> None:
         """Add figure chunks to the store.
 
@@ -235,10 +249,11 @@ class VectorStore:
                 "quality_grade": doc_meta.get("quality_grade", ""),
                 "chunk_type": "figure",
                 "page_num": fig.page_num,
-                "chunk_index": -1,  # Marker for non-text chunks
+                "chunk_index": _ref_chunk_index(ref_map, "figure", fig) if ref_map else -1,
                 "figure_index": fig.figure_index,
                 "caption": fig.caption or "",  # Empty string for orphans
                 "image_path": str(fig.image_path) if fig.image_path else "",
+                "reference_context": getattr(fig, 'reference_context', '') or "",
                 # Section detection doesn't apply to figures
                 "section": "figure",
                 "section_confidence": 1.0,

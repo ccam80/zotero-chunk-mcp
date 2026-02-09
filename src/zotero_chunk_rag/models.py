@@ -70,12 +70,17 @@ class ExtractedFigure:
     bbox: tuple[float, float, float, float]
     caption: str | None  # None for orphaned figures (no caption found)
     image_path: Path | None = None  # Path to saved PNG
+    reference_context: str | None = None
 
     def to_searchable_text(self) -> str:
         """Return text for embedding."""
         if self.caption:
-            return self.caption
-        return f"Figure on page {self.page_num}"
+            text = self.caption
+        else:
+            text = f"Figure on page {self.page_num}"
+        if self.reference_context:
+            text += f"\n{self.reference_context}"
+        return text
 
 
 @dataclass
@@ -161,6 +166,7 @@ class ExtractedTable:
     rows: list[list[str]]                      # Data rows
     caption: str | None = ""                   # Detected caption text (None for orphans)
     caption_position: str = ""                 # "above" | "below" | ""
+    reference_context: str | None = None
 
     @property
     def num_rows(self) -> int:
@@ -241,6 +247,8 @@ class RetrievalResult:
     publication: str = ""
     section: str = "unknown"
     section_confidence: float = 1.0  # Confidence of section detection (0.0-1.0)
+    tags: str = ""
+    collections: str = ""
     journal_quartile: str | None = None
     composite_score: float | None = None  # Reranked score (similarity × section × journal)
     context_before: list[str] = field(default_factory=list)

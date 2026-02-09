@@ -209,6 +209,13 @@ def _build_chromadb_filters(
     return {"$and": conditions}
 
 
+def _meta_get(r, key: str, default: str = "") -> str:
+    """Get a metadata field from StoredChunk (.metadata dict) or RetrievalResult (attrs)."""
+    if hasattr(r, "metadata") and isinstance(r.metadata, dict):
+        return r.metadata.get(key, default)
+    return getattr(r, key, default)
+
+
 def _apply_text_filters(
     results: list,
     author: str | None = None,
@@ -220,8 +227,10 @@ def _apply_text_filters(
     ChromaDB doesn't support substring matching, so we filter after retrieval.
     All matches are case-insensitive substrings.
 
+    Works with both StoredChunk (metadata dict) and RetrievalResult (dataclass attrs).
+
     Args:
-        results: List with .metadata dict (StoredChunk or RetrievalResult)
+        results: List of StoredChunk or RetrievalResult objects
         author: Author name substring (case-insensitive)
         tag: Tag substring (case-insensitive)
         collection: Collection name substring (case-insensitive)
@@ -238,20 +247,18 @@ def _apply_text_filters(
 
     filtered = []
     for r in results:
-        meta = r.metadata if hasattr(r, 'metadata') else r
-
         if author_lower:
-            authors = meta.get("authors_lower", meta.get("authors", "").lower())
+            authors = _meta_get(r, "authors", "").lower()
             if author_lower not in authors:
                 continue
 
         if tag_lower:
-            tags = meta.get("tags_lower", meta.get("tags", "").lower())
+            tags = _meta_get(r, "tags", "").lower()
             if tag_lower not in tags:
                 continue
 
         if collection_lower:
-            colls = meta.get("collections", "").lower()
+            colls = _meta_get(r, "collections", "").lower()
             if collection_lower not in colls:
                 continue
 

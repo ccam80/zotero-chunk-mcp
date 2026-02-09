@@ -30,9 +30,6 @@ class Config:
     stats_sample_limit: int
     # OCR settings (language passed through to pymupdf-layout)
     ocr_language: str
-    # Table extraction settings
-    table_strategy: str  # pymupdf4llm table detection strategy
-    image_size_limit: float  # minimum image size as page fraction
     # OpenAlex settings
     openalex_email: str | None  # Optional email for polite pool (10 req/sec vs 1 req/sec)
 
@@ -72,9 +69,6 @@ class Config:
             stats_sample_limit=data.get("stats_sample_limit", 10000),
             # OCR settings — language passed through to pymupdf-layout
             ocr_language=data.get("ocr_language", "eng"),
-            # Table extraction settings
-            table_strategy=data.get("table_strategy", "lines_strict"),
-            image_size_limit=data.get("image_size_limit", 0.05),
             # OpenAlex settings
             openalex_email=data.get("openalex_email") or os.environ.get("OPENALEX_EMAIL"),
         )

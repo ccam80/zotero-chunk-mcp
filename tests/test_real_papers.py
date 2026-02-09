@@ -33,16 +33,6 @@ def _create_test_config(tmp_path: Path) -> Config:
         oversample_topic_factor=5,
         stats_sample_limit=10000,
         ocr_language="eng",
-        tables_enabled=True,
-        table_strategy="lines_strict",
-        image_size_limit=0.05,
-        figures_enabled=True,
-        figures_min_size=100,
-        quality_threshold_a=2000,
-        quality_threshold_b=1000,
-        quality_threshold_c=500,
-        quality_threshold_d=100,
-        quality_entropy_min=4.0,
         openalex_email=None,
     )
 

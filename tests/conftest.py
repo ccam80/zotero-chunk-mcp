@@ -195,8 +195,6 @@ def mock_config(temp_db_path: Path, tmp_path: Path):
         oversample_topic_factor=5,
         stats_sample_limit=10000,
         ocr_language="eng",
-        table_strategy="lines_strict",
-        image_size_limit=0.05,
         openalex_email=None,
     )
 

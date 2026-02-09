@@ -19,7 +19,7 @@ DEFAULT_SECTION_WEIGHTS: dict[str, float] = {
     "methods": 0.85,
     "abstract": 0.75,
     "background": 0.7,
-    "unknown": 0.7,
+    "unknown": 0.85,
     "discussion": 0.65,
     "introduction": 0.5,
     "preamble": 0.3,

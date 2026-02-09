@@ -31,16 +31,16 @@ _PAGE_ID_RE = re.compile(r"^R?\d+$")
 
 # Pattern for matching table captions
 _TABLE_CAPTION_RE = re.compile(
-    r"^(?:\*\*)?(?:Table|Tab\.)\s+(\d+|[IVXLCDM]+)",
+    r"^(?:\*\*)?(?:Table|Tab\.)\s+(\d+|[IVXLCDM]+)\s*[.:()\u2014\u2013-]",
     re.IGNORECASE,
 )
 
 # Patterns for caption completeness counting
 _FIG_CAPTION_RE_COMP = re.compile(
-    r"^(?:Figure|Fig\.?)\s+(\d+|[IVXLCDM]+)", re.IGNORECASE,
+    r"^(?:Figure|Fig\.?)\s+(\d+|[IVXLCDM]+)\s*[.:()\u2014\u2013-]", re.IGNORECASE,
 )
 _TABLE_CAPTION_RE_COMP = re.compile(
-    r"^(?:\*\*)?(?:Table|Tab\.)\s+(\d+|[IVXLCDM]+)", re.IGNORECASE,
+    r"^(?:\*\*)?(?:Table|Tab\.)\s+(\d+|[IVXLCDM]+)\s*[.:()\u2014\u2013-]", re.IGNORECASE,
 )
 _CAPTION_NUM_RE = re.compile(r"(\d+)")
 
@@ -50,8 +50,6 @@ def extract_document(
     *,
     write_images: bool = False,
     images_dir: Path | str | None = None,
-    table_strategy: str = "lines_strict",
-    image_size_limit: float = 0.05,
     ocr_language: str = "eng",
 ) -> DocumentExtraction:
     """Extract a PDF document using pymupdf4llm with layout detection."""
@@ -60,8 +58,8 @@ def extract_document(
     kwargs: dict = dict(
         page_chunks=True,
         write_images=False,
-        table_strategy=table_strategy,
-        image_size_limit=image_size_limit,
+        header=False,
+        footer=False,
         show_progress=False,
     )
 
@@ -94,18 +92,18 @@ def extract_document(
     # Detect sections using toc_items or section-header page_boxes
     sections = _detect_sections(page_chunks, full_markdown, pages)
 
-    # --- Abstract detection ---
-    # If no section is labelled "abstract", check first page for abstract text
-    has_abstract = any(s.label == "abstract" for s in sections)
-    if not has_abstract and pages:
-        abstract_span = _detect_abstract(pages[0], full_markdown)
-        if abstract_span:
-            sections = _insert_abstract(sections, abstract_span)
-
     # --- STRUCTURED EXTRACTION (use native PyMuPDF) ---
     doc = pymupdf.open(str(pdf_path))
 
-    tables = _extract_tables_native(doc)
+    # --- Abstract detection ---
+    # If no section is labelled "abstract", check first pages for abstract text
+    has_abstract = any(s.label == "abstract" for s in sections)
+    if not has_abstract and pages:
+        abstract_span = _detect_abstract(pages, full_markdown, doc, sections)
+        if abstract_span:
+            sections = _insert_abstract(sections, abstract_span)
+
+    tables = _extract_tables_native(doc, sections=sections, pages=pages)
 
     from ._figure_extraction import extract_figures
     figures = extract_figures(
@@ -395,39 +393,126 @@ def _build_spans(
     return spans
 
 
-def _detect_abstract(first_page: PageExtraction, full_markdown: str) -> SectionSpan | None:
-    """Check if the first page contains an abstract.
+def _detect_abstract(
+    pages: list[PageExtraction],
+    full_markdown: str,
+    doc: pymupdf.Document,
+    sections: list[SectionSpan],
+) -> SectionSpan | None:
+    """Detect abstract using three-tier approach.
 
-    Looks for the word 'abstract' (case-insensitive) in the first page text,
-    either as a heading or as a label preceding a paragraph.
+    Tier 2: Already labelled via TOC — return None.
+    Tier 1: Keyword match ('abstract') in first 3 pages.
+    Tier 3: Font-based detection — differently-styled prose block.
     """
-    page_text = first_page.markdown
-    lower = page_text.lower()
-
     import re
-    match = re.search(r"(?:^|\n)\s*(?:#{1,3}\s*)?(?:\*\*)?abstract(?:\*\*)?\.?\s*[\n:]?",
-                       lower)
-    if not match:
+
+    # Tier 2: Already detected via TOC
+    if any(s.label == "abstract" for s in sections):
         return None
 
-    abs_start = first_page.char_start + match.start()
+    # Tier 1: Keyword detection in first 3 pages
+    for page in pages[:3]:
+        page_text = page.markdown
+        lower = page_text.lower()
+        match = re.search(
+            r"(?:^|\n)\s*(?:#{1,3}\s*)?(?:\*\*)?abstract(?:\*\*)?\.?\s*[\n:]?",
+            lower,
+        )
+        if match:
+            abs_start = page.char_start + match.start()
+            rest = page_text[match.end():]
+            next_heading = re.search(r"\n\s*(?:#{1,3}\s|\*\*\d)", rest)
+            if next_heading:
+                abs_end = page.char_start + match.end() + next_heading.start()
+            else:
+                abs_end = page.char_start + len(page_text)
+            return SectionSpan(
+                label="abstract",
+                char_start=abs_start,
+                char_end=abs_end,
+                heading_text="Abstract",
+                confidence=CONFIDENCE_SCHEME_MATCH,
+            )
 
-    # Abstract ends at the next heading, not end of page.
-    # Scan forward from the match for the next markdown heading or bold number.
-    rest = page_text[match.end():]
-    next_heading = re.search(r"\n\s*(?:#{1,3}\s|\*\*\d)", rest)
-    if next_heading:
-        abs_end = first_page.char_start + match.end() + next_heading.start()
-    else:
-        abs_end = first_page.char_start + len(page_text)
+    # Tier 3: Font-based detection (find differently-styled prose in first pages)
+    if len(doc) < 4:
+        return None
 
-    return SectionSpan(
-        label="abstract",
-        char_start=abs_start,
-        char_end=abs_end,
-        heading_text="Abstract",
-        confidence=CONFIDENCE_SCHEME_MATCH,
-    )
+    # Compute body font from pages 3+
+    font_counts: dict[tuple[str, float], int] = {}
+    for page_idx in range(3, min(len(doc), 10)):
+        page = doc[page_idx]
+        text_dict = page.get_text("dict")
+        for block in text_dict.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    font_key = (span.get("font", ""), round(span.get("size", 0), 1))
+                    char_count = len(span.get("text", ""))
+                    font_counts[font_key] = font_counts.get(font_key, 0) + char_count
+
+    if not font_counts:
+        return None
+
+    body_font = max(font_counts, key=font_counts.get)
+    body_font_name, body_font_size = body_font
+
+    # Scan first 3 pages for differently-styled prose blocks
+    candidates: list[tuple[int, int, str]] = []  # (char_start, char_end, text)
+    for page_idx in range(min(3, len(doc))):
+        page = doc[page_idx]
+        page_obj = pages[page_idx] if page_idx < len(pages) else None
+        if page_obj is None:
+            continue
+
+        text_dict = page.get_text("dict")
+        for block in text_dict.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+
+            # Get dominant font for this block
+            block_font_counts: dict[tuple[str, float], int] = {}
+            block_text = ""
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    font_key = (span.get("font", ""), round(span.get("size", 0), 1))
+                    char_count = len(span.get("text", ""))
+                    block_font_counts[font_key] = block_font_counts.get(font_key, 0) + char_count
+                    block_text += span.get("text", "")
+                block_text += " "
+            block_text = block_text.strip()
+
+            if not block_text or len(block_text) < 100:
+                continue
+
+            # Skip if it looks like affiliations/emails
+            if re.search(r"@[\w.]+\.\w+", block_text):
+                continue
+
+            if not block_font_counts:
+                continue
+
+            block_font = max(block_font_counts, key=block_font_counts.get)
+            # Different font = potential abstract
+            if block_font != body_font and abs(block_font[1] - body_font_size) > 0.3:
+                candidates.append((
+                    page_obj.char_start,
+                    page_obj.char_start + len(page_obj.markdown),
+                    block_text,
+                ))
+
+    if len(candidates) == 1:
+        return SectionSpan(
+            label="abstract",
+            char_start=candidates[0][0],
+            char_end=candidates[0][1],
+            heading_text="Abstract",
+            confidence=CONFIDENCE_GAP_FILL,
+        )
+
+    return None
 
 
 def _insert_abstract(
@@ -478,7 +563,11 @@ def _insert_abstract(
 # Table extraction
 # ---------------------------------------------------------------------------
 
-def _extract_tables_native(doc: pymupdf.Document) -> list[ExtractedTable]:
+def _extract_tables_native(
+    doc: pymupdf.Document,
+    sections: list[SectionSpan] | None = None,
+    pages: list[PageExtraction] | None = None,
+) -> list[ExtractedTable]:
     """Extract tables using PyMuPDF's native find_tables() API.
 
     Captions are found by scanning ALL text blocks on each page for
@@ -491,6 +580,19 @@ def _extract_tables_native(doc: pymupdf.Document) -> list[ExtractedTable]:
 
     for page_num_0, page in enumerate(doc):
         page_num = page_num_0 + 1
+
+        # Skip references/appendix sections (abbreviation lists, reference
+        # lists get parsed as tables)
+        if sections and pages:
+            from ._figure_extraction import _is_in_references
+            page_label = None
+            for p in pages:
+                if p.page_num == page_num:
+                    from .section_classifier import assign_section
+                    page_label = assign_section(p.char_start, sections)
+                    break
+            if page_label in ("references", "appendix"):
+                continue
 
         tab_finder = page.find_tables()
         if not tab_finder.tables:
@@ -535,6 +637,19 @@ def _extract_tables_native(doc: pymupdf.Document) -> list[ExtractedTable]:
         # Match tables to captions by order
         for i, (_, bbox, headers, rows) in enumerate(page_tables):
             caption = caption_hits[i][1] if i < len(caption_hits) else None
+
+            # Filter garbage tables: very low fill + no caption = misclassified
+            # layout element (block diagrams, reference lists parsed as grids)
+            total_cells = len(rows) * max(len(r) for r in rows) if rows else 0
+            filled_cells = sum(1 for r in rows for c in r if c.strip())
+            fill_rate = filled_cells / max(1, total_cells)
+            if fill_rate < 0.15 and caption is None:
+                logger.debug(
+                    "Skipping garbage table on page %d: %dx%d fill=%.0f%% no caption",
+                    page_num, len(rows), max(len(r) for r in rows) if rows else 0,
+                    fill_rate * 100,
+                )
+                continue
 
             tables.append(ExtractedTable(
                 page_num=page_num,

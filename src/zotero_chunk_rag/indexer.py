@@ -28,8 +28,7 @@ def _config_hash(config: Config) -> str:
         f"{config.embedding_provider}:"
         f"{config.embedding_dimensions}:"
         f"{config.embedding_model}:"
-        f"{config.ocr_language}:"
-        f"{config.table_strategy}"
+        f"{config.ocr_language}"
     )
     return hashlib.sha256(data.encode()).hexdigest()[:16]
 
@@ -294,8 +293,6 @@ class Indexer:
             item.pdf_path,
             write_images=True,
             images_dir=figures_dir,
-            table_strategy=self.config.table_strategy,
-            image_size_limit=self.config.image_size_limit,
             ocr_language=self.config.ocr_language,
         )
 
@@ -345,10 +342,29 @@ class Indexer:
         }
         self.store.add_chunks(item.item_key, doc_meta, chunks)
 
+        # Build reference map for table/figure placement
+        from ._reference_matcher import match_references
+        ref_map = match_references(extraction.full_markdown, chunks, extraction.tables, extraction.figures)
+
+        # Enrich tables/figures with reference context (Fix 5)
+        from ._reference_matcher import get_reference_context
+        for table in extraction.tables:
+            import re
+            m = re.search(r"(\d+)", table.caption) if table.caption else None
+            if m:
+                ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "table", int(m.group(1)))
+                table.reference_context = ctx
+        for fig in extraction.figures:
+            import re
+            m = re.search(r"(\d+)", fig.caption) if fig.caption else None
+            if m:
+                ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "figure", int(m.group(1)))
+                fig.reference_context = ctx
+
         # Store tables if enabled
         n_tables = 0
         if extraction.tables:
-            self.store.add_tables(item.item_key, doc_meta, extraction.tables)
+            self.store.add_tables(item.item_key, doc_meta, extraction.tables, ref_map=ref_map)
             n_tables = len(extraction.tables)
             logger.debug(f"  Extracted {n_tables} tables")
 
@@ -356,7 +372,7 @@ class Indexer:
         n_figures = 0
         if extraction.figures:
             try:
-                self.store.add_figures(item.item_key, doc_meta, extraction.figures)
+                self.store.add_figures(item.item_key, doc_meta, extraction.figures, ref_map=ref_map)
                 n_figures = len(extraction.figures)
                 logger.debug(f"  Extracted {n_figures} figures")
             except Exception as e:

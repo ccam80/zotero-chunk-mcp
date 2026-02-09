@@ -107,3 +107,18 @@ def test_tables_have_structured_data():
                 assert isinstance(h, str), (
                     f"{pdf_name}: table {table.table_index} has non-string header: {h!r}"
                 )
+
+
+def test_no_uncaptioned_low_fill_tables():
+    """Tables with <15% fill and no caption are garbage — should be filtered."""
+    for pdf_name in EXPECTED:
+        ex = extract_document(FIXTURES / pdf_name)
+        for table in ex.tables:
+            if table.caption is None:
+                total = table.num_rows * table.num_cols
+                filled = sum(1 for r in table.rows for c in r if c.strip())
+                fill_rate = filled / max(1, total)
+                assert fill_rate >= 0.15, (
+                    f"{pdf_name}: uncaptioned table {table.table_index} on p{table.page_num} "
+                    f"has {fill_rate:.0%} fill — should have been filtered"
+                )
