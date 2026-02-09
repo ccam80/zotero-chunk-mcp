@@ -1,12 +1,8 @@
 """End-to-end extraction pipeline integration tests."""
 from pathlib import Path
-from zotero_chunk_rag.pdf_processor import extract_document
-from zotero_chunk_rag.chunker import Chunker
 from zotero_chunk_rag.config import Config
 from zotero_chunk_rag.embedder import create_embedder
 from zotero_chunk_rag.vector_store import VectorStore
-
-FIXTURES = Path(__file__).parent / "fixtures" / "papers"
 
 
 def _create_test_config(tmp_path: Path) -> Config:
@@ -36,20 +32,17 @@ def _create_test_config(tmp_path: Path) -> Config:
     )
 
 
-def test_noname1_chunks_have_introduction():
-    ex = extract_document(FIXTURES / "noname1.pdf")
-    chunker = Chunker(chunk_size=400, overlap=100)
-    chunks = chunker.chunk(ex.full_markdown, ex.pages, ex.sections)
+def test_noname1_chunks_have_introduction(chunked_papers):
+    chunks = chunked_papers["noname1.pdf"]
     intro_chunks = [c for c in chunks if c.section == "introduction"]
     assert len(intro_chunks) >= 1
 
 
-def test_full_pipeline_search(tmp_path):
+def test_full_pipeline_search(tmp_path, extracted_papers, chunked_papers):
     """Full pipeline: extract -> chunk -> embed -> store -> search returns results."""
     config = _create_test_config(tmp_path)
-    ex = extract_document(FIXTURES / "noname1.pdf")
-    chunker = Chunker(chunk_size=400, overlap=100)
-    chunks = chunker.chunk(ex.full_markdown, ex.pages, ex.sections)
+    ex = extracted_papers["noname1.pdf"]
+    chunks = chunked_papers["noname1.pdf"]
     assert len(chunks) > 5
 
     embedder = create_embedder(config)
@@ -64,16 +57,9 @@ def test_full_pipeline_search(tmp_path):
     assert len(results) > 0
 
 
-def test_all_papers_quality_grade_a():
+def test_all_papers_quality_grade_a(extracted_papers):
     for pdf_name in ["noname1.pdf", "noname2.pdf", "noname3.pdf"]:
-        ex = extract_document(FIXTURES / pdf_name)
+        ex = extracted_papers[pdf_name]
         assert ex.quality_grade in ("A", "B"), (
             f"{pdf_name} quality grade is {ex.quality_grade}, expected A or B"
         )
-
-
-def _section_dist(chunks):
-    dist = {}
-    for c in chunks:
-        dist[c.section] = dist.get(c.section, 0) + 1
-    return dist

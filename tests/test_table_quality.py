@@ -1,8 +1,4 @@
 """Table extraction quality tests against real papers."""
-from pathlib import Path
-from zotero_chunk_rag.pdf_processor import extract_document
-
-FIXTURES = Path(__file__).parent / "fixtures" / "papers"
 
 # Exact expected table counts and caption prefixes per paper.
 EXPECTED = {
@@ -21,34 +17,28 @@ EXPECTED = {
 }
 
 
-def test_noname1_table_count():
-    ex = extract_document(FIXTURES / "noname1.pdf")
-    assert len(ex.tables) == EXPECTED["noname1.pdf"]["count"]
+def test_noname1_table_count(extracted_papers):
+    assert len(extracted_papers["noname1.pdf"].tables) == EXPECTED["noname1.pdf"]["count"]
 
 
-def test_noname2_table_count():
-    ex = extract_document(FIXTURES / "noname2.pdf")
-    assert len(ex.tables) == EXPECTED["noname2.pdf"]["count"]
+def test_noname2_table_count(extracted_papers):
+    assert len(extracted_papers["noname2.pdf"].tables) == EXPECTED["noname2.pdf"]["count"]
 
 
-def test_noname3_table_count():
-    ex = extract_document(FIXTURES / "noname3.pdf")
-    assert len(ex.tables) == EXPECTED["noname3.pdf"]["count"]
+def test_noname3_table_count(extracted_papers):
+    assert len(extracted_papers["noname3.pdf"].tables) == EXPECTED["noname3.pdf"]["count"]
 
 
-def test_noname1_table_captions():
-    ex = extract_document(FIXTURES / "noname1.pdf")
-    _assert_caption_prefixes(ex.tables, EXPECTED["noname1.pdf"]["caption_prefixes"], "noname1")
+def test_noname1_table_captions(extracted_papers):
+    _assert_caption_prefixes(extracted_papers["noname1.pdf"].tables, EXPECTED["noname1.pdf"]["caption_prefixes"], "noname1")
 
 
-def test_noname2_table_captions():
-    ex = extract_document(FIXTURES / "noname2.pdf")
-    _assert_caption_prefixes(ex.tables, EXPECTED["noname2.pdf"]["caption_prefixes"], "noname2")
+def test_noname2_table_captions(extracted_papers):
+    _assert_caption_prefixes(extracted_papers["noname2.pdf"].tables, EXPECTED["noname2.pdf"]["caption_prefixes"], "noname2")
 
 
-def test_noname3_table_captions():
-    ex = extract_document(FIXTURES / "noname3.pdf")
-    _assert_caption_prefixes(ex.tables, EXPECTED["noname3.pdf"]["caption_prefixes"], "noname3")
+def test_noname3_table_captions(extracted_papers):
+    _assert_caption_prefixes(extracted_papers["noname3.pdf"].tables, EXPECTED["noname3.pdf"]["caption_prefixes"], "noname3")
 
 
 def _assert_caption_prefixes(tables, expected_prefixes, paper_name):
@@ -62,42 +52,38 @@ def _assert_caption_prefixes(tables, expected_prefixes, paper_name):
         )
 
 
-def test_all_tables_have_content():
+def test_all_tables_have_content(extracted_papers):
     """Every table must have at least 1 data row and 2 columns."""
     for pdf_name in EXPECTED:
-        ex = extract_document(FIXTURES / pdf_name)
-        for table in ex.tables:
+        for table in extracted_papers[pdf_name].tables:
             assert table.num_rows >= 1, f"{pdf_name}: table {table.table_index} has 0 rows. Caption: {table.caption!r}"
             assert table.num_cols >= 2, f"{pdf_name}: table {table.table_index} has {table.num_cols} cols. Caption: {table.caption!r}"
 
 
-def test_all_tables_render_markdown():
+def test_all_tables_render_markdown(extracted_papers):
     """Every table must render to markdown with pipe characters."""
     for pdf_name in EXPECTED:
-        ex = extract_document(FIXTURES / pdf_name)
-        for table in ex.tables:
+        for table in extracted_papers[pdf_name].tables:
             md = table.to_markdown()
             assert "|" in md, f"{pdf_name}: table {table.table_index} markdown has no pipes"
             lines = [line for line in md.split("\n") if line.strip()]
             assert len(lines) >= 2, f"{pdf_name}: table {table.table_index} markdown has <2 lines"
 
 
-def test_no_body_text_captions():
+def test_no_body_text_captions(extracted_papers):
     """No table caption should be body text. Real captions start with 'Table N'."""
     for pdf_name in EXPECTED:
-        ex = extract_document(FIXTURES / pdf_name)
-        for table in ex.tables:
+        for table in extracted_papers[pdf_name].tables:
             if table.caption:
                 assert table.caption.lower().startswith("table"), (
                     f"{pdf_name}: table {table.table_index} caption looks like body text: {table.caption[:80]!r}"
                 )
 
 
-def test_tables_have_structured_data():
+def test_tables_have_structured_data(extracted_papers):
     """Every table must have proper cell-level data, not raw markdown."""
     for pdf_name in EXPECTED:
-        ex = extract_document(FIXTURES / pdf_name)
-        for table in ex.tables:
+        for table in extracted_papers[pdf_name].tables:
             for row in table.rows:
                 for cell in row:
                     assert isinstance(cell, str), (
@@ -109,11 +95,10 @@ def test_tables_have_structured_data():
                 )
 
 
-def test_no_uncaptioned_low_fill_tables():
+def test_no_uncaptioned_low_fill_tables(extracted_papers):
     """Tables with <15% fill and no caption are garbage — should be filtered."""
     for pdf_name in EXPECTED:
-        ex = extract_document(FIXTURES / pdf_name)
-        for table in ex.tables:
+        for table in extracted_papers[pdf_name].tables:
             if table.caption is None:
                 total = table.num_rows * table.num_cols
                 filled = sum(1 for r in table.rows for c in r if c.strip())

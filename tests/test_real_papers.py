@@ -1,13 +1,9 @@
 """End-to-end tests against real academic papers."""
 from pathlib import Path
-from zotero_chunk_rag.pdf_processor import extract_document
-from zotero_chunk_rag.chunker import Chunker
 from zotero_chunk_rag.config import Config
 from zotero_chunk_rag.embedder import create_embedder
 from zotero_chunk_rag.vector_store import VectorStore
 from zotero_chunk_rag.retriever import Retriever
-
-FIXTURES = Path(__file__).parent / "fixtures" / "papers"
 
 
 def _create_test_config(tmp_path: Path) -> Config:
@@ -37,29 +33,24 @@ def _create_test_config(tmp_path: Path) -> Config:
     )
 
 
-def test_all_papers_produce_multiple_sections():
+def test_all_papers_produce_multiple_sections(chunked_papers):
     for pdf_name in ["noname1.pdf", "noname2.pdf", "noname3.pdf"]:
-        ex = extract_document(FIXTURES / pdf_name)
-        chunker = Chunker(chunk_size=400, overlap=100)
-        chunks = chunker.chunk(ex.full_markdown, ex.pages, ex.sections)
+        chunks = chunked_papers[pdf_name]
         sections_found = set(c.section for c in chunks)
         assert len(sections_found) >= 3, f"{pdf_name}: only {len(sections_found)} sections in chunks: {sections_found}"
 
 
-def test_all_papers_produce_enough_chunks():
+def test_all_papers_produce_enough_chunks(chunked_papers):
     for pdf_name in ["noname1.pdf", "noname2.pdf", "noname3.pdf"]:
-        ex = extract_document(FIXTURES / pdf_name)
-        chunker = Chunker(chunk_size=400, overlap=100)
-        chunks = chunker.chunk(ex.full_markdown, ex.pages, ex.sections)
+        chunks = chunked_papers[pdf_name]
         assert len(chunks) > 20, f"{pdf_name}: only {len(chunks)} chunks"
 
 
-def test_full_pipeline_retriever(tmp_path):
+def test_full_pipeline_retriever(tmp_path, extracted_papers, chunked_papers):
     """Full pipeline: extract -> chunk -> embed -> store -> retriever.search() returns results."""
     config = _create_test_config(tmp_path)
-    ex = extract_document(FIXTURES / "noname1.pdf")
-    chunker = Chunker(chunk_size=400, overlap=100)
-    chunks = chunker.chunk(ex.full_markdown, ex.pages, ex.sections)
+    ex = extracted_papers["noname1.pdf"]
+    chunks = chunked_papers["noname1.pdf"]
 
     embedder = create_embedder(config)
     store = VectorStore(config.chroma_db_path, embedder)

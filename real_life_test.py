@@ -767,24 +767,8 @@ def run_stress_test():
         # ===================================================================
         print(f"\n[PHASE 7] Testing metadata filters...")
 
-        # --- BUG DISCOVERED: _apply_text_filters crashes on RetrievalResult ---
-        # The server's _apply_text_filters does meta.get() on objects that may be
-        # dataclass instances (RetrievalResult) rather than dicts. This means
-        # search_papers and search_topic with author/tag/collection filters WILL CRASH.
-        # This is a real bug that affects production use.
-        report.add(
-            "server-text-filter-bug",
-            "all",
-            False,
-            "BUG: server._apply_text_filters crashes on RetrievalResult objects. "
-            "search_papers(author='...') and search_topic(author='...') will raise "
-            "AttributeError: 'RetrievalResult' object has no attribute 'get'. "
-            "The function assumes .metadata dict but RetrievalResult has individual fields. "
-            "Any researcher filtering by author/tag/collection via search_papers is broken.",
-            severity="MAJOR",
-        )
-
-        # Test author filter using direct attribute access (working around the bug)
+        # Test author filter using _apply_text_filters (Fix 1 added _meta_get helper)
+        from zotero_chunk_rag.server import _apply_text_filters
         for item_key, (extraction, chunks, item, gt, short_name) in extractions.items():
             author_substr = gt.get("author_substr", "")
             if not author_substr:
@@ -793,8 +777,8 @@ def run_stress_test():
             query = gt["searchable_content"]
             results = retriever.search(query=query, top_k=50, context_window=0)
 
-            # Manual filter since server's _apply_text_filters is broken for RetrievalResult
-            filtered = [r for r in results if author_substr.lower() in r.authors.lower()]
+            # Use the server's _apply_text_filters — Fix 1 made this work on RetrievalResult
+            filtered = _apply_text_filters(results, author=author_substr)
 
             target_hits = [r for r in filtered if r.doc_id == item_key]
             found = len(target_hits) > 0

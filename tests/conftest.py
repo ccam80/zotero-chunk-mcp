@@ -11,6 +11,9 @@ from pathlib import Path
 
 import pytest
 
+_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "papers"
+_PAPER_NAMES = ["noname1.pdf", "noname2.pdf", "noname3.pdf"]
+
 
 # =============================================================================
 # Path fixtures
@@ -19,9 +22,36 @@ import pytest
 @pytest.fixture
 def real_papers_dir() -> Path:
     """Path to the directory containing real academic papers for testing."""
-    path = Path(__file__).parent / "fixtures" / "papers"
+    path = _FIXTURES_DIR
     assert path.exists(), f"Real papers directory not found: {path}"
     return path
+
+
+# =============================================================================
+# Session-scoped extraction fixtures (run once, shared by all tests)
+# =============================================================================
+
+@pytest.fixture(scope="session")
+def extracted_papers():
+    """Extract all fixture PDFs once per session. Returns dict keyed by filename."""
+    from zotero_chunk_rag.pdf_processor import extract_document
+
+    return {
+        name: extract_document(_FIXTURES_DIR / name)
+        for name in _PAPER_NAMES
+    }
+
+
+@pytest.fixture(scope="session")
+def chunked_papers(extracted_papers):
+    """Chunk all fixture PDFs once per session. Returns dict keyed by filename."""
+    from zotero_chunk_rag.chunker import Chunker
+
+    chunker = Chunker(chunk_size=400, overlap=100)
+    return {
+        name: chunker.chunk(ex.full_markdown, ex.pages, ex.sections)
+        for name, ex in extracted_papers.items()
+    }
 
 
 # =============================================================================

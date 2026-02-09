@@ -30,34 +30,26 @@ EXPECTED = {
 }
 
 
-def _get_figures(pdf_name):
-    """Extract figures using the layout-engine-based extraction."""
-    from zotero_chunk_rag.pdf_processor import extract_document
-    pdf_path = FIXTURES / pdf_name
-    extraction = extract_document(pdf_path, write_images=False)
-    return extraction.figures
-
-
 # --- Count tests (exact) ---
 
-def test_noname1_figure_count():
-    figures = _get_figures("noname1.pdf")
+def test_noname1_figure_count(extracted_papers):
+    figures = extracted_papers["noname1.pdf"].figures
     assert len(figures) == EXPECTED["noname1.pdf"]["count"], (
         f"Expected {EXPECTED['noname1.pdf']['count']} figures, got {len(figures)}. "
         f"Pages: {[f.page_num for f in figures]}"
     )
 
 
-def test_noname2_figure_count():
-    figures = _get_figures("noname2.pdf")
+def test_noname2_figure_count(extracted_papers):
+    figures = extracted_papers["noname2.pdf"].figures
     assert len(figures) == EXPECTED["noname2.pdf"]["count"], (
         f"Expected {EXPECTED['noname2.pdf']['count']} figures, got {len(figures)}. "
         f"Pages: {[f.page_num for f in figures]}"
     )
 
 
-def test_noname3_figure_count():
-    figures = _get_figures("noname3.pdf")
+def test_noname3_figure_count(extracted_papers):
+    figures = extracted_papers["noname3.pdf"].figures
     assert len(figures) == EXPECTED["noname3.pdf"]["count"], (
         f"Expected {EXPECTED['noname3.pdf']['count']} figures, got {len(figures)}. "
         f"Pages: {[f.page_num for f in figures]}"
@@ -66,18 +58,18 @@ def test_noname3_figure_count():
 
 # --- Caption tests (1:1 match) ---
 
-def test_noname1_figure_captions():
-    figures = _get_figures("noname1.pdf")
+def test_noname1_figure_captions(extracted_papers):
+    figures = extracted_papers["noname1.pdf"].figures
     _assert_caption_prefixes(figures, EXPECTED["noname1.pdf"]["caption_prefixes"], "noname1")
 
 
-def test_noname2_figure_captions():
-    figures = _get_figures("noname2.pdf")
+def test_noname2_figure_captions(extracted_papers):
+    figures = extracted_papers["noname2.pdf"].figures
     _assert_caption_prefixes(figures, EXPECTED["noname2.pdf"]["caption_prefixes"], "noname2")
 
 
-def test_noname3_figure_captions():
-    figures = _get_figures("noname3.pdf")
+def test_noname3_figure_captions(extracted_papers):
+    figures = extracted_papers["noname3.pdf"].figures
     _assert_caption_prefixes(figures, EXPECTED["noname3.pdf"]["caption_prefixes"], "noname3")
 
 
@@ -94,10 +86,10 @@ def _assert_caption_prefixes(figures, expected_prefixes, paper_name):
 
 # --- Quality guards ---
 
-def test_no_body_text_figure_captions():
+def test_no_body_text_figure_captions(extracted_papers):
     """No figure caption should be >2000 chars (would be body text, not a caption)."""
     for pdf_name in EXPECTED:
-        figures = _get_figures(pdf_name)
+        figures = extracted_papers[pdf_name].figures
         for fig in figures:
             if fig.caption:
                 assert len(fig.caption) < 2000, (
@@ -107,7 +99,7 @@ def test_no_body_text_figure_captions():
                 )
 
 
-def test_no_body_text_as_figure_caption():
+def test_no_body_text_as_figure_caption(extracted_papers):
     """Figure captions must start with 'Figure N.' or 'Fig. N.', never
     body text like 'Figure 9 shows...'."""
     import re
@@ -116,7 +108,7 @@ def test_no_body_text_as_figure_caption():
         re.IGNORECASE,
     )
     for pdf_name in EXPECTED:
-        figures = _get_figures(pdf_name)
+        figures = extracted_papers[pdf_name].figures
         for fig in figures:
             if fig.caption:
                 assert not body_text_re.match(fig.caption), (
@@ -152,11 +144,11 @@ def test_image_extraction_writes_files(tmp_path):
         )
 
 
-def test_noname2_vector_figures_captured():
+def test_noname2_vector_figures_captured(extracted_papers):
     """noname2 has figures made of narrow raster sub-images.
     The extraction must capture them even though individual sub-images
     are smaller than 100px in one dimension."""
-    figures = _get_figures("noname2.pdf")
+    figures = extracted_papers["noname2.pdf"].figures
     figure_pages = {f.page_num for f in figures}
     # Figures are on pages 9, 11, 12, 13
     for expected_page in [9, 11, 12, 13]:
