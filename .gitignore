@@ -4,3 +4,9 @@
 /__pycache__/
 *.pyc
 *.pyo
+
+# Stress test outputs (large, regenerated on each run)
+_stress_test_figures/
+_stress_test_debug.db
+_FULL_EXTRACTION_AUDIT.txt
+STRESS_TEST_REPORT.md

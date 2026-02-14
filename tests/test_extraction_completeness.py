@@ -95,3 +95,55 @@ def test_noname3_grade(extracted_papers):
         f"tables_missing={ex.completeness.tables_missing}, "
         f"unknown_sections={ex.completeness.unknown_sections}"
     )
+
+
+# --- Quality signal fields exist and have sane defaults ---
+
+
+def test_quality_fields_exist(extracted_papers):
+    """New quality signal fields must exist on ExtractionCompleteness."""
+    for pdf_name in ("noname1.pdf", "noname2.pdf", "noname3.pdf"):
+        comp = extracted_papers[pdf_name].completeness
+        assert hasattr(comp, "garbled_table_cells")
+        assert hasattr(comp, "interleaved_table_cells")
+        assert hasattr(comp, "encoding_artifact_captions")
+        assert hasattr(comp, "tables_1x1")
+        assert hasattr(comp, "duplicate_captions")
+        assert hasattr(comp, "figure_number_gaps")
+        assert hasattr(comp, "table_number_gaps")
+
+
+def test_noname_papers_no_duplicate_captions(extracted_papers):
+    """Fixture papers should have no duplicate captions."""
+    for pdf_name in ("noname1.pdf", "noname2.pdf", "noname3.pdf"):
+        comp = extracted_papers[pdf_name].completeness
+        assert comp.duplicate_captions == 0, (
+            f"{pdf_name}: {comp.duplicate_captions} duplicate captions"
+        )
+
+
+def test_noname_papers_no_figure_gaps(extracted_papers):
+    """Fixture papers should have no gaps in figure numbering."""
+    for pdf_name in ("noname1.pdf", "noname2.pdf", "noname3.pdf"):
+        comp = extracted_papers[pdf_name].completeness
+        assert comp.figure_number_gaps == [], (
+            f"{pdf_name}: figure number gaps: {comp.figure_number_gaps}"
+        )
+
+
+def test_noname_papers_no_table_gaps(extracted_papers):
+    """Fixture papers should have no gaps in table numbering."""
+    for pdf_name in ("noname1.pdf", "noname2.pdf", "noname3.pdf"):
+        comp = extracted_papers[pdf_name].completeness
+        assert comp.table_number_gaps == [], (
+            f"{pdf_name}: table number gaps: {comp.table_number_gaps}"
+        )
+
+
+def test_noname_papers_no_1x1_tables(extracted_papers):
+    """Fixture papers should have no degenerate 1x1 tables."""
+    for pdf_name in ("noname1.pdf", "noname2.pdf", "noname3.pdf"):
+        comp = extracted_papers[pdf_name].completeness
+        assert comp.tables_1x1 == 0, (
+            f"{pdf_name}: {comp.tables_1x1} degenerate 1x1 tables"
+        )

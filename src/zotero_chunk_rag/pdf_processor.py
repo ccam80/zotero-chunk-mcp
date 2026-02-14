@@ -29,39 +29,53 @@ logger = logging.getLogger(__name__)
 # Pattern for filtering page identifiers from section-header boxes (e.g. "R1356")
 _PAGE_ID_RE = re.compile(r"^R?\d+$")
 
+_NUM_GROUP = r"(\d+|[IVXLCDM]+|[A-Z]\.\d+|S\d+)"
+
 # Pattern for matching table captions
 _TABLE_CAPTION_RE = re.compile(
-    r"^(?:\*\*)?(?:Table|Tab\.)\s+(\d+|[IVXLCDM]+)\s*[.:()\u2014\u2013-]",
+    rf"^(?:\*\*)?(?:Table|Tab\.)\s+{_NUM_GROUP}\s*[.:()\u2014\u2013-]",
     re.IGNORECASE,
 )
 
 # Relaxed table caption regex — no delimiter required after the number.
 # Only used when font-change detection confirms a distinct label font.
 _TABLE_CAPTION_RE_RELAXED = re.compile(
-    r"^(?:\*\*)?(?:Table|Tab\.)\s+(\d+|[IVXLCDM]+)\s+\S",
+    rf"^(?:\*\*)?(?:Table|Tab\.)\s+{_NUM_GROUP}\s+\S",
     re.IGNORECASE,
 )
 
 # Label-only regex — matches "Table N" on its own line (no description).
 _TABLE_LABEL_ONLY_RE = re.compile(
-    r"^(?:\*\*)?(?:Table|Tab\.?)\s+(\d+|[IVXLCDM]+)\s*$",
+    rf"^(?:\*\*)?(?:Table|Tab\.?)\s+{_NUM_GROUP}\s*$",
     re.IGNORECASE,
 )
 
 # Patterns for caption completeness counting
 _FIG_CAPTION_RE_COMP = re.compile(
-    r"^(?:Figure|Fig\.?)\s+(\d+|[IVXLCDM]+)\s*[.:()\u2014\u2013-]", re.IGNORECASE,
+    rf"^(?:Figure|Fig\.?)\s+{_NUM_GROUP}\s*[.:()\u2014\u2013-]", re.IGNORECASE,
 )
 _FIG_CAPTION_RE_COMP_RELAXED = re.compile(
-    r"^(?:Figure|Fig\.?)\s+(\d+|[IVXLCDM]+)\s+\S", re.IGNORECASE,
+    rf"^(?:Figure|Fig\.?)\s+{_NUM_GROUP}\s+\S", re.IGNORECASE,
 )
 _TABLE_CAPTION_RE_COMP = re.compile(
-    r"^(?:\*\*)?(?:Table|Tab\.)\s+(\d+|[IVXLCDM]+)\s*[.:()\u2014\u2013-]", re.IGNORECASE,
+    rf"^(?:\*\*)?(?:Table|Tab\.)\s+{_NUM_GROUP}\s*[.:()\u2014\u2013-]", re.IGNORECASE,
 )
 _TABLE_CAPTION_RE_COMP_RELAXED = re.compile(
-    r"^(?:\*\*)?(?:Table|Tab\.)\s+(\d+|[IVXLCDM]+)\s+\S", re.IGNORECASE,
+    rf"^(?:\*\*)?(?:Table|Tab\.)\s+{_NUM_GROUP}\s+\S", re.IGNORECASE,
 )
 _CAPTION_NUM_RE = re.compile(r"(\d+)")
+
+# Ligature codepoints that pymupdf often fails to decompose
+_LIGATURE_MAP = {
+    "\ufb00": "ff",
+    "\ufb01": "fi",
+    "\ufb02": "fl",
+    "\ufb03": "ffi",
+    "\ufb04": "ffl",
+}
+
+# Prefix for synthetic captions assigned to orphan tables/figures
+SYNTHETIC_CAPTION_PREFIX = "Uncaptioned "
 
 
 def extract_document(
@@ -108,6 +122,11 @@ def extract_document(
 
     full_markdown = "\n".join(md_parts)
 
+    # --- Ligature normalization (all text) ---
+    full_markdown = _normalize_ligatures(full_markdown)
+    for p in pages:
+        p.markdown = _normalize_ligatures(p.markdown)
+
     # Detect sections using toc_items or section-header page_boxes
     sections = _detect_sections(page_chunks, full_markdown, pages)
 
@@ -134,10 +153,34 @@ def extract_document(
         pages=pages,
     )
 
+    # Recovery pass: fill orphan captions via proximity matching and gap search
+    from ._gap_fill import run_recovery
+    figures, tables = run_recovery(
+        doc, figures, tables, page_chunks,
+        sections=sections, pages=pages,
+    )
+
+    # --- Normalize ligatures in extracted table/figure content ---
+    for t in tables:
+        t.caption = _normalize_ligatures(t.caption)
+        t.headers = [_normalize_ligatures(h) or "" for h in t.headers]
+        t.rows = [[_normalize_ligatures(c) or "" for c in row] for row in t.rows]
+    for f in figures:
+        f.caption = _normalize_ligatures(f.caption)
+
     # Compute extraction stats (needs open doc for OCR detection)
     stats = _compute_stats(pages, page_chunks, doc)
     completeness = _compute_completeness(doc, pages, sections, tables, figures, stats)
     doc.close()
+
+    # Assign synthetic captions to orphan tables/figures AFTER completeness
+    # (so completeness counts reflect reality, but returned data is usable)
+    for t in tables:
+        if not t.caption:
+            t.caption = f"{SYNTHETIC_CAPTION_PREFIX}table on page {t.page_num}"
+    for f in figures:
+        if not f.caption:
+            f.caption = f"{SYNTHETIC_CAPTION_PREFIX}figure on page {f.page_num}"
 
     return DocumentExtraction(
         pages=pages,
@@ -582,6 +625,119 @@ def _insert_abstract(
 # Table extraction
 # ---------------------------------------------------------------------------
 
+def _merge_over_divided_rows(
+    rows: list[list[str]],
+) -> list[list[str]]:
+    """Merge continuation rows produced by pymupdf's find_tables().
+
+    pymupdf often treats each wrapped text line as a separate table row,
+    producing e.g. 59 rows where ~10 logical rows exist.  Pattern: a
+    "continuation" row has an empty first cell, meaning it continues the
+    content of the previous row.  We merge by appending each cell's text
+    (space-separated) into the anchor row.
+
+    Only triggers when >40% of rows have an empty first cell (clear
+    over-division signal) and there are at least 6 rows.
+    """
+    if not rows or len(rows) < 6:
+        return rows
+
+    ncols = max(len(r) for r in rows)
+
+    # Check if the table is over-divided: count rows with empty first cell
+    empty_col0 = sum(
+        1 for r in rows
+        if len(r) == 0 or not r[0].strip()
+    )
+    if empty_col0 / len(rows) < 0.40:
+        return rows  # most rows have col-0 content, not over-divided
+
+    merged: list[list[str]] = []
+    for row in rows:
+        # Pad row to ncols
+        padded = list(row) + [""] * (ncols - len(row))
+
+        if merged and not padded[0].strip():
+            # Continuation: append into previous anchor row
+            anchor = merged[-1]
+            for j in range(ncols):
+                cell = padded[j].strip()
+                if cell:
+                    if anchor[j].strip():
+                        anchor[j] = anchor[j].rstrip() + " " + cell
+                    else:
+                        anchor[j] = cell
+        else:
+            merged.append(padded)
+
+    return merged
+
+
+def _remove_empty_columns(
+    rows: list[list[str]], headers: list[str],
+) -> tuple[list[list[str]], list[str]]:
+    """Drop columns that are empty in every row AND have no header text."""
+    if not rows:
+        return rows, headers
+    ncols = max((len(r) for r in rows), default=0)
+    ncols = max(ncols, len(headers))
+    if ncols == 0:
+        return rows, headers
+    keep = []
+    for j in range(ncols):
+        h = headers[j].strip() if j < len(headers) else ""
+        if h:
+            keep.append(j)
+            continue
+        if any(r[j].strip() for r in rows if j < len(r)):
+            keep.append(j)
+    if len(keep) == ncols:
+        return rows, headers  # nothing to remove
+    new_rows = [[r[j] if j < len(r) else "" for j in keep] for r in rows]
+    new_headers = [headers[j] if j < len(headers) else "" for j in keep]
+    return new_rows, new_headers
+
+
+def _repair_garbled_cells(
+    page: pymupdf.Page,
+    tab,
+    data: list[list[str | None]],
+) -> None:
+    """Re-extract garbled cells using PyMuPDF's word-level text API.
+
+    ``find_tables().extract()`` sometimes concatenates words without
+    spaces when the PDF encodes characters as individually-positioned
+    glyphs.  ``page.get_text("words")`` uses a different word-boundary
+    algorithm that handles this correctly.
+
+    Only touches cells detected as garbled by ``_detect_garbled_spacing``
+    (avg word length > 25 chars, no Greek/math characters).  Math cells
+    are never re-extracted because the word API can reorder symbols.
+
+    Mutates *data* in-place.
+    """
+    table_rows = tab.rows
+    for ri, table_row in enumerate(table_rows):
+        if ri >= len(data):
+            break
+        for ci, cell_bbox in enumerate(table_row.cells):
+            if ci >= len(data[ri]) or cell_bbox is None:
+                continue
+            cell_text = data[ri][ci]
+            if not cell_text:
+                continue
+            is_garbled, _ = _detect_garbled_spacing(cell_text)
+            if not is_garbled:
+                continue
+            words = page.get_text("words", clip=pymupdf.Rect(cell_bbox))
+            if not words:
+                continue
+            words.sort(key=lambda w: (w[1], w[0]))
+            new_text = " ".join(w[4] for w in words)
+            if new_text.strip():
+                data[ri][ci] = new_text
+
+
 def _extract_tables_native(
     doc: pymupdf.Document,
     sections: list[SectionSpan] | None = None,
@@ -600,11 +756,9 @@ def _extract_tables_native(
     for page_num_0, page in enumerate(doc):
         page_num = page_num_0 + 1
 
-        # Skip references/appendix sections (abbreviation lists, reference
-        # lists get parsed as tables)
+        # Determine section label for this page (used for ref/appendix skip and phantom scoring)
+        page_label = None
         if sections and pages:
-            from ._figure_extraction import _is_in_references
-            page_label = None
             for p in pages:
                 if p.page_num == page_num:
                     from .section_classifier import assign_section
@@ -629,6 +783,7 @@ def _extract_tables_native(
         page_tables = []
         for tab in tab_finder.tables:
             data = tab.extract()
+            _repair_garbled_cells(page, tab, data)
 
             cleaned_rows = [
                 [cell if cell is not None else "" for cell in row]
@@ -657,22 +812,18 @@ def _extract_tables_native(
 
         page_tables.sort(key=lambda x: x[0])
 
-        # Match tables to captions by order
-        for i, (_, bbox, headers, rows) in enumerate(page_tables):
-            caption = caption_hits[i][1] if i < len(caption_hits) else None
+        # Match tables to captions by proximity (not positional index)
+        from ._figure_extraction import _match_by_proximity
+        table_bboxes = [bbox for _, bbox, _, _ in page_tables]
+        matched_captions = _match_by_proximity(table_bboxes, caption_hits)
 
-            # Filter garbage tables: very low fill + no caption = misclassified
-            # layout element (block diagrams, reference lists parsed as grids)
-            total_cells = len(rows) * max(len(r) for r in rows) if rows else 0
-            filled_cells = sum(1 for r in rows for c in r if c.strip())
-            fill_rate = filled_cells / max(1, total_cells)
-            if fill_rate < 0.15 and caption is None:
-                logger.debug(
-                    "Skipping garbage table on page %d: %dx%d fill=%.0f%% no caption",
-                    page_num, len(rows), max(len(r) for r in rows) if rows else 0,
-                    fill_rate * 100,
-                )
-                continue
+        for i, (_, bbox, headers, rows) in enumerate(page_tables):
+            caption = matched_captions[i]
+
+            # Merge over-divided rows (pymupdf wraps multi-line cells into
+            # separate rows, producing very sparse tables).
+            rows = _merge_over_divided_rows(rows)
+            rows, headers = _remove_empty_columns(rows, headers)
 
             tables.append(ExtractedTable(
                 page_num=page_num,
@@ -684,7 +835,301 @@ def _extract_tables_native(
             ))
             table_idx += 1
 
+    # --- Pass 2: Prose/lineless table extraction ---
+    # find_tables() can't detect tables formatted as prose definition lists.
+    # Scan for "Table N" captions that have no corresponding extracted table,
+    # then capture the text blocks below the caption as table content.
+    tables = _extract_prose_tables(doc, tables, table_idx, sections, pages)
+
     return tables
+
+
+def _parse_prose_rows(content: str) -> list[list[str]]:
+    """Try to split prose table content into structured rows.
+
+    If content looks like a definition list (multiple lines, most with
+    colon/dash delimiters), parse into 2-column rows.  Otherwise return
+    as single cell.
+    """
+    lines = [l.strip() for l in content.split("\n") if l.strip()]
+    if len(lines) < 2:
+        return [[content]]
+    delim_lines = sum(1 for l in lines if re.search(r"[:\u2013\u2014]", l))
+    if delim_lines / len(lines) < 0.4:
+        return [[content]]
+    rows: list[list[str]] = []
+    for line in lines:
+        m = re.match(r"^(.+?)\s*[:\u2013\u2014]\s*(.+)$", line)
+        if m:
+            rows.append([m.group(1).strip(), m.group(2).strip()])
+        else:
+            rows.append([line])
+    return rows if rows else [[content]]
+
+
+def _extract_prose_tables(
+    doc: pymupdf.Document,
+    tables: list[ExtractedTable],
+    table_idx: int,
+    sections: list[SectionSpan] | None,
+    pages: list[PageExtraction] | None,
+) -> list[ExtractedTable]:
+    """Find table captions with no extracted table and capture prose content."""
+    from ._figure_extraction import find_all_captions_on_page
+
+    # Collect caption numbers already matched to tables
+    matched_nums: set[str] = set()
+    for t in tables:
+        if t.caption:
+            m = _CAPTION_NUM_RE.search(t.caption)
+            if m:
+                matched_nums.add(m.group(1))
+
+    for page_num_0, page in enumerate(doc):
+        page_num = page_num_0 + 1
+
+        # Skip references/appendix
+        if sections and pages:
+            from ._figure_extraction import _is_in_references
+            page_label = None
+            for p in pages:
+                if p.page_num == page_num:
+                    from .section_classifier import assign_section
+                    page_label = assign_section(p.char_start, sections)
+                    break
+            if page_label in ("references", "appendix"):
+                continue
+
+        caption_hits = find_all_captions_on_page(
+            page, _TABLE_CAPTION_RE,
+            relaxed_re=_TABLE_CAPTION_RE_RELAXED,
+            label_only_re=_TABLE_LABEL_ONLY_RE,
+        )
+
+        for y_center, caption_text, bbox in caption_hits:
+            m = _CAPTION_NUM_RE.search(caption_text)
+            if not m:
+                continue
+            num = m.group(1)
+            if num in matched_nums:
+                continue  # already have a table for this caption
+
+            # Capture text blocks below this caption on the same page
+            content = _collect_prose_table_content(page, y_center, bbox)
+            if not content:
+                continue
+
+            parsed_rows = _parse_prose_rows(content)
+            tables.append(ExtractedTable(
+                page_num=page_num,
+                table_index=table_idx,
+                bbox=bbox,
+                headers=[],
+                rows=parsed_rows,
+                caption=caption_text,
+            ))
+            matched_nums.add(num)
+            table_idx += 1
+            logger.debug(
+                "Prose table '%s' extracted on page %d (%d chars)",
+                caption_text[:60], page_num, len(content),
+            )
+
+    return tables
+
+
+def _collect_prose_table_content(
+    page: pymupdf.Page,
+    caption_y: float,
+    caption_bbox: tuple[float, float, float, float] | None = None,
+) -> str:
+    """Collect text blocks below a caption until body text resumes.
+
+    Heuristic: collect blocks whose top edge is below the caption y-center,
+    stopping when we encounter a block that looks like body text (long
+    paragraph without definition-list structure) or another caption.
+
+    When *caption_bbox* is provided, only blocks with meaningful horizontal
+    overlap (>30 pt) with the caption are considered.  This prevents
+    collecting body-text from the wrong column in multi-column layouts.
+    """
+    _MIN_X_OVERLAP = 30  # pts
+
+    text_dict = page.get_text("dict")
+    candidates: list[tuple[float, str]] = []
+
+    for block in text_dict.get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        block_bbox = block.get("bbox", (0, 0, 0, 0))
+        block_top = block_bbox[1]
+
+        # Only consider blocks below the caption
+        if block_top < caption_y + 5:
+            continue
+
+        # x-overlap filter: reject blocks from a different column
+        if caption_bbox is not None:
+            x_overlap = min(caption_bbox[2], block_bbox[2]) - max(caption_bbox[0], block_bbox[0])
+            if x_overlap < _MIN_X_OVERLAP:
+                continue
+
+        block_text = ""
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                block_text += span.get("text", "")
+            block_text += " "
+        block_text = block_text.strip()
+
+        if not block_text:
+            continue
+
+        candidates.append((block_top, block_text))
+
+    # Sort by y-position (pymupdf block order is not guaranteed visual order)
+    candidates.sort(key=lambda t: t[0])
+
+    blocks_below: list[tuple[float, str]] = []
+    for block_top, block_text in candidates:
+        # Stop at another caption or section heading
+        if _TABLE_CAPTION_RE.match(block_text) or _FIG_CAPTION_RE_COMP.match(block_text):
+            break
+
+        # Stop at long body-text paragraphs (>500 chars without
+        # definition-list markers like ":", "=", ";")
+        if len(block_text) > 500:
+            def_markers = block_text.count(":") + block_text.count("=") + block_text.count(";")
+            if def_markers < 3:
+                break  # looks like body text, not a table
+
+        # After the first block, reject body-text bleed: >300 chars, no
+        # definition markers, starts with a lowercase letter
+        if blocks_below and len(block_text) > 300:
+            def_markers = block_text.count(":") + block_text.count("=") + block_text.count(";")
+            if def_markers < 2 and block_text[0].islower():
+                break
+
+        blocks_below.append((block_top, block_text))
+
+    if not blocks_below:
+        return ""
+
+    # Cap at 20 blocks — existing stop conditions (next caption, body-text
+    # paragraphs >500 chars) prevent runaway; 5 was too restrictive.
+    blocks_below = blocks_below[:20]
+    return "\n".join(text for _, text in blocks_below)
+
+
+# ---------------------------------------------------------------------------
+# Content quality detection
+# ---------------------------------------------------------------------------
+
+_MATH_GREEK_RE = re.compile(r"[\u0391-\u03C9\u2200-\u22FF=±×÷²³∑∏∫∂∇]")
+
+def _detect_garbled_spacing(text: str) -> tuple[bool, str]:
+    """Flag text where average word length > 25 chars (missing word spaces).
+
+    Skips cells containing Greek letters or math operators — these are
+    legitimate technical content, not garbled extraction artifacts.
+
+    Returns (is_garbled, reason).
+    """
+    if not text or not text.strip():
+        return False, ""
+    if _MATH_GREEK_RE.search(text):
+        return False, ""
+    words = text.split()
+    if not words:
+        return False, ""
+    avg_len = sum(len(w) for w in words) / len(words)
+    if avg_len > 25:
+        return True, f"avg word length {avg_len:.0f} chars (likely merged words)"
+    return False, ""
+
+
+def _normalize_ligatures(text: str | None) -> str | None:
+    """Replace common ligature codepoints with their ASCII equivalents."""
+    if not text:
+        return text
+    for lig, replacement in _LIGATURE_MAP.items():
+        text = text.replace(lig, replacement)
+    return text
+
+
+def _detect_interleaved_chars(text: str) -> tuple[bool, str]:
+    """Flag text where >40% of tokens are single alphabetic characters.
+
+    Only counts alphabetic single-char tokens.  Digits, punctuation,
+    and decimal numbers (e.g. ".906", ",") are not interleaving signals.
+
+    Returns (is_interleaved, reason).
+    """
+    if not text or not text.strip():
+        return False, ""
+    tokens = text.split()
+    if len(tokens) < 5:
+        return False, ""
+    single_chars = sum(1 for t in tokens if len(t) == 1 and t.isalpha())
+    ratio = single_chars / len(tokens)
+    if ratio > 0.4:
+        return True, f"{ratio:.0%} of tokens are single alpha chars (likely interleaved columns)"
+    return False, ""
+
+
+def _detect_encoding_artifacts(text: str) -> tuple[bool, list[str]]:
+    """Detect ligature glyphs that indicate encoding problems.
+
+    Returns (has_artifacts, list of found artifact strings).
+    """
+    # Common ligature codepoints that appear when PDF text extraction
+    # fails to decompose ligatures
+    _LIGATURES = [
+        "\ufb00",  # ff
+        "\ufb01",  # fi
+        "\ufb02",  # fl
+        "\ufb03",  # ffi
+        "\ufb04",  # ffl
+    ]
+    if not text:
+        return False, []
+    found = [lig for lig in _LIGATURES if lig in text]
+    return bool(found), found
+
+
+def _check_content_readability(table: "ExtractedTable") -> dict:
+    """Combine all quality checks into a per-table report.
+
+    Returns dict with keys: garbled_cells, interleaved_cells,
+    encoding_artifacts (bool), details (list[str]).
+    """
+    garbled = 0
+    interleaved = 0
+    has_encoding = False
+    details: list[str] = []
+
+    for ri, row in enumerate(table.rows):
+        for ci, cell in enumerate(row):
+            g, g_reason = _detect_garbled_spacing(cell)
+            if g:
+                garbled += 1
+                details.append(f"row {ri} col {ci}: {g_reason}")
+            i, i_reason = _detect_interleaved_chars(cell)
+            if i:
+                interleaved += 1
+                details.append(f"row {ri} col {ci}: {i_reason}")
+
+    if table.caption:
+        enc, enc_list = _detect_encoding_artifacts(table.caption)
+        if enc:
+            has_encoding = True
+            details.append(f"caption encoding artifacts: {enc_list}")
+
+    return {
+        "garbled_cells": garbled,
+        "interleaved_cells": interleaved,
+        "encoding_artifacts": has_encoding,
+        "details": details,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -761,6 +1206,77 @@ def _compute_completeness(
     figures_with_captions = sum(1 for f in figures if f.caption)
     tables_with_captions = sum(1 for t in tables if t.caption)
 
+    # --- Content quality signals ---
+    garbled_cells = 0
+    interleaved_cells = 0
+    encoding_artifact_captions = 0
+    tables_1x1 = 0
+    for t in tables:
+        report = _check_content_readability(t)
+        garbled_cells += report["garbled_cells"]
+        interleaved_cells += report["interleaved_cells"]
+        if report["encoding_artifacts"]:
+            encoding_artifact_captions += 1
+        if t.num_rows <= 1 and t.num_cols <= 1:
+            tables_1x1 += 1
+
+    # Duplicate captions: count caption texts that appear more than once.
+    # Exclude "(continued)" captions — multi-page tables legitimately
+    # produce multiple continuation captions with the same text.
+    _CONTINUED_RE = re.compile(r"\(continued\)", re.IGNORECASE)
+    all_captions: list[str] = []
+    for f in figures:
+        if f.caption and not _CONTINUED_RE.search(f.caption):
+            all_captions.append(f.caption.strip())
+    for t in tables:
+        if t.caption and not _CONTINUED_RE.search(t.caption):
+            all_captions.append(t.caption.strip())
+    seen_captions: set[str] = set()
+    duplicate_captions = 0
+    for cap in all_captions:
+        if cap in seen_captions:
+            duplicate_captions += 1
+        seen_captions.add(cap)
+
+    # Caption number gaps: find missing integers in 1..max sequences
+    def _find_gaps(nums: set[str]) -> list[str]:
+        int_nums = set()
+        for n in nums:
+            try:
+                int_nums.add(int(n))
+            except ValueError:
+                pass  # skip non-integer like "A.1", "S1"
+        if not int_nums:
+            return []
+        full_range = set(range(1, max(int_nums) + 1))
+        missing = sorted(full_range - int_nums)
+        return [str(m) for m in missing]
+
+    # Compute gaps from caption numbers found on pages
+    figure_number_gaps = _find_gaps(fig_nums)
+    table_number_gaps = _find_gaps(tab_nums)
+
+    # Unmatched captions: caption numbers found on pages but not on any
+    # extracted object's caption.  This is a set-level check (not just count).
+    _cap_num_re = re.compile(r"(?:Table|Tab\.?|Figure|Fig\.?)\s+(\d+)", re.IGNORECASE)
+
+    matched_fig_nums: set[str] = set()
+    for f in figures:
+        if f.caption:
+            m = _cap_num_re.search(f.caption)
+            if m:
+                matched_fig_nums.add(m.group(1))
+
+    matched_tab_nums: set[str] = set()
+    for t in tables:
+        if t.caption:
+            m = _cap_num_re.search(t.caption)
+            if m:
+                matched_tab_nums.add(m.group(1))
+
+    unmatched_fig = sorted(fig_nums - matched_fig_nums, key=lambda x: (len(x), x))
+    unmatched_tab = sorted(tab_nums - matched_tab_nums, key=lambda x: (len(x), x))
+
     return ExtractionCompleteness(
         text_pages=stats.get("text_pages", 0),
         empty_pages=stats.get("empty_pages", 0),
@@ -776,6 +1292,15 @@ def _compute_completeness(
         sections_identified=len([s for s in sections if s.label != "preamble"]),
         unknown_sections=len([s for s in sections if s.label == "unknown"]),
         has_abstract=any(s.label == "abstract" for s in sections),
+        garbled_table_cells=garbled_cells,
+        interleaved_table_cells=interleaved_cells,
+        encoding_artifact_captions=encoding_artifact_captions,
+        tables_1x1=tables_1x1,
+        duplicate_captions=duplicate_captions,
+        figure_number_gaps=figure_number_gaps,
+        table_number_gaps=table_number_gaps,
+        unmatched_figure_captions=unmatched_fig,
+        unmatched_table_captions=unmatched_tab,
     )
 
 

@@ -22,6 +22,7 @@ import json
 import logging
 import re
 import shutil
+import sqlite3
 import sys
 import tempfile
 import time
@@ -335,7 +336,7 @@ class StressTestReport:
 # ---------------------------------------------------------------------------
 
 def run_stress_test():
-    """Run the full stress test and return the report."""
+    """Run the full stress test and return the report and extractions."""
     logging.basicConfig(
         level=logging.WARNING,
         format="%(levelname)s %(name)s: %(message)s",
@@ -345,14 +346,19 @@ def run_stress_test():
     logging.getLogger("httpx").setLevel(logging.ERROR)
 
     report = StressTestReport()
+    extractions: dict[str, tuple] = {}
 
-    # Use a temp directory for the test index
+    # Temp dir for ephemeral data (chroma index, OCR scratch).
+    # Figures go to a persistent directory alongside the report/audit.
     test_dir = Path(tempfile.mkdtemp(prefix="stress_test_"))
     chroma_path = test_dir / "chroma"
-    figures_path = test_dir / "figures"
     ocr_path = test_dir / "ocr_images"
 
+    base_dir = Path(__file__).parent.parent
+    figures_path = base_dir / "_stress_test_figures"
+
     print(f"Test directory: {test_dir}")
+    print(f"Figures directory: {figures_path}")
     print(f"=" * 70)
 
     try:
@@ -382,7 +388,7 @@ def run_stress_test():
 
         if len(corpus_items) < 5:
             print("FATAL: Not enough papers found. Aborting.")
-            return report
+            return report, extractions
 
         # ===================================================================
         # PHASE 2: Extract and index all papers
@@ -427,8 +433,6 @@ def run_stress_test():
         journal_ranker = JournalRanker()
         reranker = Reranker(alpha=0.7)
         retriever = Retriever(store)
-
-        extractions: dict[str, tuple] = {}  # item_key -> (extraction, chunks, item, gt)
 
         t_start = time.perf_counter()
 
@@ -477,17 +481,22 @@ def run_stress_test():
                 # Build reference map and enrich tables/figures with body-text context
                 # (mirrors production indexer pipeline)
                 from zotero_chunk_rag._reference_matcher import match_references, get_reference_context
+                from zotero_chunk_rag.pdf_processor import SYNTHETIC_CAPTION_PREFIX
                 ref_map = match_references(extraction.full_markdown, chunks, extraction.tables, extraction.figures)
+                _TAB_NUM_RE = re.compile(r"(?:Table|Tab\.?)\s+(\d+)", re.IGNORECASE)
+                _FIG_NUM_RE = re.compile(r"(?:Figure|Fig\.?)\s+(\d+)", re.IGNORECASE)
                 for table in extraction.tables:
-                    m_cap = re.search(r"(\d+)", table.caption) if table.caption else None
-                    if m_cap:
-                        ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "table", int(m_cap.group(1)))
-                        table.reference_context = ctx
+                    if table.caption and not table.caption.startswith(SYNTHETIC_CAPTION_PREFIX):
+                        m_cap = _TAB_NUM_RE.search(table.caption)
+                        if m_cap:
+                            ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "table", int(m_cap.group(1)))
+                            table.reference_context = ctx
                 for fig in extraction.figures:
-                    m_cap = re.search(r"(\d+)", fig.caption) if fig.caption else None
-                    if m_cap:
-                        ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "figure", int(m_cap.group(1)))
-                        fig.reference_context = ctx
+                    if fig.caption and not fig.caption.startswith(SYNTHETIC_CAPTION_PREFIX):
+                        m_cap = _FIG_NUM_RE.search(fig.caption)
+                        if m_cap:
+                            ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "figure", int(m_cap.group(1)))
+                            fig.reference_context = ctx
 
                 # Store tables
                 if extraction.tables:
@@ -578,10 +587,10 @@ def run_stress_test():
                         report.add(
                             "table-content-quality",
                             f"{short_name}/table-{i}",
-                            fill_rate > 0.3,
+                            fill_rate > 0.5,
                             f"Table {i}: {non_empty}/{total_cells} cells non-empty ({fill_rate:.0%}). "
                             f"Caption: '{(tab.caption or 'NONE')[:60]}'",
-                            severity="MAJOR" if fill_rate < 0.1 else "MINOR",
+                            severity="MAJOR" if fill_rate < 0.2 else "MINOR",
                         )
 
             # --- 3c: Figures extracted ---
@@ -594,18 +603,16 @@ def run_stress_test():
                     f"Expected figures — found {len(extraction.figures)}",
                     severity="MAJOR",
                 )
-                # Check figure captions
+                # Caption rate (informational — orphans are caught as MAJOR by 3d.3)
                 captioned = [f for f in extraction.figures if f.caption]
-                orphans = [f for f in extraction.figures if not f.caption]
                 if extraction.figures:
                     caption_rate = len(captioned) / len(extraction.figures)
                     report.add(
                         "figure-caption-rate",
                         short_name,
-                        caption_rate >= 0.5,
-                        f"{len(captioned)}/{len(extraction.figures)} figures have captions ({caption_rate:.0%}). "
-                        f"Orphan pages: {[f.page_num for f in orphans]}",
-                        severity="MAJOR" if caption_rate < 0.3 else "MINOR",
+                        caption_rate == 1.0,
+                        f"{len(captioned)}/{len(extraction.figures)} figures have captions ({caption_rate:.0%})",
+                        severity="MAJOR",
                     )
 
             # --- 3d: Completeness grade ---
@@ -621,6 +628,70 @@ def run_stress_test():
                     severity="MAJOR" if comp.grade in ("D", "F") else "MINOR",
                 )
 
+                # --- 3d.1: Missing figures (captions found, no image extracted) ---
+                if comp.figures_missing > 0:
+                    report.add(
+                        "missing-figures",
+                        short_name,
+                        False,
+                        f"{comp.figures_missing} figure(s) have captions but no extracted image. "
+                        f"Captions found: {comp.figure_captions_found}, figures extracted: {comp.figures_found}",
+                        severity="MAJOR",
+                    )
+
+                # --- 3d.2: Missing tables (captions found, no table extracted) ---
+                if comp.tables_missing > 0:
+                    report.add(
+                        "missing-tables",
+                        short_name,
+                        False,
+                        f"{comp.tables_missing} table(s) have captions but no extracted content. "
+                        f"Captions found: {comp.table_captions_found}, tables extracted: {comp.tables_found}",
+                        severity="MAJOR",
+                    )
+
+                # --- 3d.3: Orphan figures (extracted but no caption matched) ---
+                # Severity depends on whether captions are going unmatched.
+                # Extra uncaptioned figures (junk) with no caption gaps = MINOR.
+                # Unmatched captions or number gaps = MAJOR (real detection failure).
+                orphan_figs = comp.figures_found - comp.figures_with_captions
+                if orphan_figs > 0:
+                    has_fig_gaps = bool(comp.figure_number_gaps or comp.unmatched_figure_captions)
+                    report.add(
+                        "orphan-figures",
+                        short_name,
+                        False,
+                        f"{orphan_figs} figure(s) extracted without a real caption. "
+                        f"Unmatched caption numbers: {comp.unmatched_figure_captions or 'none'}",
+                        severity="MAJOR" if has_fig_gaps else "MINOR",
+                    )
+
+                # --- 3d.4: Orphan tables (extracted but no caption matched) ---
+                orphan_tabs = comp.tables_found - comp.tables_with_captions
+                if orphan_tabs > 0:
+                    has_tab_gaps = bool(comp.table_number_gaps or comp.unmatched_table_captions)
+                    report.add(
+                        "orphan-tables",
+                        short_name,
+                        False,
+                        f"{orphan_tabs} table(s) extracted without a real caption. "
+                        f"Unmatched caption numbers: {comp.unmatched_table_captions or 'none'}",
+                        severity="MAJOR" if has_tab_gaps else "MINOR",
+                    )
+
+                # --- 3d.5: Unmatched captions (caption on page, not on any object) ---
+                unmatched = comp.unmatched_figure_captions + comp.unmatched_table_captions
+                if unmatched:
+                    report.add(
+                        "unmatched-captions",
+                        short_name,
+                        False,
+                        f"Caption numbers found on pages but not matched to any extracted object: "
+                        f"figures={comp.unmatched_figure_captions or 'none'}, "
+                        f"tables={comp.unmatched_table_captions or 'none'}",
+                        severity="MAJOR",
+                    )
+
             # --- 3e: Abstract detected ---
             has_abstract = any(s.label == "abstract" for s in extraction.sections)
             report.add(
@@ -630,6 +701,68 @@ def run_stress_test():
                 f"Abstract {'detected' if has_abstract else 'NOT detected'}",
                 severity="MINOR",
             )
+
+            # --- 3h: Content readability (garbled/interleaved cells) ---
+            if comp and extraction.tables:
+                from zotero_chunk_rag.pdf_processor import _check_content_readability
+                readability_issues = []
+                for ti, tab in enumerate(extraction.tables):
+                    rpt = _check_content_readability(tab)
+                    if rpt["garbled_cells"] or rpt["interleaved_cells"]:
+                        readability_issues.append(
+                            f"table {ti}: garbled={rpt['garbled_cells']}, "
+                            f"interleaved={rpt['interleaved_cells']}"
+                        )
+                report.add(
+                    "content-readability",
+                    short_name,
+                    len(readability_issues) == 0,
+                    f"{len(readability_issues)} tables with readability issues"
+                    + (f": {'; '.join(readability_issues[:3])}" if readability_issues else ""),
+                    severity="MAJOR",
+                )
+
+            # --- 3i: 1x1 table dimensions ---
+            if comp:
+                report.add(
+                    "table-dimensions-sanity",
+                    short_name,
+                    comp.tables_1x1 == 0,
+                    f"{comp.tables_1x1} tables are 1x1 (degenerate)",
+                    severity="MAJOR",
+                )
+
+            # --- 3j: Caption encoding quality ---
+            if comp:
+                report.add(
+                    "caption-encoding-quality",
+                    short_name,
+                    comp.encoding_artifact_captions == 0,
+                    f"{comp.encoding_artifact_captions} captions with encoding artifacts",
+                    severity="MINOR",
+                )
+
+            # --- 3k: Caption number continuity ---
+            if comp:
+                gaps = comp.figure_number_gaps + comp.table_number_gaps
+                report.add(
+                    "caption-number-continuity",
+                    short_name,
+                    len(gaps) == 0,
+                    f"Figure gaps: {comp.figure_number_gaps or 'none'}, "
+                    f"Table gaps: {comp.table_number_gaps or 'none'}",
+                    severity="MAJOR",
+                )
+
+            # --- 3l: Duplicate captions ---
+            if comp:
+                report.add(
+                    "duplicate-captions",
+                    short_name,
+                    comp.duplicate_captions == 0,
+                    f"{comp.duplicate_captions} duplicate caption(s) found",
+                    severity="MAJOR",
+                )
 
             # --- 3f: Chunk count sanity ---
             expected_min_chunks = len(extraction.pages) * 2  # At least 2 chunks per page
@@ -1145,7 +1278,285 @@ def run_stress_test():
         except Exception:
             pass
 
-    return report
+    return report, extractions
+
+
+# ---------------------------------------------------------------------------
+# Debug database — structured SQLite for agent-friendly artifact inspection
+# ---------------------------------------------------------------------------
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS run_metadata (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
+
+CREATE TABLE IF NOT EXISTS papers (
+    item_key              TEXT PRIMARY KEY,
+    short_name            TEXT NOT NULL,
+    title                 TEXT,
+    num_pages             INTEGER,
+    num_chunks            INTEGER,
+    quality_grade         TEXT,
+    -- completeness fields (NULL when completeness unavailable)
+    figures_found         INTEGER,
+    figures_with_captions INTEGER,
+    figures_missing       INTEGER,
+    figure_captions_found INTEGER,
+    tables_found          INTEGER,
+    tables_with_captions  INTEGER,
+    tables_missing        INTEGER,
+    table_captions_found  INTEGER,
+    tables_1x1            INTEGER,
+    encoding_artifact_captions INTEGER,
+    duplicate_captions    INTEGER,
+    figure_number_gaps    TEXT,   -- JSON array of gap strings
+    table_number_gaps     TEXT,   -- JSON array of gap strings
+    unmatched_figure_captions TEXT, -- JSON array
+    unmatched_table_captions  TEXT, -- JSON array
+    completeness_grade    TEXT,
+    full_markdown         TEXT    -- full extracted document text
+);
+
+CREATE TABLE IF NOT EXISTS sections (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_key       TEXT NOT NULL,
+    section_index  INTEGER,
+    label          TEXT,
+    heading_text   TEXT,
+    char_start     INTEGER,
+    char_end       INTEGER,
+    confidence     REAL,
+    FOREIGN KEY (item_key) REFERENCES papers(item_key)
+);
+
+CREATE TABLE IF NOT EXISTS pages (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_key  TEXT NOT NULL,
+    page_num  INTEGER,
+    markdown  TEXT,
+    FOREIGN KEY (item_key) REFERENCES papers(item_key)
+);
+
+CREATE TABLE IF NOT EXISTS extracted_tables (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_key          TEXT NOT NULL,
+    table_index       INTEGER,
+    page_num          INTEGER,
+    caption           TEXT,
+    caption_position  TEXT,
+    num_rows          INTEGER,
+    num_cols          INTEGER,
+    non_empty_cells   INTEGER,
+    total_cells       INTEGER,
+    fill_rate         REAL,
+    headers_json      TEXT,   -- JSON array of header strings
+    rows_json         TEXT,   -- JSON array of arrays (full cell data)
+    markdown          TEXT,   -- rendered markdown table
+    reference_context TEXT,
+    bbox              TEXT,   -- JSON [x0, y0, x1, y1]
+    FOREIGN KEY (item_key) REFERENCES papers(item_key)
+);
+
+CREATE TABLE IF NOT EXISTS extracted_figures (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_key          TEXT NOT NULL,
+    figure_index      INTEGER,
+    page_num          INTEGER,
+    caption           TEXT,
+    bbox              TEXT,   -- JSON [x0, y0, x1, y1]
+    image_path        TEXT,
+    has_image         INTEGER,
+    reference_context TEXT,
+    FOREIGN KEY (item_key) REFERENCES papers(item_key)
+);
+
+CREATE TABLE IF NOT EXISTS chunks (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_key             TEXT NOT NULL,
+    chunk_index          INTEGER,
+    page_num             INTEGER,
+    section              TEXT,
+    section_confidence   REAL,
+    char_start           INTEGER,
+    char_end             INTEGER,
+    text                 TEXT,
+    FOREIGN KEY (item_key) REFERENCES papers(item_key)
+);
+
+CREATE TABLE IF NOT EXISTS test_results (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    test_name TEXT,
+    paper     TEXT,
+    passed    INTEGER,
+    detail    TEXT,
+    severity  TEXT
+);
+"""
+
+
+def write_debug_database(
+    extractions: dict[str, tuple],
+    report: StressTestReport,
+    db_path: Path,
+) -> None:
+    """Write all extraction artifacts and test results to a SQLite database.
+
+    Replaces the old text-file audit.  Agents can then query specific papers,
+    tables, figures, chunks, or test failures via SQL instead of reading a
+    giant text dump.
+    """
+    # Remove stale DB so each run is a clean snapshot
+    if db_path.exists():
+        db_path.unlink()
+
+    con = sqlite3.connect(str(db_path))
+    con.executescript(_SCHEMA)
+
+    # --- run metadata ---
+    meta_rows = [
+        ("generated", time.strftime("%Y-%m-%d %H:%M:%S")),
+        ("corpus_size", str(len(CORPUS))),
+        ("papers_extracted", str(len(extractions))),
+        ("tests_total", str(len(report.results))),
+        ("tests_passed", str(report.passed)),
+        ("tests_failed", str(report.failed)),
+        ("major_failures", str(report.major_failures)),
+    ]
+    for k, v in report.timings.items():
+        meta_rows.append((f"timing_{k}", f"{v:.1f}s"))
+    con.executemany(
+        "INSERT INTO run_metadata (key, value) VALUES (?, ?)", meta_rows,
+    )
+
+    for item_key, (extraction, chunks, item, gt, short_name) in extractions.items():
+        comp = extraction.completeness
+
+        # --- paper row ---
+        con.execute(
+            """INSERT INTO papers VALUES (
+                ?,?,?,?,?,?,  ?,?,?,?,  ?,?,?,?,  ?,?,?,  ?,?,?,?,  ?,?
+            )""",
+            (
+                item_key,
+                short_name,
+                item.title,
+                len(extraction.pages),
+                len(chunks),
+                extraction.quality_grade,
+                # completeness (may be None)
+                comp.figures_found if comp else None,
+                comp.figures_with_captions if comp else None,
+                comp.figures_missing if comp else None,
+                comp.figure_captions_found if comp else None,
+                comp.tables_found if comp else None,
+                comp.tables_with_captions if comp else None,
+                comp.tables_missing if comp else None,
+                comp.table_captions_found if comp else None,
+                comp.tables_1x1 if comp else None,
+                comp.encoding_artifact_captions if comp else None,
+                comp.duplicate_captions if comp else None,
+                json.dumps(comp.figure_number_gaps) if comp else None,
+                json.dumps(comp.table_number_gaps) if comp else None,
+                json.dumps(comp.unmatched_figure_captions) if comp else None,
+                json.dumps(comp.unmatched_table_captions) if comp else None,
+                comp.grade if comp else None,
+                extraction.full_markdown,
+            ),
+        )
+
+        # --- sections ---
+        for si, sec in enumerate(extraction.sections):
+            con.execute(
+                "INSERT INTO sections (item_key, section_index, label, heading_text, "
+                "char_start, char_end, confidence) VALUES (?,?,?,?,?,?,?)",
+                (item_key, si, sec.label, sec.heading_text,
+                 sec.char_start, sec.char_end, sec.confidence),
+            )
+
+        # --- pages ---
+        for pg in extraction.pages:
+            con.execute(
+                "INSERT INTO pages (item_key, page_num, markdown) VALUES (?,?,?)",
+                (item_key, pg.page_num, pg.markdown),
+            )
+
+        # --- tables ---
+        for tab in extraction.tables:
+            non_empty = sum(1 for row in tab.rows for cell in row if cell.strip())
+            total_cells = sum(len(row) for row in tab.rows)
+            fill_rate = non_empty / total_cells if total_cells else 0.0
+            con.execute(
+                "INSERT INTO extracted_tables (item_key, table_index, page_num, "
+                "caption, caption_position, num_rows, num_cols, non_empty_cells, "
+                "total_cells, fill_rate, headers_json, rows_json, markdown, "
+                "reference_context, bbox) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    item_key,
+                    tab.table_index,
+                    tab.page_num,
+                    tab.caption,
+                    tab.caption_position,
+                    tab.num_rows,
+                    tab.num_cols,
+                    non_empty,
+                    total_cells,
+                    fill_rate,
+                    json.dumps(tab.headers),
+                    json.dumps(tab.rows),
+                    tab.to_markdown(),
+                    tab.reference_context,
+                    json.dumps(list(tab.bbox)),
+                ),
+            )
+
+        # --- figures ---
+        for fig in extraction.figures:
+            has_img = 1 if (fig.image_path and fig.image_path.exists()) else 0
+            con.execute(
+                "INSERT INTO extracted_figures (item_key, figure_index, page_num, "
+                "caption, bbox, image_path, has_image, reference_context) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    item_key,
+                    fig.figure_index,
+                    fig.page_num,
+                    fig.caption,
+                    json.dumps(list(fig.bbox)),
+                    str(fig.image_path) if fig.image_path else None,
+                    has_img,
+                    fig.reference_context,
+                ),
+            )
+
+        # --- chunks ---
+        for ch in chunks:
+            con.execute(
+                "INSERT INTO chunks (item_key, chunk_index, page_num, section, "
+                "section_confidence, char_start, char_end, text) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    item_key,
+                    ch.chunk_index,
+                    ch.page_num,
+                    ch.section,
+                    ch.section_confidence,
+                    ch.char_start,
+                    ch.char_end,
+                    ch.text,
+                ),
+            )
+
+    # --- test results ---
+    for r in report.results:
+        con.execute(
+            "INSERT INTO test_results (test_name, paper, passed, detail, severity) "
+            "VALUES (?,?,?,?,?)",
+            (r.test_name, r.paper, 1 if r.passed else 0, r.detail, r.severity),
+        )
+
+    con.commit()
+    con.close()
 
 
 # ---------------------------------------------------------------------------
@@ -1163,7 +1574,7 @@ if __name__ == "__main__":
     print("  Real papers, real searches, real expectations")
     print("=" * 70)
 
-    report = run_stress_test()
+    report, extractions = run_stress_test()
 
     # Print report
     md = report.to_markdown()
@@ -1171,9 +1582,18 @@ if __name__ == "__main__":
     print(md)
 
     # Save report
-    report_path = Path(__file__).parent.parent / "STRESS_TEST_REPORT.md"
+    base_dir = Path(__file__).parent.parent
+    report_path = base_dir / "STRESS_TEST_REPORT.md"
     report_path.write_text(md, encoding="utf-8")
     print(f"\nReport saved to: {report_path}")
+
+    # Write debug database (all figures, tables, chunks, sections, test results)
+    if extractions:
+        db_path = base_dir / "_stress_test_debug.db"
+        write_debug_database(extractions, report, db_path)
+        print(f"Debug database saved to: {db_path} ({db_path.stat().st_size:,} bytes)")
+        print(f"  Query with: sqlite3 {db_path} \"SELECT short_name, quality_grade FROM papers\"")
+        print(f"  Tables: run_metadata, papers, sections, pages, extracted_tables, extracted_figures, chunks, test_results")
 
     # Exit with appropriate code
     if report.major_failures > 0:

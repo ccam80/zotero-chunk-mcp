@@ -346,20 +346,25 @@ class Indexer:
         from ._reference_matcher import match_references
         ref_map = match_references(extraction.full_markdown, chunks, extraction.tables, extraction.figures)
 
-        # Enrich tables/figures with reference context (Fix 5)
+        # Enrich tables/figures with reference context.
+        # Only for real captions (Table N / Figure N), not synthetic ones.
+        import re
+        from .pdf_processor import SYNTHETIC_CAPTION_PREFIX
         from ._reference_matcher import get_reference_context
+        _TAB_NUM_RE = re.compile(r"(?:Table|Tab\.?)\s+(\d+)", re.IGNORECASE)
+        _FIG_NUM_RE = re.compile(r"(?:Figure|Fig\.?)\s+(\d+)", re.IGNORECASE)
         for table in extraction.tables:
-            import re
-            m = re.search(r"(\d+)", table.caption) if table.caption else None
-            if m:
-                ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "table", int(m.group(1)))
-                table.reference_context = ctx
+            if table.caption and not table.caption.startswith(SYNTHETIC_CAPTION_PREFIX):
+                m = _TAB_NUM_RE.search(table.caption)
+                if m:
+                    ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "table", int(m.group(1)))
+                    table.reference_context = ctx
         for fig in extraction.figures:
-            import re
-            m = re.search(r"(\d+)", fig.caption) if fig.caption else None
-            if m:
-                ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "figure", int(m.group(1)))
-                fig.reference_context = ctx
+            if fig.caption and not fig.caption.startswith(SYNTHETIC_CAPTION_PREFIX):
+                m = _FIG_NUM_RE.search(fig.caption)
+                if m:
+                    ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "figure", int(m.group(1)))
+                    fig.reference_context = ctx
 
         # Store tables if enabled
         n_tables = 0

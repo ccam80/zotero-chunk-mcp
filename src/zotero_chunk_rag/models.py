@@ -100,6 +100,15 @@ class ExtractionCompleteness:
     sections_identified: int = 0
     unknown_sections: int = 0
     has_abstract: bool = False
+    garbled_table_cells: int = 0
+    interleaved_table_cells: int = 0
+    encoding_artifact_captions: int = 0
+    tables_1x1: int = 0
+    duplicate_captions: int = 0
+    figure_number_gaps: list[str] = field(default_factory=list)
+    table_number_gaps: list[str] = field(default_factory=list)
+    unmatched_figure_captions: list[str] = field(default_factory=list)  # caption numbers on pages not on any figure
+    unmatched_table_captions: list[str] = field(default_factory=list)   # caption numbers on pages not on any table
 
     @property
     def grade(self) -> str:

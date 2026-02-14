@@ -24,24 +24,25 @@ from .section_classifier import assign_section
 
 logger = logging.getLogger(__name__)
 
+_NUM_GROUP = r"(\d+|[IVXLCDM]+|[A-Z]\.\d+|S\d+)"
+
 _FIG_CAPTION_RE = re.compile(
-    r"^(?:Figure|Fig\.?)\s+(\d+|[IVXLCDM]+)\s*[.:()\u2014\u2013-]",
+    rf"^(?:Figure|Fig\.?)\s+{_NUM_GROUP}\s*[.:()\u2014\u2013-]",
     re.IGNORECASE,
 )
 
 # Relaxed figure caption regex — no delimiter required after the number.
 # Only used when font-change detection confirms a distinct label font.
 _FIG_CAPTION_RE_RELAXED = re.compile(
-    r"^(?:Figure|Fig\.?)\s+(\d+|[IVXLCDM]+)\s+\S",
+    rf"^(?:Figure|Fig\.?)\s+{_NUM_GROUP}\s+\S",
     re.IGNORECASE,
 )
 
 _FIG_LABEL_ONLY_RE = re.compile(
-    r"^(?:Figure|Fig\.?)\s+(\d+|[IVXLCDM]+)\s*$",
+    rf"^(?:Figure|Fig\.?)\s+{_NUM_GROUP}\s*$",
     re.IGNORECASE,
 )
 
-_MAX_CAPTION_LEN = 2000
 _SUPP_PREFIX_RE = re.compile(r"^(?:supplementary|suppl?\.?)\s+", re.IGNORECASE)
 _MIN_FIGURE_AREA = 15000    # ~120x125 pts; filters logos/icons
 _MERGE_GAP_PTS = 50         # merge boxes within 50 pts (bridges multi-panel figure gaps)
@@ -108,9 +109,10 @@ def extract_figures(
                 page_table_boxes.setdefault(page_num, []).append(rect)
 
     # Step 2: Find captions on every page (not just pages with picture boxes)
+    # Uses find_all_captions_on_page to get bbox for x-overlap checks in Step 4.5
     for page_num_0, page in enumerate(doc):
         page_num = page_num_0 + 1
-        captions = _find_captions_on_page(
+        captions = find_all_captions_on_page(
             page, _FIG_CAPTION_RE,
             relaxed_re=_FIG_CAPTION_RE_RELAXED,
             label_only_re=_FIG_LABEL_ONLY_RE,
@@ -135,9 +137,10 @@ def extract_figures(
     for page_num in page_figures:
         page_figures[page_num] = _merge_rects(page_figures[page_num])
 
-    # Step 4.5: Split picture boxes that contain multiple figures.
-    # Detection: a caption's y-center falls INSIDE a picture box's y-range.
-    # When found, split the box at each internal caption boundary.
+    # Step 4.5: Split picture boxes when there are more captions than boxes.
+    # Phase 1: Split boxes that have captions INSIDE their y-range.
+    # Phase 2: When still outnumbered, use caption y-positions to create
+    #          synthetic figure regions (handles captions below the box).
     for page_num in list(page_figures.keys()):
         rects = page_figures[page_num]
         captions = page_captions.get(page_num, [])
@@ -145,14 +148,22 @@ def extract_figures(
             continue  # enough boxes for all captions, no split needed
 
         new_rects: list[pymupdf.Rect] = []
-        used_captions: set[int] = set()
 
         for rect in sorted(rects, key=lambda r: r.y0):
-            # Find captions whose y_center falls inside this rect
+            # Find captions whose y_center falls inside this rect AND
+            # whose x-range overlaps (prevents 2-column false splits)
             internal: list[tuple[int, float, str]] = []
-            for ci, (cy, ctext) in enumerate(captions):
+            for ci, cap in enumerate(captions):
+                cy = cap[0]
+                cap_bbox = cap[2] if len(cap) >= 3 else None
                 if rect.y0 < cy < rect.y1:
-                    internal.append((ci, cy, ctext))
+                    # Check x-overlap if bbox available
+                    if cap_bbox:
+                        cap_x0, cap_x1 = cap_bbox[0], cap_bbox[2]
+                        x_overlap = min(rect.x1, cap_x1) - max(rect.x0, cap_x0)
+                        if x_overlap < 20:
+                            continue  # different column
+                    internal.append((ci, cy, cap[1]))
 
             if not internal:
                 new_rects.append(rect)
@@ -162,31 +173,53 @@ def extract_figures(
             internal.sort(key=lambda x: x[1])
             split_y = rect.y0
             for ci, cy, ctext in internal:
-                used_captions.add(ci)
                 sub = pymupdf.Rect(rect.x0, split_y, rect.x1, cy)
-                if not sub.is_empty and abs(sub.y1 - sub.y0) > 20:
+                if not sub.is_empty and abs(sub.y1 - sub.y0) > 100:
                     new_rects.append(sub)
                 split_y = cy + 40
 
             # Final region: from last split to bottom of original box
             final = pymupdf.Rect(rect.x0, split_y, rect.x1, rect.y1)
-            if not final.is_empty and abs(final.y1 - final.y0) > 20:
+            if not final.is_empty and abs(final.y1 - final.y0) > 100:
                 new_rects.append(final)
+
+        # Phase 2: Still more captions than rects? The extra captions are
+        # outside all boxes (typically below). Only create synthetic rects
+        # when the existing box region is large enough to plausibly contain
+        # multiple figures (total height > 250pt per expected figure).
+        if len(captions) > len(new_rects) and new_rects:
+            total_height = sum(r.y1 - r.y0 for r in new_rects)
+            min_height = 250 * len(captions)
+            if total_height >= min_height:
+                x0 = min(r.x0 for r in new_rects)
+                x1 = max(r.x1 for r in new_rects)
+                for cap in sorted(captions, key=lambda c: c[0]):
+                    cy = cap[0]
+                    covered = any(r.y0 - 30 <= cy <= r.y1 + 30 for r in new_rects)
+                    if covered:
+                        continue
+                    fig_top = max(cy - 200, 0)
+                    fig_bot = cy - 10
+                    if fig_bot > fig_top + 20:
+                        new_rects.append(pymupdf.Rect(x0, fig_top, x1, fig_bot))
 
         if new_rects:
             page_figures[page_num] = new_rects
 
-    # Step 5: Build ExtractedFigure list
+    # Step 5: Build ExtractedFigure list — proximity-based caption matching
     figures: list[ExtractedFigure] = []
     fig_idx = 0
 
     for page_num in sorted(page_figures.keys()):
         rects = sorted(page_figures[page_num], key=lambda r: r.y0)
         captions_with_y = page_captions.get(page_num, [])
-        caption_texts = [text for _, text in captions_with_y]
+
+        # Match captions to figure boxes by proximity (not positional index)
+        rect_bboxes = [(r.x0, r.y0, r.x1, r.y1) for r in rects]
+        matched_captions = _match_by_proximity(rect_bboxes, captions_with_y)
 
         for i, rect in enumerate(rects):
-            caption = caption_texts[i] if i < len(caption_texts) else None
+            caption = matched_captions[i]
 
             image_path = None
             if write_images and images_dir:
@@ -286,6 +319,63 @@ def _block_is_bold(block: dict) -> bool:
     return total_chars > 0 and bold_chars > total_chars * 0.5
 
 
+
+def _scan_lines_for_caption(
+    block: dict,
+    prefix_re: re.Pattern,
+    relaxed_re: re.Pattern | None,
+    label_only_re: re.Pattern | None,
+) -> str | None:
+    """Scan individual lines of a block for a caption pattern.
+
+    When PyMuPDF merges preceding text (axis labels, column headers) into
+    the same block as a caption, the block-start regex fails. This scans
+    each line and returns text from the first matching line onward.
+
+    Returns caption text or None.
+    """
+    lines = block.get("lines", [])
+    if len(lines) < 2:
+        return None  # single-line block already tested at block level
+
+    # Only scan first 5 lines — captions merged with axis labels are
+    # always near block start. Body text "Fig. N" references buried
+    # deep in a paragraph (line 20+) are not captions.
+    max_scan = min(5, len(lines))
+    for line_idx in range(1, max_scan):  # skip line 0 (already tested)
+        line = lines[line_idx]
+        line_text = ""
+        for span in line.get("spans", []):
+            line_text += span.get("text", "")
+        line_text = line_text.strip()
+        if not line_text:
+            continue
+
+        check_line = _SUPP_PREFIX_RE.sub("", line_text)
+        if prefix_re.match(check_line):
+            # Build text from this line onward
+            return _text_from_line_onward(block, line_idx)
+        if relaxed_re and relaxed_re.match(check_line):
+            # For mid-block relaxed matches, require font change or bold
+            # (same structural checks as block-level)
+            sub_block = {"lines": lines[line_idx:]}
+            if (_block_has_label_font_change(sub_block)
+                    or _block_is_bold(sub_block)):
+                return _text_from_line_onward(block, line_idx)
+
+    return None
+
+
+def _text_from_line_onward(block: dict, start_line_idx: int) -> str:
+    """Extract text from a specific line index onward in a block."""
+    text = ""
+    for line in block.get("lines", [])[start_line_idx:]:
+        for span in line.get("spans", []):
+            text += span.get("text", "")
+        text += " "
+    return text.strip()
+
+
 def _find_captions_on_page(
     page: pymupdf.Page,
     prefix_re: re.Pattern,
@@ -320,18 +410,34 @@ def _find_captions_on_page(
             block_text += " "
         block_text = block_text.strip()
 
-        if not block_text or len(block_text) > _MAX_CAPTION_LEN:
+        if not block_text:
             continue
-        # Strip supplementary prefixes for matching; keep original as caption
+
+        # Strip supplementary prefixes for matching
         check_text = _SUPP_PREFIX_RE.sub("", block_text)
+        matched = False
+        caption_text = block_text  # default: full block
         if prefix_re.match(check_text):
-            hits.append((y_center, block_text))
+            matched = True
         elif relaxed_re and relaxed_re.match(check_text):
             if (_block_has_label_font_change(block)
                     or (label_only_re
                         and _block_label_on_own_line(block, label_only_re))
                     or _block_is_bold(block)):
-                hits.append((y_center, block_text))
+                matched = True
+
+        # A2 fallback: if block didn't match at start, scan individual lines.
+        # PyMuPDF sometimes merges axis labels or column headers into the
+        # same block as the caption (e.g. "Time (s)\nFigure 5. ...").
+        if not matched:
+            caption_text = _scan_lines_for_caption(
+                block, prefix_re, relaxed_re, label_only_re,
+            )
+            if caption_text:
+                matched = True
+
+        if matched:
+            hits.append((y_center, caption_text))
 
     hits.sort(key=lambda x: x[0])
     return hits  # list of (y_center, text)
@@ -369,28 +475,113 @@ def find_all_captions_on_page(
             block_text += " "
         block_text = block_text.strip()
 
-        if not block_text or len(block_text) > _MAX_CAPTION_LEN:
+        if not block_text:
             continue
-        # Strip supplementary prefixes for matching; keep original as caption
+
+        # Strip supplementary prefixes for matching
         check_text = _SUPP_PREFIX_RE.sub("", block_text)
+        matched = False
+        caption_text = block_text  # default: full block
         if prefix_re.match(check_text):
-            hits.append((y_center, block_text, tuple(block_bbox)))
+            matched = True
         elif relaxed_re and relaxed_re.match(check_text):
             if (_block_has_label_font_change(block)
                     or (label_only_re
                         and _block_label_on_own_line(block, label_only_re))
                     or _block_is_bold(block)):
-                hits.append((y_center, block_text, tuple(block_bbox)))
+                matched = True
+
+        # A2 fallback: line-by-line scan for mid-block captions
+        if not matched:
+            caption_text = _scan_lines_for_caption(
+                block, prefix_re, relaxed_re, label_only_re,
+            )
+            if caption_text:
+                matched = True
+
+        if matched:
+            hits.append((y_center, caption_text, tuple(block_bbox)))
 
     hits.sort(key=lambda x: x[0])
     return hits
 
 
 
+_CAPTION_NUM_RE = re.compile(r"(\d+)")
+
+
+def _match_by_proximity(
+    objects: list[tuple[float, float, float, float]],
+    captions: list[tuple[float, str]] | list[tuple[float, str, tuple]],
+) -> list[str | None]:
+    """Match captions to objects by number ordering, with proximity fallback.
+
+    Primary strategy: parse caption numbers, sort by number, match to objects
+    sorted by y-position. This preserves the logical ordering (Table 1 → first
+    table, Table 2 → second table).
+
+    Fallback (when numbers aren't available): greedy nearest-first by
+    edge-to-caption y-distance.
+
+    Args:
+        objects: List of bboxes (x0, y0, x1, y1) for each figure/table.
+        captions: List of (y_center, text, ...) for each caption.
+
+    Returns:
+        List parallel to objects, with caption text or None.
+    """
+    if not objects:
+        return []
+    if not captions:
+        return [None] * len(objects)
+
+    # Try number-ordered matching first
+    numbered: list[tuple[str, int, str]] = []  # (num_key, cap_idx, text)
+    unnumbered: list[tuple[int, str]] = []
+    for ci, cap in enumerate(captions):
+        text = cap[1]
+        m = _CAPTION_NUM_RE.search(text)
+        if m:
+            numbered.append((m.group(1), ci, text))
+        else:
+            unnumbered.append((ci, text))
+
+    if numbered:
+        # Sort captions by number, objects by y-position
+        def num_sort_key(item):
+            num_str = item[0]
+            try:
+                return (0, int(num_str))
+            except ValueError:
+                return (1, num_str)  # non-numeric appendix numbers sort after
+
+        numbered.sort(key=num_sort_key)
+        obj_order = sorted(range(len(objects)), key=lambda i: objects[i][1])
+
+        result = [None] * len(objects)
+        for i, oi in enumerate(obj_order):
+            if i < len(numbered):
+                result[oi] = numbered[i][2]
+
+        return result
+
+    # Fallback: y-distance matching for captions without numbers
+    obj_order = sorted(range(len(objects)), key=lambda i: objects[i][1])
+    cap_order = sorted(range(len(captions)), key=lambda i: captions[i][0])
+    result = [None] * len(objects)
+    for i, oi in enumerate(obj_order):
+        if i < len(cap_order):
+            result[oi] = captions[cap_order[i]][1]
+    return result
+
+
 def _merge_rects(rects: list[pymupdf.Rect]) -> list[pymupdf.Rect]:
     """Merge overlapping or nearby rectangles.
 
-    Two rects merge if they overlap or are within _MERGE_GAP_PTS of each other.
+    Two rects merge if they overlap or are within _MERGE_GAP_PTS of each other,
+    BUT only when they share meaningful horizontal overlap (>20% of the smaller
+    rect's width).  This prevents side-by-side figures in 2-column layouts from
+    being incorrectly merged.
     """
     if not rects:
         return []
@@ -401,6 +592,15 @@ def _merge_rects(rects: list[pymupdf.Rect]) -> list[pymupdf.Rect]:
 
     for rect in rects[1:]:
         last = merged[-1]
+
+        # Check horizontal overlap BEFORE expanding.  Side-by-side rects
+        # (different columns) have near-zero x-overlap and must not merge.
+        x_overlap = min(last.x1, rect.x1) - max(last.x0, rect.x0)
+        min_width = min(last.width, rect.width)
+        if min_width > 0 and x_overlap / min_width < 0.2:
+            merged.append(pymupdf.Rect(rect))
+            continue
+
         # Expand last by gap for overlap check
         expanded = pymupdf.Rect(
             last.x0 - _MERGE_GAP_PTS,
