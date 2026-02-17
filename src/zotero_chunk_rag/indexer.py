@@ -354,6 +354,8 @@ class Indexer:
         _TAB_NUM_RE = re.compile(r"(?:Table|Tab\.?)\s+(\d+)", re.IGNORECASE)
         _FIG_NUM_RE = re.compile(r"(?:Figure|Fig\.?)\s+(\d+)", re.IGNORECASE)
         for table in extraction.tables:
+            if table.artifact_type:
+                continue  # skip layout artifacts
             if table.caption and not table.caption.startswith(SYNTHETIC_CAPTION_PREFIX):
                 m = _TAB_NUM_RE.search(table.caption)
                 if m:
@@ -366,12 +368,16 @@ class Indexer:
                     ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "figure", int(m.group(1)))
                     fig.reference_context = ctx
 
-        # Store tables if enabled
+        # Store tables if enabled (skip layout artifacts)
         n_tables = 0
-        if extraction.tables:
-            self.store.add_tables(item.item_key, doc_meta, extraction.tables, ref_map=ref_map)
-            n_tables = len(extraction.tables)
-            logger.debug(f"  Extracted {n_tables} tables")
+        real_tables = [t for t in extraction.tables if not t.artifact_type]
+        n_artifacts = len(extraction.tables) - len(real_tables)
+        if real_tables:
+            self.store.add_tables(item.item_key, doc_meta, real_tables, ref_map=ref_map)
+            n_tables = len(real_tables)
+        if n_artifacts:
+            logger.debug(f"  Skipped {n_artifacts} artifact table(s)")
+        logger.debug(f"  Extracted {n_tables} tables")
 
         # Store figures if enabled
         n_figures = 0

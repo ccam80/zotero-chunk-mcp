@@ -133,6 +133,30 @@ def extract_figures(
         if page_num in page_table_boxes:
             page_figures[page_num] = list(page_table_boxes[page_num])
 
+    # Step 3b: Image-info fallback — for pages with captions but still no
+    # picture or table boxes from the layout engine.  Use embedded image
+    # bboxes from page.get_image_info() (e.g. Huang Fig 6).
+    for page_num, captions in page_captions.items():
+        if page_num in page_figures:
+            continue  # already have boxes
+        if sections and pages:
+            if _is_in_references(page_num, sections, pages):
+                continue
+        page = doc[page_num - 1]
+        page_rect = page.rect
+        for img_info in page.get_image_info():
+            bbox = img_info.get("bbox")
+            if not bbox:
+                continue
+            rect = pymupdf.Rect(bbox)
+            area = rect.get_area()
+            if area < _MIN_FIGURE_AREA:
+                continue
+            # Skip full-page background images (>90% of page area)
+            if area > page_rect.get_area() * 0.9:
+                continue
+            page_figures.setdefault(page_num, []).append(rect)
+
     # Step 4: Merge overlapping/adjacent boxes on each page
     for page_num in page_figures:
         page_figures[page_num] = _merge_rects(page_figures[page_num])
@@ -510,6 +534,73 @@ def find_all_captions_on_page(
 _CAPTION_NUM_RE = re.compile(r"(\d+)")
 
 
+def _has_side_by_side(objects: list[tuple[float, float, float, float]]) -> bool:
+    """Detect whether any objects overlap vertically (side-by-side layout).
+
+    Two objects are side-by-side when their y-ranges overlap by more than 30%
+    of the shorter object's height (proportional to geometry).
+    """
+    for i in range(len(objects)):
+        for j in range(i + 1, len(objects)):
+            y0_i, y1_i = objects[i][1], objects[i][3]
+            y0_j, y1_j = objects[j][1], objects[j][3]
+            overlap = max(0, min(y1_i, y1_j) - max(y0_i, y0_j))
+            min_height = min(y1_i - y0_i, y1_j - y0_j)
+            if min_height > 0 and overlap / min_height > 0.3:
+                return True
+    return False
+
+
+def _euclidean_match(
+    objects: list[tuple[float, float, float, float]],
+    captions_ordered: list[tuple[str, int, str]],
+    all_captions: list[tuple[float, str]] | list[tuple[float, str, tuple]],
+) -> list[str | None]:
+    """Greedy Euclidean-distance assignment: each caption (in number order)
+    matches the nearest unassigned object by bbox-center distance.
+
+    Caption bboxes come from the 3rd tuple element when available; otherwise
+    falls back to (0, y_center) as the caption position.
+    """
+    import math as _math
+
+    result = [None] * len(objects)
+    assigned: set[int] = set()
+
+    # Precompute object centers
+    obj_centers = [
+        ((o[0] + o[2]) / 2, (o[1] + o[3]) / 2)
+        for o in objects
+    ]
+
+    for _, cap_idx, cap_text in captions_ordered:
+        cap = all_captions[cap_idx]
+        # Caption center: use bbox if available, else (page_midpoint, y_center)
+        if len(cap) >= 3 and cap[2]:
+            cb = cap[2]
+            cx = (cb[0] + cb[2]) / 2
+            cy = (cb[1] + cb[3]) / 2
+        else:
+            cx = 0  # no x info — degenerate but safe
+            cy = cap[0]
+
+        best_oi = -1
+        best_dist = float("inf")
+        for oi in range(len(objects)):
+            if oi in assigned:
+                continue
+            ox, oy = obj_centers[oi]
+            dist = _math.hypot(ox - cx, oy - cy)
+            if dist < best_dist:
+                best_dist = dist
+                best_oi = oi
+        if best_oi >= 0:
+            result[best_oi] = cap_text
+            assigned.add(best_oi)
+
+    return result
+
+
 def _match_by_proximity(
     objects: list[tuple[float, float, float, float]],
     captions: list[tuple[float, str]] | list[tuple[float, str, tuple]],
@@ -520,8 +611,12 @@ def _match_by_proximity(
     sorted by y-position. This preserves the logical ordering (Table 1 → first
     table, Table 2 → second table).
 
+    When side-by-side objects are detected (overlapping y-ranges), switches to
+    Euclidean distance matching using both x and y coordinates to prevent
+    caption swaps in 2-column layouts.
+
     Fallback (when numbers aren't available): greedy nearest-first by
-    edge-to-caption y-distance.
+    edge-to-caption y-distance (or Euclidean when side-by-side).
 
     Args:
         objects: List of bboxes (x0, y0, x1, y1) for each figure/table.
@@ -535,6 +630,8 @@ def _match_by_proximity(
     if not captions:
         return [None] * len(objects)
 
+    side_by_side = _has_side_by_side(objects)
+
     # Try number-ordered matching first
     numbered: list[tuple[str, int, str]] = []  # (num_key, cap_idx, text)
     unnumbered: list[tuple[int, str]] = []
@@ -547,15 +644,20 @@ def _match_by_proximity(
             unnumbered.append((ci, text))
 
     if numbered:
-        # Sort captions by number, objects by y-position
         def num_sort_key(item):
             num_str = item[0]
             try:
                 return (0, int(num_str))
             except ValueError:
-                return (1, num_str)  # non-numeric appendix numbers sort after
+                return (1, num_str)
 
         numbered.sort(key=num_sort_key)
+
+        if side_by_side:
+            # Euclidean matching — uses x+y to resolve side-by-side ambiguity
+            return _euclidean_match(objects, numbered, captions)
+
+        # Fast path: ordinal y-sort matching (correct for vertically stacked)
         obj_order = sorted(range(len(objects)), key=lambda i: objects[i][1])
 
         result = [None] * len(objects)
@@ -566,6 +668,12 @@ def _match_by_proximity(
         return result
 
     # Fallback: y-distance matching for captions without numbers
+    if side_by_side:
+        # Build pseudo-numbered list from captions in y-order for Euclidean match
+        cap_order = sorted(range(len(captions)), key=lambda i: captions[i][0])
+        pseudo = [(str(i), ci, captions[ci][1]) for i, ci in enumerate(cap_order)]
+        return _euclidean_match(objects, pseudo, captions)
+
     obj_order = sorted(range(len(objects)), key=lambda i: objects[i][1])
     cap_order = sorted(range(len(captions)), key=lambda i: captions[i][0])
     result = [None] * len(objects)

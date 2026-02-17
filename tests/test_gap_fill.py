@@ -51,9 +51,12 @@ class TestRunRecoveryNoop:
             _make_table(1, 0, caption="Table 1. Data"),
         ]
 
+        mock_page = MagicMock()
+        mock_page.rect.height = 792.0
         doc = MagicMock()
         doc.__len__ = MagicMock(return_value=3)
-        doc.__iter__ = MagicMock(return_value=iter([MagicMock(), MagicMock(), MagicMock()]))
+        doc.__getitem__ = MagicMock(return_value=mock_page)
+        doc.__iter__ = MagicMock(return_value=iter([mock_page, mock_page, mock_page]))
 
         with patch("zotero_chunk_rag._gap_fill.run_recovery", wraps=run_recovery):
             result_figs, result_tabs = run_recovery(
@@ -68,9 +71,12 @@ class TestRunRecoveryNoop:
         """Empty inputs → empty outputs, no crash."""
         from zotero_chunk_rag._gap_fill import run_recovery
 
+        mock_page = MagicMock()
+        mock_page.rect.height = 792.0
         doc = MagicMock()
         doc.__len__ = MagicMock(return_value=1)
-        doc.__iter__ = MagicMock(return_value=iter([MagicMock()]))
+        doc.__getitem__ = MagicMock(return_value=mock_page)
+        doc.__iter__ = MagicMock(return_value=iter([mock_page]))
 
         result_figs, result_tabs = run_recovery(doc, [], [], [])
         assert result_figs == []
@@ -112,6 +118,7 @@ class TestYProximityMatching:
             doc, figures, mock_finder,
             strict_re, relaxed_re, label_only_re, ref_re,
             kind="figure",
+            max_y_distance=120.0,
         )
 
         assert count == 1
@@ -146,6 +153,7 @@ class TestYProximityMatching:
             doc, figures, mock_finder,
             strict_re, relaxed_re, label_only_re, ref_re,
             kind="figure",
+            max_y_distance=120.0,
         )
 
         assert count == 0
@@ -185,6 +193,7 @@ class TestYProximityMatching:
             doc, figures, mock_finder,
             strict_re, relaxed_re, label_only_re, ref_re,
             kind="figure",
+            max_y_distance=120.0,
         )
 
         assert count == 0
@@ -224,6 +233,7 @@ class TestMultiOrphanGreedyAssignment:
             doc, figures, mock_finder,
             strict_re, relaxed_re, label_only_re, ref_re,
             kind="figure",
+            max_y_distance=120.0,
         )
 
         assert count == 2
@@ -264,6 +274,7 @@ class TestTableRecovery:
             doc, tables, mock_finder,
             strict_re, relaxed_re, label_only_re, ref_re,
             kind="table",
+            max_y_distance=120.0,
         )
 
         assert count == 1
@@ -304,6 +315,7 @@ class TestNoFalsePositives:
             doc, figures, mock_finder,
             strict_re, relaxed_re, label_only_re, ref_re,
             kind="figure",
+            max_y_distance=120.0,
         )
 
         assert count == 0

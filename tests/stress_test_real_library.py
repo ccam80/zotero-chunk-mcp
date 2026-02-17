@@ -530,11 +530,17 @@ def run_stress_test():
                 if not any(s.label == "abstract" for s in extraction.sections):
                     issues_parts.append("no abstract detected")
 
+                n_real_tables = sum(1 for t in extraction.tables if not t.artifact_type)
+                n_artifact_tables = sum(1 for t in extraction.tables if t.artifact_type)
+                table_str = str(n_real_tables)
+                if n_artifact_tables:
+                    table_str += f" (+{n_artifact_tables} artifacts)"
+
                 report.extraction_summaries.append({
                     "name": short_name,
                     "pages": len(extraction.pages),
                     "sections": n_sections,
-                    "tables": len(extraction.tables),
+                    "tables": table_str,
                     "figures": len(extraction.figures),
                     "grade": extraction.quality_grade,
                     "issues": "; ".join(issues_parts) if issues_parts else "none",
@@ -569,17 +575,32 @@ def run_stress_test():
                 )
 
             # --- 3b: Tables extracted ---
+            real_tables = [t for t in extraction.tables if not t.artifact_type]
+            artifact_tables = [t for t in extraction.tables if t.artifact_type]
+
+            # Report artifact tables (informational — always passes)
+            if artifact_tables:
+                tags = [t.artifact_type for t in artifact_tables]
+                report.add(
+                    "artifact-tables-tagged",
+                    short_name,
+                    True,
+                    f"{len(artifact_tables)} layout artifact(s) tagged and excluded: {tags}",
+                )
+
             if gt.get("expect_tables"):
-                has_tables = len(extraction.tables) > 0
+                has_tables = len(real_tables) > 0
                 report.add(
                     "table-extraction",
                     short_name,
                     has_tables,
-                    f"Expected tables — found {len(extraction.tables)}",
+                    f"Expected tables — found {len(real_tables)}",
                     severity="MAJOR",
                 )
-                # Check table content quality (non-empty cells)
+                # Check table content quality (non-empty cells) — skip artifacts
                 for i, tab in enumerate(extraction.tables):
+                    if tab.artifact_type:
+                        continue
                     non_empty = sum(1 for row in tab.rows for cell in row if cell.strip())
                     total_cells = sum(len(row) for row in tab.rows)
                     if total_cells > 0:
@@ -618,13 +639,16 @@ def run_stress_test():
             # --- 3d: Completeness grade ---
             comp = extraction.completeness
             if comp:
+                n_artifacts = len(artifact_tables)
+                artifact_note = f" | Artifacts: {n_artifacts} tagged" if n_artifacts else ""
                 report.add(
                     "completeness-grade",
                     short_name,
                     comp.grade in ("A", "B"),
                     f"Grade: {comp.grade} | "
                     f"Figs: {comp.figures_found} found / {comp.figure_captions_found} captioned / {comp.figures_missing} missing | "
-                    f"Tables: {comp.tables_found} found / {comp.table_captions_found} captioned / {comp.tables_missing} missing",
+                    f"Tables: {comp.tables_found} found / {comp.table_captions_found} captioned / {comp.tables_missing} missing"
+                    + artifact_note,
                     severity="MAJOR" if comp.grade in ("D", "F") else "MINOR",
                 )
 
@@ -651,32 +675,27 @@ def run_stress_test():
                     )
 
                 # --- 3d.3: Orphan figures (extracted but no caption matched) ---
-                # Severity depends on whether captions are going unmatched.
-                # Extra uncaptioned figures (junk) with no caption gaps = MINOR.
-                # Unmatched captions or number gaps = MAJOR (real detection failure).
                 orphan_figs = comp.figures_found - comp.figures_with_captions
                 if orphan_figs > 0:
-                    has_fig_gaps = bool(comp.figure_number_gaps or comp.unmatched_figure_captions)
                     report.add(
                         "orphan-figures",
                         short_name,
                         False,
                         f"{orphan_figs} figure(s) extracted without a real caption. "
                         f"Unmatched caption numbers: {comp.unmatched_figure_captions or 'none'}",
-                        severity="MAJOR" if has_fig_gaps else "MINOR",
+                        severity="MAJOR",
                     )
 
                 # --- 3d.4: Orphan tables (extracted but no caption matched) ---
                 orphan_tabs = comp.tables_found - comp.tables_with_captions
                 if orphan_tabs > 0:
-                    has_tab_gaps = bool(comp.table_number_gaps or comp.unmatched_table_captions)
                     report.add(
                         "orphan-tables",
                         short_name,
                         False,
                         f"{orphan_tabs} table(s) extracted without a real caption. "
                         f"Unmatched caption numbers: {comp.unmatched_table_captions or 'none'}",
-                        severity="MAJOR" if has_tab_gaps else "MINOR",
+                        severity="MAJOR",
                     )
 
                 # --- 3d.5: Unmatched captions (caption on page, not on any object) ---
@@ -1355,6 +1374,8 @@ CREATE TABLE IF NOT EXISTS extracted_tables (
     markdown          TEXT,   -- rendered markdown table
     reference_context TEXT,
     bbox              TEXT,   -- JSON [x0, y0, x1, y1]
+    artifact_type     TEXT,   -- NULL=real data, else layout artifact tag
+    extraction_strategy TEXT, -- which multi-strategy winner produced cell text
     FOREIGN KEY (item_key) REFERENCES papers(item_key)
 );
 
@@ -1490,7 +1511,8 @@ def write_debug_database(
                 "INSERT INTO extracted_tables (item_key, table_index, page_num, "
                 "caption, caption_position, num_rows, num_cols, non_empty_cells, "
                 "total_cells, fill_rate, headers_json, rows_json, markdown, "
-                "reference_context, bbox) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "reference_context, bbox, artifact_type, extraction_strategy) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     item_key,
                     tab.table_index,
@@ -1507,6 +1529,8 @@ def write_debug_database(
                     tab.to_markdown(),
                     tab.reference_context,
                     json.dumps(list(tab.bbox)),
+                    tab.artifact_type,
+                    tab.extraction_strategy,
                 ),
             )
 

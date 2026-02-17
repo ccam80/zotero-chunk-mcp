@@ -18,6 +18,33 @@ from zotero_chunk_rag.embedder import LocalEmbedder, Embedder, create_embedder
 from zotero_chunk_rag.vector_store import VectorStore, EmbeddingDimensionMismatchError
 
 
+def _make_config(tmp_path, **overrides):
+    """Build a Config with sensible defaults, accepting overrides."""
+    defaults = dict(
+        zotero_data_dir=tmp_path,
+        chroma_db_path=tmp_path / "chroma",
+        embedding_model="gemini-embedding-001",
+        embedding_dimensions=768,
+        chunk_size=400,
+        chunk_overlap=100,
+        gemini_api_key=None,
+        embedding_provider="local",
+        embedding_timeout=120.0,
+        embedding_max_retries=3,
+        rerank_alpha=0.7,
+        rerank_section_weights=None,
+        rerank_journal_weights=None,
+        rerank_enabled=True,
+        oversample_multiplier=3,
+        oversample_topic_factor=5,
+        stats_sample_limit=10000,
+        ocr_language="eng",
+        openalex_email=None,
+    )
+    defaults.update(overrides)
+    return Config(**defaults)
+
+
 class TestLocalEmbedder:
     """Tests for LocalEmbedder class."""
 
@@ -85,37 +112,7 @@ class TestCreateEmbedder:
 
     def test_creates_local_embedder(self, tmp_path):
         """Factory creates LocalEmbedder for 'local' provider."""
-        config = Config(
-            zotero_data_dir=tmp_path,
-            chroma_db_path=tmp_path / "chroma",
-            embedding_model="gemini-embedding-001",
-            embedding_dimensions=768,
-            chunk_size=400,
-            chunk_overlap=100,
-            gemini_api_key=None,
-            embedding_provider="local",
-            embedding_timeout=120.0,
-            embedding_max_retries=3,
-            rerank_alpha=0.7,
-            rerank_section_weights=None,
-            rerank_journal_weights=None,
-            rerank_enabled=True,
-            oversample_multiplier=3,
-            oversample_topic_factor=5,
-            stats_sample_limit=10000,
-            ocr_language="eng",
-            tables_enabled=False,
-            table_strategy="lines_strict",
-            image_size_limit=0.05,
-            figures_enabled=False,
-            figures_min_size=100,
-            quality_threshold_a=2000,
-            quality_threshold_b=1000,
-            quality_threshold_c=500,
-            quality_threshold_d=100,
-            quality_entropy_min=4.0,
-            openalex_email=None,
-        )
+        config = _make_config(tmp_path, embedding_provider="local")
 
         embedder = create_embedder(config)
         assert isinstance(embedder, LocalEmbedder)
@@ -123,39 +120,12 @@ class TestCreateEmbedder:
 
     def test_creates_gemini_embedder_when_key_present(self, tmp_path, monkeypatch):
         """Factory creates Embedder for 'gemini' provider when API key is set."""
-        # Set a fake API key
         monkeypatch.setenv("GEMINI_API_KEY", "fake-key-for-testing")
 
-        config = Config(
-            zotero_data_dir=tmp_path,
-            chroma_db_path=tmp_path / "chroma",
-            embedding_model="gemini-embedding-001",
-            embedding_dimensions=768,
-            chunk_size=400,
-            chunk_overlap=100,
+        config = _make_config(
+            tmp_path,
             gemini_api_key="fake-key-for-testing",
             embedding_provider="gemini",
-            embedding_timeout=120.0,
-            embedding_max_retries=3,
-            rerank_alpha=0.7,
-            rerank_section_weights=None,
-            rerank_journal_weights=None,
-            rerank_enabled=True,
-            oversample_multiplier=3,
-            oversample_topic_factor=5,
-            stats_sample_limit=10000,
-            ocr_language="eng",
-            tables_enabled=False,
-            table_strategy="lines_strict",
-            image_size_limit=0.05,
-            figures_enabled=False,
-            figures_min_size=100,
-            quality_threshold_a=2000,
-            quality_threshold_b=1000,
-            quality_threshold_c=500,
-            quality_threshold_d=100,
-            quality_entropy_min=4.0,
-            openalex_email=None,
         )
 
         embedder = create_embedder(config)
@@ -164,37 +134,7 @@ class TestCreateEmbedder:
 
     def test_invalid_provider_raises(self, tmp_path):
         """Factory raises ValueError for invalid provider."""
-        config = Config(
-            zotero_data_dir=tmp_path,
-            chroma_db_path=tmp_path / "chroma",
-            embedding_model="gemini-embedding-001",
-            embedding_dimensions=768,
-            chunk_size=400,
-            chunk_overlap=100,
-            gemini_api_key=None,
-            embedding_provider="invalid_provider",
-            embedding_timeout=120.0,
-            embedding_max_retries=3,
-            rerank_alpha=0.7,
-            rerank_section_weights=None,
-            rerank_journal_weights=None,
-            rerank_enabled=True,
-            oversample_multiplier=3,
-            oversample_topic_factor=5,
-            stats_sample_limit=10000,
-            ocr_language="eng",
-            tables_enabled=False,
-            table_strategy="lines_strict",
-            image_size_limit=0.05,
-            figures_enabled=False,
-            figures_min_size=100,
-            quality_threshold_a=2000,
-            quality_threshold_b=1000,
-            quality_threshold_c=500,
-            quality_threshold_d=100,
-            quality_entropy_min=4.0,
-            openalex_email=None,
-        )
+        config = _make_config(tmp_path, embedding_provider="invalid_provider")
 
         with pytest.raises(ValueError, match="Invalid embedding_provider"):
             create_embedder(config)
@@ -205,84 +145,31 @@ class TestConfigValidation:
 
     def test_local_provider_no_api_key_required(self, tmp_path):
         """Local provider doesn't require GEMINI_API_KEY."""
-        # Create Zotero directory structure
         zotero_dir = tmp_path / "zotero"
         zotero_dir.mkdir()
         (zotero_dir / "zotero.sqlite").touch()
 
-        config = Config(
+        config = _make_config(
+            tmp_path,
             zotero_data_dir=zotero_dir,
-            chroma_db_path=tmp_path / "chroma",
-            embedding_model="gemini-embedding-001",
-            embedding_dimensions=768,
-            chunk_size=400,
-            chunk_overlap=100,
-            gemini_api_key=None,  # No API key
-            embedding_provider="local",  # Using local embeddings
-            embedding_timeout=120.0,
-            embedding_max_retries=3,
-            rerank_alpha=0.7,
-            rerank_section_weights=None,
-            rerank_journal_weights=None,
-            rerank_enabled=True,
-            oversample_multiplier=3,
-            oversample_topic_factor=5,
-            stats_sample_limit=10000,
-            ocr_language="eng",
-            tables_enabled=False,
-            table_strategy="lines_strict",
-            image_size_limit=0.05,
-            figures_enabled=False,
-            figures_min_size=100,
-            quality_threshold_a=2000,
-            quality_threshold_b=1000,
-            quality_threshold_c=500,
-            quality_threshold_d=100,
-            quality_entropy_min=4.0,
-            openalex_email=None,
+            embedding_provider="local",
+            gemini_api_key=None,
         )
 
         errors = config.validate()
-        # Should have no errors about API key
         assert not any("GEMINI_API_KEY" in e for e in errors)
 
     def test_gemini_provider_requires_api_key(self, tmp_path):
         """Gemini provider requires GEMINI_API_KEY."""
-        # Create Zotero directory structure
         zotero_dir = tmp_path / "zotero"
         zotero_dir.mkdir()
         (zotero_dir / "zotero.sqlite").touch()
 
-        config = Config(
+        config = _make_config(
+            tmp_path,
             zotero_data_dir=zotero_dir,
-            chroma_db_path=tmp_path / "chroma",
-            embedding_model="gemini-embedding-001",
-            embedding_dimensions=768,
-            chunk_size=400,
-            chunk_overlap=100,
-            gemini_api_key=None,  # No API key
-            embedding_provider="gemini",  # Using Gemini
-            embedding_timeout=120.0,
-            embedding_max_retries=3,
-            rerank_alpha=0.7,
-            rerank_section_weights=None,
-            rerank_journal_weights=None,
-            rerank_enabled=True,
-            oversample_multiplier=3,
-            oversample_topic_factor=5,
-            stats_sample_limit=10000,
-            ocr_language="eng",
-            tables_enabled=False,
-            table_strategy="lines_strict",
-            image_size_limit=0.05,
-            figures_enabled=False,
-            figures_min_size=100,
-            quality_threshold_a=2000,
-            quality_threshold_b=1000,
-            quality_threshold_c=500,
-            quality_threshold_d=100,
-            quality_entropy_min=4.0,
-            openalex_email=None,
+            embedding_provider="gemini",
+            gemini_api_key=None,
         )
 
         errors = config.validate()
@@ -290,41 +177,14 @@ class TestConfigValidation:
 
     def test_invalid_provider_in_validation(self, tmp_path):
         """Invalid provider caught by validation."""
-        # Create Zotero directory structure
         zotero_dir = tmp_path / "zotero"
         zotero_dir.mkdir()
         (zotero_dir / "zotero.sqlite").touch()
 
-        config = Config(
+        config = _make_config(
+            tmp_path,
             zotero_data_dir=zotero_dir,
-            chroma_db_path=tmp_path / "chroma",
-            embedding_model="gemini-embedding-001",
-            embedding_dimensions=768,
-            chunk_size=400,
-            chunk_overlap=100,
-            gemini_api_key=None,
-            embedding_provider="openai",  # Invalid provider
-            embedding_timeout=120.0,
-            embedding_max_retries=3,
-            rerank_alpha=0.7,
-            rerank_section_weights=None,
-            rerank_journal_weights=None,
-            rerank_enabled=True,
-            oversample_multiplier=3,
-            oversample_topic_factor=5,
-            stats_sample_limit=10000,
-            ocr_language="eng",
-            tables_enabled=False,
-            table_strategy="lines_strict",
-            image_size_limit=0.05,
-            figures_enabled=False,
-            figures_min_size=100,
-            quality_threshold_a=2000,
-            quality_threshold_b=1000,
-            quality_threshold_c=500,
-            quality_threshold_d=100,
-            quality_entropy_min=4.0,
-            openalex_email=None,
+            embedding_provider="openai",
         )
 
         errors = config.validate()

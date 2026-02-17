@@ -40,8 +40,23 @@ _BODY_REF_CONTEXT_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Max y-distance in points for orphan ↔ caption matching (~1.7 inches)
-_MAX_Y_DISTANCE = 120
+def _adaptive_max_y_distance(
+    doc: pymupdf.Document,
+    *,
+    page_fraction: float = 0.15,
+) -> float:
+    """Compute fallback y-proximity threshold from page height.
+
+    Used when fewer than 3 matched caption-item pairs are available
+    for calibration.  Returns *page_fraction* of the median page height.
+    """
+    _ASSUMED_PAGE_HEIGHT = 792.0  # letter-size fallback
+    if not doc or len(doc) == 0:
+        return _ASSUMED_PAGE_HEIGHT * page_fraction
+    heights = [doc[i].rect.height for i in range(min(len(doc), 5))]
+    heights.sort()
+    median_height = heights[len(heights) // 2]
+    return median_height * page_fraction
 
 
 def run_recovery(
@@ -77,15 +92,17 @@ def run_recovery(
         _TABLE_LABEL_ONLY_RE,
     )
 
+    max_y_dist = _adaptive_max_y_distance(doc)
+
     fig_recoveries = _recover_captions(
         doc, figures, find_all_captions_on_page,
         _FIG_CAPTION_RE, _FIG_CAPTION_RE_RELAXED, _FIG_LABEL_ONLY_RE,
-        _FIG_REF_RE, kind="figure",
+        _FIG_REF_RE, kind="figure", max_y_distance=max_y_dist,
     )
     tab_recoveries = _recover_captions(
         doc, tables, find_all_captions_on_page,
         _TABLE_CAPTION_RE, _TABLE_CAPTION_RE_RELAXED, _TABLE_LABEL_ONLY_RE,
-        _TABLE_REF_RE, kind="table",
+        _TABLE_REF_RE, kind="table", max_y_distance=max_y_dist,
     )
 
     if fig_recoveries or tab_recoveries:
@@ -106,6 +123,7 @@ def _recover_captions(
     label_only_re: re.Pattern,
     ref_re: re.Pattern,
     kind: str,
+    max_y_distance: float,
 ) -> int:
     """Core recovery logic for either figures or tables.
 
@@ -131,7 +149,9 @@ def _recover_captions(
         return 0  # nothing to recover
 
     # Scan all pages for captions → find floating (unassigned) ones
+    # Also collect distances from assigned captions to their items for calibration
     floating_captions: list[dict] = []  # {num, y_center, text, page_num}
+    matched_distances: list[float] = []
     for page_num_0, page in enumerate(doc):
         page_num = page_num_0 + 1
         hits = caption_finder(
@@ -144,7 +164,14 @@ def _recover_captions(
             if not m:
                 continue
             num_str = m.group(1)
-            if num_str not in assigned_nums:
+            if num_str in assigned_nums:
+                # Measure distance from this caption to its matched item
+                item_idx = assigned_nums[num_str]
+                item = items[item_idx]
+                if item.page_num == page_num:
+                    dist = abs(y_center - item.bbox[3])
+                    matched_distances.append(dist)
+            else:
                 floating_captions.append({
                     "num": num_str,
                     "y_center": y_center,
@@ -152,6 +179,22 @@ def _recover_captions(
                     "page_num": page_num,
                     "bbox": bbox,
                 })
+
+    # Calibrate threshold from matched caption-to-item distances
+    if len(matched_distances) >= 3:
+        matched_distances.sort()
+        n_md = len(matched_distances)
+        q1 = matched_distances[n_md // 4]
+        q3 = matched_distances[3 * n_md // 4]
+        iqr = q3 - q1
+        effective_max_dist = q3 + 1.5 * iqr
+        logger.debug(
+            "Recovery %s: calibrated max_y_distance=%.0f from %d matched pairs "
+            "(Q1=%.0f Q3=%.0f IQR=%.0f, passed default=%.0f)",
+            kind, effective_max_dist, n_md, q1, q3, iqr, max_y_distance,
+        )
+    else:
+        effective_max_dist = max_y_distance
 
     # --- Step 2: Y-Proximity Matching (orphans ↔ floating captions) ---
     recoveries = 0
@@ -168,7 +211,7 @@ def _recover_captions(
         orphan_page = orphan.page_num
         orphan_bottom = orphan.bbox[3]  # y1
 
-        best_dist = _MAX_Y_DISTANCE + 1
+        best_dist = effective_max_dist + 1
         best_fc_idx = -1
 
         for fc_idx, fc in enumerate(floating_captions):
@@ -181,7 +224,7 @@ def _recover_captions(
                 best_dist = dist
                 best_fc_idx = fc_idx
 
-        if best_fc_idx >= 0 and best_dist <= _MAX_Y_DISTANCE:
+        if best_fc_idx >= 0 and best_dist <= effective_max_dist:
             items[orphan_idx].caption = floating_captions[best_fc_idx]["text"]
             num = floating_captions[best_fc_idx]["num"]
             assigned_nums[num] = orphan_idx

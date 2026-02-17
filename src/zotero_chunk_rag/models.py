@@ -212,7 +212,10 @@ class ExtractedTable:
     rows: list[list[str]]                      # Data rows
     caption: str | None = ""                   # Detected caption text (None for orphans)
     caption_position: str = ""                 # "above" | "below" | ""
+    footnotes: str = ""                        # Footnote text stripped from bottom rows
     reference_context: str | None = None
+    artifact_type: str | None = None           # None=real data, else layout artifact tag
+    extraction_strategy: str = ""               # which multi-strategy winner produced cell text
 
     @property
     def num_rows(self) -> int:
@@ -244,6 +247,11 @@ class ExtractedTable:
             # Pad row to match header count if needed
             padded = row + [""] * (self.num_cols - len(row))
             lines.append("| " + " | ".join(padded[:self.num_cols]) + " |")
+
+        # Footnotes
+        if self.footnotes:
+            lines.append("")
+            lines.append(f"*{self.footnotes}*")
 
         return "\n".join(lines)
 
