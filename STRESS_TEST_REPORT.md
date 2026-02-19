@@ -1,13 +1,13 @@
 # Stress Test Report: zotero-chunk-rag
 
-**Date**: 2026-02-17 22:21
+**Date**: 2026-02-18 18:26
 **Corpus**: 10 papers from live Zotero library
 
 ## Executive Summary
 
 - **Total tests**: 291
-- **Passed**: 275 (95%)
-- **Failed**: 16
+- **Passed**: 277 (95%)
+- **Failed**: 14
 - **Major failures**: 0
 
 > **VERDICT**: Mostly functional but has rough edges that will
@@ -17,7 +17,7 @@
 
 | Operation | Time |
 |-----------|------|
-| Total indexing | 380.9s |
+| Total indexing | 292.1s |
 
 ## Extraction Quality per Paper
 
@@ -42,11 +42,11 @@ Expected section 'discussion' — MISSING. Got: ['appendix', 'conclusion', 'intr
 
 ### ! [MINOR] table-content-quality — active-inference-tutorial/table-3
 
-Table 3: 828/1968 cells non-empty (42%). Caption: 'Table 2 Matrix formulation of equations used for inference.'
+Table 3: 813/1920 cells non-empty (42%). Caption: 'Table 2 Matrix formulation of equations used for inference.'
 
 ### ! [MINOR] table-content-quality — active-inference-tutorial/table-4
 
-Table 4: 582/1375 cells non-empty (42%). Caption: 'Table 2 (continued).'
+Table 4: 574/1350 cells non-empty (43%). Caption: 'Table 2 (continued).'
 
 ### ! [MINOR] abstract-detection — active-inference-tutorial
 
@@ -76,17 +76,9 @@ Expected section 'introduction' — MISSING. Got: ['abstract', 'background', 'co
 
 Expected section 'introduction' — MISSING. Got: ['conclusion', 'discussion', 'methods', 'preamble', 'references', 'results', 'unknown']
 
-### ! [MINOR] table-content-quality — helm-coregulation/table-1
-
-Table 1: 72/186 cells non-empty (39%). Caption: 'Table 2 Coefficients From Best-Fitting Cross-Lagged Panel Mo'
-
 ### ! [MINOR] abstract-detection — helm-coregulation
 
 Abstract NOT detected
-
-### ! [MINOR] table-content-quality — roland-emg-filter/table-2
-
-Table 2: 174/350 cells non-empty (50%). Caption: 'Table 2. Floating-point highpass filter coefficients.'
 
 ### ! [MINOR] abstract-detection — friston-life
 
@@ -111,8 +103,8 @@ Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'me
 | table-content-quality | active-inference-tutorial/table-1 | Table 1: 21/21 cells non-empty (100%). Caption: 'Table 1 Model variables.' |
 | table-content-quality | active-inference-tutorial/table-2 | Table 2: 9/9 cells non-empty (100%). Caption: 'Table 1 (continued).' |
 | table-content-quality | active-inference-tutorial/table-5 | Table 5: 10/12 cells non-empty (83%). Caption: 'Table 2 (continued).' |
-| table-content-quality | active-inference-tutorial/table-6 | Table 6: 100/132 cells non-empty (76%). Caption: 'Table 3 Output fields for spm_ |
-| table-content-quality | active-inference-tutorial/table-7 | Table 7: 49/92 cells non-empty (53%). Caption: 'Table 3 (continued).' |
+| table-content-quality | active-inference-tutorial/table-6 | Table 6: 56/56 cells non-empty (100%). Caption: 'Table 3 Output fields for spm_M |
+| table-content-quality | active-inference-tutorial/table-7 | Table 7: 16/16 cells non-empty (100%). Caption: 'Table 3 (continued).' |
 | figure-extraction | active-inference-tutorial | Expected figures — found 18 |
 | figure-caption-rate | active-inference-tutorial | 18/18 figures have captions (100%) |
 | completeness-grade | active-inference-tutorial | Grade: A / Figs: 18 found / 17 captioned / 0 missing / Tables: 7 found / 3 capti |
@@ -169,6 +161,7 @@ Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'me
 | section-detection | helm-coregulation | Expected section 'discussion' — FOUND |
 | table-extraction | helm-coregulation | Expected tables — found 2 |
 | table-content-quality | helm-coregulation/table-0 | Table 0: 40/44 cells non-empty (91%). Caption: 'Table 1 Comparisons of Model Fit |
+| table-content-quality | helm-coregulation/table-1 | Table 1: 12/12 cells non-empty (100%). Caption: 'Table 2 Coefficients From Best- |
 | figure-extraction | helm-coregulation | Expected figures — found 2 |
 | figure-caption-rate | helm-coregulation | 2/2 figures have captions (100%) |
 | completeness-grade | helm-coregulation | Grade: A / Figs: 2 found / 2 captioned / 0 missing / Tables: 2 found / 2 caption |
@@ -185,6 +178,7 @@ Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'me
 | artifact-tables-tagged | roland-emg-filter | 1 layout artifact(s) tagged and excluded: ['diagram_as_table'] |
 | table-extraction | roland-emg-filter | Expected tables — found 8 |
 | table-content-quality | roland-emg-filter/table-1 | Table 1: 81/81 cells non-empty (100%). Caption: 'Table 1. Floating-point comb fi |
+| table-content-quality | roland-emg-filter/table-2 | Table 2: 161/310 cells non-empty (52%). Caption: 'Table 2. Floating-point highpa |
 | table-content-quality | roland-emg-filter/table-3 | Table 3: 27/45 cells non-empty (60%). Caption: 'Table 3. Poles of comb filters w |
 | table-content-quality | roland-emg-filter/table-4 | Table 4: 27/30 cells non-empty (90%). Caption: 'Table 4. Poles of highpass filte |
 | table-content-quality | roland-emg-filter/table-5 | Table 5: 10/10 cells non-empty (100%). Caption: 'Table 5. Runtime per sample of  |
@@ -238,7 +232,7 @@ Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'me
 | section-detection | fortune-impedance | Expected section 'results' — FOUND |
 | artifact-tables-tagged | fortune-impedance | 1 layout artifact(s) tagged and excluded: ['article_info_box'] |
 | table-extraction | fortune-impedance | Expected tables — found 6 |
-| table-content-quality | fortune-impedance/table-1 | Table 1: 28/28 cells non-empty (100%). Caption: 'Table 1 Component values used f |
+| table-content-quality | fortune-impedance/table-1 | Table 1: 21/24 cells non-empty (88%). Caption: 'Table 1 Component values used fo |
 | table-content-quality | fortune-impedance/table-2 | Table 2: 27/30 cells non-empty (90%). Caption: 'Table 2 Error between the custom |
 | table-content-quality | fortune-impedance/table-3 | Table 3: 60/60 cells non-empty (100%). Caption: 'Table 3 Error between the custo |
 | table-content-quality | fortune-impedance/table-4 | Table 4: 263/287 cells non-empty (92%). Caption: 'Table 4 Electrode–skin impedan |
@@ -260,7 +254,7 @@ Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'me
 | table-content-quality | reyes-lf-hrv/table-1 | Table 1: 40/72 cells non-empty (56%). Caption: 'Table 2. Means and Standard Devi |
 | table-content-quality | reyes-lf-hrv/table-2 | Table 2: 57/65 cells non-empty (88%). Caption: 'Table 3. Correlations of HRV Par |
 | table-content-quality | reyes-lf-hrv/table-3 | Table 3: 57/65 cells non-empty (88%). Caption: 'Table 4. Correlations of HRV Par |
-| table-content-quality | reyes-lf-hrv/table-4 | Table 4: 11/20 cells non-empty (55%). Caption: 'Table 5. Hypothetical Database D |
+| table-content-quality | reyes-lf-hrv/table-4 | Table 4: 90/90 cells non-empty (100%). Caption: 'Table 5. Hypothetical Database  |
 | figure-extraction | reyes-lf-hrv | Expected figures — found 2 |
 | figure-caption-rate | reyes-lf-hrv | 2/2 figures have captions (100%) |
 | completeness-grade | reyes-lf-hrv | Grade: A / Figs: 2 found / 2 captioned / 0 missing / Tables: 5 found / 5 caption |
@@ -292,14 +286,14 @@ Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'me
 | semantic-search-ranking | fortune-impedance | Ranked 1/10 for its own core content query |
 | semantic-search-recall | reyes-lf-hrv | Query: 'low frequency heart rate variability sympathetic' — found at rank 1/10 ( |
 | semantic-search-ranking | reyes-lf-hrv | Ranked 1/10 for its own core content query |
-| table-search-recall | active-inference-tutorial | Query: 'algorithm update rules' — found 7 matching table(s), best score 0.223, c |
-| table-markdown-quality | active-inference-tutorial | Table markdown has pipes and 58 lines. Preview: **Table 2 (continued).** /  / /  |
+| table-search-recall | active-inference-tutorial | Query: 'algorithm update rules' — found 7 matching table(s), best score 0.283, c |
+| table-markdown-quality | active-inference-tutorial | Table markdown has pipes and 83 lines. Preview: **Table 2 Matrix formulation of  |
 | table-search-recall | hallett-tms-primer | Query: 'stimulation parameters coil' — found 1 matching table(s), best score 0.3 |
 | table-markdown-quality | hallett-tms-primer | Table markdown has pipes and 8 lines. Preview: **Table 1. Summary of Noninvasive |
 | table-search-recall | laird-fick-polyps | Query: 'polyp location demographics patient' — found 5 matching table(s), best s |
 | table-markdown-quality | laird-fick-polyps | Table markdown has pipes and 15 lines. Preview: **Table 5 Distribution of polyps |
-| table-search-recall | helm-coregulation | Query: 'correlation coefficient RSA' — found 1 matching table(s), best score 0.2 |
-| table-markdown-quality | helm-coregulation | Table markdown has pipes and 34 lines. Preview: **Table 2 Coefficients From Best |
+| table-search-recall | helm-coregulation | Query: 'correlation coefficient RSA' — found 1 matching table(s), best score 0.4 |
+| table-markdown-quality | helm-coregulation | Table markdown has pipes and 7 lines. Preview: **Table 2 Coefficients From Best- |
 | table-search-recall | roland-emg-filter | Query: 'power consumption filter' — found 7 matching table(s), best score 0.440, |
 | table-markdown-quality | roland-emg-filter | Table markdown has pipes and 8 lines. Preview: **Table 7. Effect of reducing sam |
 | table-search-recall | yang-ppv-meta | Query: 'sensitivity specificity diagnostic' — found 3 matching table(s), best sc |
@@ -348,7 +342,7 @@ Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'me
 | context-adds-value | fortune-impedance | Full context (9518 chars) vs hit (1482 chars) |
 | context-expansion | reyes-lf-hrv | Context expansion: before=0, after=2, full_context=4355 chars |
 | context-adds-value | reyes-lf-hrv | Full context (4355 chars) vs hit (1361 chars) |
-| topic-search-multi-paper | HRV papers | Topic search for HRV: found 2/2 expected papers in 2 total docs. Keys found: {'9 |
+| topic-search-multi-paper | HRV papers | Topic search for HRV: found 2/2 expected papers in 2 total docs. Keys found: {'A |
 | topic-search-engineering | impedance papers | Topic search for impedance: found 1/1 expected. Total docs: 2. Keys: {'VP3NJ74M' |
 | ocr-text-extraction | active-inference-tutorial | OCR extracted 63342 chars from 3 image pages. OCR pages detected: 3 |
 | ocr-page-detection | active-inference-tutorial | OCR page detection: 3/3 pages flagged as OCR |

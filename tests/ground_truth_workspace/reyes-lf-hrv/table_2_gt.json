@@ -1,0 +1,27 @@
+{
+  "table_id": "AQ3D94VC_table_3",
+  "paper": "reyes-lf-hrv",
+  "item_key": "AQ3D94VC",
+  "page_num": 6,
+  "table_index": 2,
+  "caption": "Table 3. Correlations of HRV Parameters Obtained by Fast Fourier Transformations with Interbeat Interval (IBI), Pulse Transit Time (PTT), and Baroreflex Sensitivity (BRS) Recorded during Baseline (BL) and Cognitive Load (Task) in the Duschek, Muckenthaler, et al. (2009; Panel A, n = 60) and Duschek et al. (2013; Panel B, n = 54) Studies",
+  "headers": ["", "IBI", "VLF", "LF", "HF"],
+  "rows": [
+    ["Panel A", "", "", "", ""],
+    ["IBI-BL", "", ".543*", ".268\u207a", ".291\u207a"],
+    ["IBI-Task", "", ".005", ".212", ".541*"],
+    ["PTT-BL", ".149", ".154", ".009", ".051"],
+    ["PTT-Task", ".224", ".161", ".370*", ".173"],
+    ["BRS-BL", ".723*", ".583*", ".234", ".587*"],
+    ["BRS-Task", ".749*", ".141", ".202", ".696*"],
+    ["Panel B", "", "", "", ""],
+    ["IBI-BL", "", ".360*", ".179", ".531*"],
+    ["IBI-Task", "", "-.054", ".368*", ".540*"],
+    ["PTT-BL", ".440*", ".129", ".170", ".020"],
+    ["PTT-Task", ".562*", "-.104", ".310\u207a", ".149"],
+    ["BRS-BL", ".738*", ".438*", ".223", ".814*"],
+    ["BRS-Task", ".808*", "-.025", ".425*", ".707*"]
+  ],
+  "notes": "Panel A and Panel B are sub-group header rows; other columns in those rows are empty. IBI-BL rows have empty IBI column because correlation of IBI with itself is not reported. * denotes statistical significance; + (superscript) denotes marginal significance. Note at bottom: VLF = very low frequency, LF = low frequency, HF = high frequency.",
+  "verified": false
+}

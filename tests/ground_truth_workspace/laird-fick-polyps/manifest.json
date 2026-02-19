@@ -1,0 +1,57 @@
+{
+  "paper": "laird-fick-polyps",
+  "item_key": "5SIZVS65",
+  "num_tables": 5,
+  "tables": [
+    {
+      "table_index": 0,
+      "table_id": "5SIZVS65_table_1",
+      "page_num": 3,
+      "caption": "Table 1 Distribution of Sex by Age among 13,881 patients",
+      "artifact_type": null,
+      "image_path": "table_0.png",
+      "extraction_path": "table_0_extraction.json",
+      "gt_path": "table_0_gt.json"
+    },
+    {
+      "table_index": 1,
+      "table_id": "5SIZVS65_table_2",
+      "page_num": 3,
+      "caption": "Table 2 Distribution of Sex by Histology among 13,881 patients",
+      "artifact_type": null,
+      "image_path": "table_1.png",
+      "extraction_path": "table_1_extraction.json",
+      "gt_path": "table_1_gt.json"
+    },
+    {
+      "table_index": 2,
+      "table_id": "5SIZVS65_table_3",
+      "page_num": 5,
+      "caption": "Table 3 Prevalence of sessile serrated adenomas, 2007-2012 in 9301 patients",
+      "artifact_type": null,
+      "image_path": "table_2.png",
+      "extraction_path": "table_2_extraction.json",
+      "gt_path": "table_2_gt.json"
+    },
+    {
+      "table_index": 3,
+      "table_id": "5SIZVS65_table_4",
+      "page_num": 5,
+      "caption": "Table 4 Odds ratios and 95 % confidence intervals for association of age with multiple versus single polyp classification in 13,881 patients",
+      "artifact_type": null,
+      "image_path": "table_3.png",
+      "extraction_path": "table_3_extraction.json",
+      "gt_path": "table_3_gt.json"
+    },
+    {
+      "table_index": 4,
+      "table_id": "5SIZVS65_table_5",
+      "page_num": 6,
+      "caption": "Table 5 Distribution of polyps by location among 13,881 patients",
+      "artifact_type": null,
+      "image_path": "table_4.png",
+      "extraction_path": "table_4_extraction.json",
+      "gt_path": "table_4_gt.json"
+    }
+  ]
+}

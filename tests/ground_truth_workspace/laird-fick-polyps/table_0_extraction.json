@@ -1,0 +1,80 @@
+{
+  "paper": "laird-fick-polyps",
+  "item_key": "5SIZVS65",
+  "page_num": 3,
+  "table_index": 0,
+  "caption": "Table 1 Distribution of Sex by Age among 13,881 patients",
+  "caption_position": "",
+  "headers": [
+    "Age",
+    "Totalb, n (%)",
+    "Sexa",
+    "",
+    "p-value"
+  ],
+  "rows": [
+    [
+      "",
+      "",
+      "Female, n (%)",
+      "Male, n (%)",
+      ""
+    ],
+    [
+      "50- < 60",
+      "5828 (42.0)",
+      "2509 (43.1)",
+      "3319 (57.0)",
+      "<.0001"
+    ],
+    [
+      "60- < 70",
+      "4636 (33.4)",
+      "2048 (44.2)",
+      "2588 (55.8)",
+      "<.0001"
+    ],
+    [
+      "70- < 80",
+      "2751 (19.8)",
+      "1251 (45.5)",
+      "1500 (54.5)",
+      "<.0001"
+    ],
+    [
+      "80-95",
+      "666 (4.8)",
+      "368 (55.3)",
+      "298 (44.7)",
+      "0.007"
+    ],
+    [
+      "Overall",
+      "13881 (100.0)",
+      "6176 (44.5)",
+      "7705 (55.5)",
+      "<.0001"
+    ],
+    [
+      "Mean (SD), years",
+      "62.8 (9.2)",
+      "63.3 (9.5)",
+      "62.5 (8.9)",
+      "<.0001"
+    ]
+  ],
+  "num_rows": 7,
+  "num_cols": 5,
+  "fill_rate": 0.9142857142857143,
+  "bbox": [
+    56.692901611328125,
+    100.86380767822266,
+    290.03369140625,
+    206.2191619873047
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "rawdict",
+  "footnotes": "",
+  "reference_context": "ate analysis was done for the years 2007 to 2012. Cases found to have both sessile serrated adenomas and other histological changes (adenoma, villous adenoma, dysplasia, or invasive carcinoma) were included, although they had been coded under the other histology in the primary analysis. \n\nDemographic statistics on colon biopsies by age and gender were summarized using frequencies and percentages. The distribution of histopathology, polyp morphology and polyp location were compared by age and gender by chi-square tests. With multiple versus single histology as outcome, logistic regression was used to assess the association of age and gender, with results summarized by odds ratios and associated 95 % confidence intervals. \n\nThe de-identified clinical dataset supporting the conclusions of this article is available upon request to the corresponding author. \n\nThe study was approved as exempt by the Michigan State University institutional review board (IRB # x121297e). \n\n## Results \n\nA total of 13,881 patients had one or more biopsy specimens taken during colonoscopies that showed polyp(s) or invasive carcinoma. A total of 7,705 (55.5 %) were \n\n\nTable 1 Distribution of Sex by Age among 13,881 patients \n\n|Table 1Distribution of Sex by|Age among13,881 patients|\n|---|---|\n|Age<br>Totalb, n (%)|Sexa<br>p-value<br>Female, n (%)<br>Male, n (%)|\n|50- < 60<br>5828 (42.0)<br>60- < 70<br>4636 (33.4)<br>70- < 80<br>2751 (19.8)<br>80-95<br>666 (4.8)<br>Overall<br>13881 (100.0)<br>Mean (SD), years<br>62.8 (9.2)|2509 (43.1)<br>3319 (57.0)<br><.0001<br>2048 (44.2)<br>2588 (55.8)<br><.0001<br>12",
+  "markdown": "**Table 1 Distribution of Sex by Age among 13,881 patients**\n\n| Age | Totalb, n (%) | Sexa |  | p-value |\n| --- | --- | --- | --- | --- |\n|  |  | Female, n (%) | Male, n (%) |  |\n| 50- < 60 | 5828 (42.0) | 2509 (43.1) | 3319 (57.0) | <.0001 |\n| 60- < 70 | 4636 (33.4) | 2048 (44.2) | 2588 (55.8) | <.0001 |\n| 70- < 80 | 2751 (19.8) | 1251 (45.5) | 1500 (54.5) | <.0001 |\n| 80-95 | 666 (4.8) | 368 (55.3) | 298 (44.7) | 0.007 |\n| Overall | 13881 (100.0) | 6176 (44.5) | 7705 (55.5) | <.0001 |\n| Mean (SD), years | 62.8 (9.2) | 63.3 (9.5) | 62.5 (8.9) | <.0001 |"
+}

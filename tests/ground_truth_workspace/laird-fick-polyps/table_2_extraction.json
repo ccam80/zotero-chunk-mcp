@@ -1,0 +1,73 @@
+{
+  "paper": "laird-fick-polyps",
+  "item_key": "5SIZVS65",
+  "page_num": 5,
+  "table_index": 2,
+  "caption": "Table 3 Prevalence of sessile serrated adenomas, 2007-2012 in 9301 patients",
+  "caption_position": "",
+  "headers": [
+    "Histology",
+    "Totala",
+    "Sex",
+    "",
+    "p-value"
+  ],
+  "rows": [
+    [
+      "",
+      "n (%)",
+      "Female",
+      "Male",
+      ""
+    ],
+    [
+      "",
+      "",
+      "n (%)",
+      "n (%)",
+      ""
+    ],
+    [
+      "Solitary",
+      "215 (2.3)",
+      "109 (50.7)",
+      "106 (49.3)",
+      "0.838"
+    ],
+    [
+      "Multiple",
+      "145 (1.6)",
+      "78 (53.8)",
+      "67 (46.2)",
+      "0.361"
+    ],
+    [
+      "SSA Other",
+      "57 (0.6)",
+      "28 (49.1)",
+      "29 (50.9)",
+      "0.895"
+    ],
+    [
+      "Overall Non SSA",
+      "417 (4.5) 8884 (95.5)",
+      "215 (51.6) 4016(45.2)",
+      "202 (48.4) 4868 (54.8)",
+      "0.524 <.0001"
+    ]
+  ],
+  "num_rows": 6,
+  "num_cols": 5,
+  "fill_rate": 0.8333333333333334,
+  "bbox": [
+    56.692901611328125,
+    111.86222076416016,
+    290.03350830078125,
+    212.2288055419922
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "rawdict",
+  "footnotes": "",
+  "reference_context": "es in gender were seen in each age category (Table 1). \n\n## Histopathology \n\nAdenomatous polyps, whether singular or multiple, were the most common pathological finding (n = 8,305; 59.9 %), followed by hyperplastic polyps (n = 4,600; 33.1 %). In contrast, villous adenomas (n = 545; 3.6 %), moderate to high grade dysplasia (n = 49; 0.4 %) and invasive carcinoma (n = 22; 0.2 %) were rare (Table 2). \n\nTypical adenomas, whether single or multiple, were more common among males (n = 4920; 63.9 %) than females (n = 3385; 54.9 %) (p < .0001 for comparison). Single hyperplastic polyps more common among women (n = 1699; 51.6 %) than men (n = 1597; 48.4 %) (p = 0.077); there was no significant difference by sex for multiple hyperplastic polyps (p = 0.580) (Fig. 1, Table 2). \n\nTrends in histopathology based on age were seen as well. Adenomas were the most common finding across all age groups, and prevalence increased with increasing age (Fig. 2). \n\nBetween 2007 and 2012, SSAs were found in a total of 417 patients (4.5 %), (Table 3). There was no statistical difference by sex, in overall SSA or within SSA types. However, amongst all 9301 patients, prevalence of SSA was higher in females (n = 215; 5.1 %) than in males (n = 202; 4.0 %) (p = 0.02). Prevalence of SSA was also greater in patients ages 50- < 60 years than older adults (7.6 % versus 2.0-4.3 %. p < .0001 for distribution of histology by age) as seen in Fig. 2. \n\n## Number of polyps \n\nPolyps were classified as single or multiple in the registry.",
+  "markdown": "**Table 3 Prevalence of sessile serrated adenomas, 2007-2012 in 9301 patients**\n\n| Histology | Totala | Sex |  | p-value |\n| --- | --- | --- | --- | --- |\n|  | n (%) | Female | Male |  |\n|  |  | n (%) | n (%) |  |\n| Solitary | 215 (2.3) | 109 (50.7) | 106 (49.3) | 0.838 |\n| Multiple | 145 (1.6) | 78 (53.8) | 67 (46.2) | 0.361 |\n| SSA Other | 57 (0.6) | 28 (49.1) | 29 (50.9) | 0.895 |\n| Overall Non SSA | 417 (4.5) 8884 (95.5) | 215 (51.6) 4016(45.2) | 202 (48.4) 4868 (54.8) | 0.524 <.0001 |"
+}

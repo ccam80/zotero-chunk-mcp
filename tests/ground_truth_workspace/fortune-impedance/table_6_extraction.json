@@ -1,0 +1,67 @@
+{
+  "paper": "fortune-impedance",
+  "item_key": "VP3NJ74M",
+  "page_num": 6,
+  "table_index": 6,
+  "caption": "Table 6",
+  "caption_position": "",
+  "headers": [],
+  "rows": [
+    [
+      "Mean and standard deviation of the compensation network component values.",
+      "",
+      "",
+      "",
+      ""
+    ],
+    [
+      "𝑅′",
+      "𝐶′",
+      "𝑅′",
+      "𝐶′",
+      ""
+    ],
+    [
+      "Electrode configuration",
+      "𝐴(kΩ)",
+      "𝐴(nF)",
+      "𝐵(kΩ)",
+      "𝐵(nF)"
+    ],
+    [
+      "Ag/AgClNSP",
+      "1884 ± 3158",
+      "144.8 ± 237.2",
+      "1748 ± 1886",
+      "141.8 ± 207.4"
+    ],
+    [
+      "Ag/AgClSP",
+      "99.6 ± 115.2",
+      "6.6 ± 9.9",
+      "102.9 ± 118.6",
+      "6.8 ± 10.4"
+    ],
+    [
+      "Ag-SP",
+      "2811 ± 3736",
+      "202.2 ± 403.7",
+      "2816 ± 3465",
+      "487.9 ± 1153"
+    ]
+  ],
+  "num_rows": 6,
+  "num_cols": 5,
+  "fill_rate": 0.8333333333333334,
+  "bbox": [
+    115.60299682617188,
+    531.335205078125,
+    479.6781005859375,
+    656.5181274414062
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "words-column",
+  "footnotes": "",
+  "reference_context": "ast balanced phase data set (Ag/AgClNSP electrode configuration). \n\n## _4.3. Electrode–skin impedance compensation_ \n\nThe mean and standard deviation of the electrode–skin impedance imbalance and the reduction in impedance imbalance after applying the compensation network are outlined in Table 5. The mean and standard deviation of the compensation network component values are outlined in Table 6. Compensation data for Subjects 4, 7 and 10 for the Ag/AgClNSP electrode configuration are shown in Fig. 7. This electrode configuration was chosen as it was the most imbalanced. These results highlight the potential for a compensation network to reduce the impedance imbalance of the electrode–skin interface, therefore, reducing differential-mode interference due to the potential divider effect. \n\n## **5. Discussion** \n\nThe validation error between the CIA and the KIA is typically low. However, 25% of the validated recordings have a NRMSE above 10%, where most of these data sets had a small absolute phase leading to a large relative error. It is believed the temporal relationship of the electrode–skin impedance is the main cause for the NRMSE. The impedance measuring process had a set-up time after electrode placement of 2–5 min, with recording times of 9.7 ± 2.3 min. Due to the large validation error of Subject 8, a 15 min wait period was performed between applying the Ag/AgClNSP electrodes and recording the impedance for Subjects 9 and 10, resulting in the lowest validation errors of the study.",
+  "markdown": "**Table 6**\n\n| Mean and standard deviation of the compensation network component values. |  |  |  |  |\n| 𝑅′ | 𝐶′ | 𝑅′ | 𝐶′ |  |\n| Electrode configuration | 𝐴(kΩ) | 𝐴(nF) | 𝐵(kΩ) | 𝐵(nF) |\n| Ag/AgClNSP | 1884 ± 3158 | 144.8 ± 237.2 | 1748 ± 1886 | 141.8 ± 207.4 |\n| Ag/AgClSP | 99.6 ± 115.2 | 6.6 ± 9.9 | 102.9 ± 118.6 | 6.8 ± 10.4 |\n| Ag-SP | 2811 ± 3736 | 202.2 ± 403.7 | 2816 ± 3465 | 487.9 ± 1153 |"
+}

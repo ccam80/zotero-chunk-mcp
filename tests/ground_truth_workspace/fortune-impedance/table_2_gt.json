@@ -1,0 +1,17 @@
+{
+  "table_id": "VP3NJ74M_table_2",
+  "paper": "fortune-impedance",
+  "item_key": "VP3NJ74M",
+  "page_num": 5,
+  "table_index": 2,
+  "caption": "Table 2 Error between the custom impedance analyser (CIA) and the theoretical impedance of the control DUT over the range of 1 Hz\u2013100 kHz (magnitude) and 1 Hz\u201310 kHz (phase), quantified by the root-mean-square error normalised using the mean of the theoretical impedance of the control DUT.",
+  "headers": ["Data set", "|Z| (%)", "\u03c6 (%)", "|Z| (%)", "\u03c6 (%)"],
+  "rows": [
+    ["1", "4.7", "2.7", "5.7", "5.3"],
+    ["2", "5.3", "1.6", "5.6", "1.5"],
+    ["3", "3.8", "3.4", "4.6", "4.2"],
+    ["Mean (SD)", "4.6 (0.7)", "2.6 (0.9)", "5.3 (0.6)", "3.6 (2.0)"]
+  ],
+  "notes": "Two-level column headers: Z_A spans |Z|(%) and \u03c6(%); Z_B spans |Z|(%) and \u03c6(%). Lowest-level headers used.",
+  "verified": false
+}

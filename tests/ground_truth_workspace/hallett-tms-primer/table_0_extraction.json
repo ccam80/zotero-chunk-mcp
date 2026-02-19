@@ -1,0 +1,54 @@
+{
+  "paper": "hallett-tms-primer",
+  "item_key": "C626CYVT",
+  "page_num": 6,
+  "table_index": 0,
+  "caption": "Table 1. Summary of Noninvasive Methods for Excitation and Inhibition",
+  "caption_position": "",
+  "headers": [
+    "rTMS",
+    "high frequency, R5 Hz",
+    "low frequency, 0.2–1 Hz"
+  ],
+  "rows": [
+    [
+      "TBS",
+      "intermittent",
+      "continuous"
+    ],
+    [
+      "tDCS",
+      "anodal",
+      "cathodal"
+    ],
+    [
+      "PAS",
+      "synchronous",
+      "asynchronous"
+    ],
+    [
+      "heterosynaptic",
+      "heterosynaptic",
+      ""
+    ],
+    [
+      "stimulation",
+      "stimulation",
+      ""
+    ]
+  ],
+  "num_rows": 5,
+  "num_cols": 3,
+  "fill_rate": 0.8666666666666667,
+  "bbox": [
+    59.754001235961915,
+    137.18888636997767,
+    274.9599914550781,
+    214.97989908854166
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "words-column",
+  "footnotes": "",
+  "reference_context": "tation at 10 and 15 ms interval. From Kujirai et al. (1993), with permission. \n\n## Short and Long Afferent Inhibition \n\nShort and long afferent inhibition (SAI and LAI) are produced at latencies of about 20 ms and 200 ms, respectively, after somatosensory stimulation of the hand (Di Lazzaro et al., 2000b). SAI has been demonstrated to be mainly muscarinic by its selective blockage by scopolamine. \n\n## Transcallosal Inhibition \n\nTranscallosal inhibition (TCI) is the inhibition produced in the primary motor cortex in one hemisphere by stimulation of the opposite primary motor cortex. Inhibition occurs at intervals of 8–50 ms (Ferbert et al., 1992). \n\n## Premotor Cortex Inhibition \n\nPremotor cortex inhibition is produced by stimulation of the premotor cortex either in the same or opposite hemisphere (Civardi et al., 2001; Mochizuki et al., 2004). \n\n## Plasticity \n\nTMS can be used in a variety of ways to induce plastic changes in the brain, and this can be utilized to assess the capability for plasticity (Table 1). Additionally, induced plastic changes can be exploited therapeutically, and this aspect will be discussed below. An effective way to modulate synaptic efficacy is to activate a cell with two or more inputs at close to the same time. If the stimuli come on the same synaptic pathway, this is called homosynaptic, and, if on different synaptic pathways, this is called heterosynaptic. Increased synaptic strength is called long-term potentiation (LTP); decreased synaptic strength is called long-term depression (LTD).",
+  "markdown": "**Table 1. Summary of Noninvasive Methods for Excitation and Inhibition**\n\n| rTMS | high frequency, R5 Hz | low frequency, 0.2–1 Hz |\n| --- | --- | --- |\n| TBS | intermittent | continuous |\n| tDCS | anodal | cathodal |\n| PAS | synchronous | asynchronous |\n| heterosynaptic | heterosynaptic |  |\n| stimulation | stimulation |  |"
+}

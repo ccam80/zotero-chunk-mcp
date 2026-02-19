@@ -1,0 +1,12 @@
+{
+  "table_id": "XIAINRVS_orphan_p2_t1",
+  "paper": "huang-emd-1998",
+  "item_key": "XIAINRVS",
+  "page_num": 2,
+  "table_index": 1,
+  "caption": "N. E. Huang and others",
+  "headers": [],
+  "rows": [],
+  "notes": "Not a data table. The image shows the running page header ('904  N. E. Huang and others'), the tail end of the table of contents ('10. Discussion  987', '11. Conclusions  991', 'References  993'), and the beginning of the paper abstract/introduction body text ('A new method for analysing nonlinear and non-stationary data has been devel\u2026'). The 'caption' field (N. E. Huang and others) is actually the page running header, not a table caption.",
+  "verified": false
+}

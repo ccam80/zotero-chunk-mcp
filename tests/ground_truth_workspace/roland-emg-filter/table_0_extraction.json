@@ -1,0 +1,60 @@
+{
+  "paper": "roland-emg-filter",
+  "item_key": "Z9X4JVZ5",
+  "page_num": 5,
+  "table_index": 0,
+  "caption": "Uncaptioned table on page 5",
+  "caption_position": "",
+  "headers": [
+    "Interface to",
+    "Digital",
+    "",
+    ""
+  ],
+  "rows": [
+    [
+      "Human Body DAC Insulated Prosthesis Operational",
+      "Analog Circuit",
+      "Signal Processing",
+      "Output"
+    ],
+    [
+      "Instrumentation",
+      "Analog",
+      "",
+      ""
+    ],
+    [
+      "EMG Sensing Drive",
+      "ADC",
+      "DSP",
+      ""
+    ],
+    [
+      "Amplifier Electrode Oscilloscope Shielding BLE Figure 3. Block diagram outlining the insulated EMG measurement set-up. First, the EMG signal coupled from the human body is amplified and filtered by the analog circuit. In the µC, the signal is then digitally filtered and provided at the sensor system output.",
+      "Bandpass",
+      "Amplifiers",
+      ""
+    ],
+    [
+      "(a) 46 mm 27 mm",
+      "(b)",
+      "(c)",
+      ""
+    ]
+  ],
+  "num_rows": 5,
+  "num_cols": 4,
+  "fill_rate": 0.75,
+  "bbox": [
+    93.83367156982422,
+    83.18870544433594,
+    497.0538024902344,
+    398.1724548339844
+  ],
+  "artifact_type": "diagram_as_table",
+  "extraction_strategy": "words-column",
+  "footnotes": "",
+  "reference_context": "",
+  "markdown": "**Uncaptioned table on page 5**\n\n| Interface to | Digital |  |  |\n| --- | --- | --- | --- |\n| Human Body DAC Insulated Prosthesis Operational | Analog Circuit | Signal Processing | Output |\n| Instrumentation | Analog |  |  |\n| EMG Sensing Drive | ADC | DSP |  |\n| Amplifier Electrode Oscilloscope Shielding BLE Figure 3. Block diagram outlining the insulated EMG measurement set-up. First, the EMG signal coupled from the human body is amplified and filtered by the analog circuit. In the µC, the signal is then digitally filtered and provided at the sensor system output. | Bandpass | Amplifiers |  |\n| (a) 46 mm 27 mm | (b) | (c) |  |"
+}

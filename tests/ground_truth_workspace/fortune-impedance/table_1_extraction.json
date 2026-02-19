@@ -1,0 +1,64 @@
+{
+  "paper": "fortune-impedance",
+  "item_key": "VP3NJ74M",
+  "page_num": 3,
+  "table_index": 1,
+  "caption": "Table 1 Component values used for the three control DUT data sets.",
+  "caption_position": "",
+  "headers": [
+    "Data",
+    "set",
+    "ZTA 𝑅1(Ω)",
+    "𝑅2(kΩ)",
+    "𝐶1(nF)",
+    "ZTB 𝑅4(Ω)",
+    "𝑅3(kΩ)",
+    "𝐶2(nF)"
+  ],
+  "rows": [
+    [
+      "1",
+      "",
+      "998.2",
+      "333.5",
+      "3.4",
+      "998.8",
+      "219.5",
+      "0.96"
+    ],
+    [
+      "2",
+      "",
+      "998.2",
+      "46.9",
+      "1029.0",
+      "998.8",
+      "47.2",
+      "1000"
+    ],
+    [
+      "3",
+      "",
+      "998.2",
+      "333.5",
+      "1.2",
+      "998.8",
+      "219.5",
+      "1.1"
+    ]
+  ],
+  "num_rows": 3,
+  "num_cols": 8,
+  "fill_rate": 0.875,
+  "bbox": [
+    311.1369934082031,
+    266.15130615234375,
+    553.1556396484375,
+    313.05731201171875
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "rawdict",
+  "footnotes": "",
+  "reference_context": "_𝑓_ ) and _𝑍𝑇𝐵_ ( _𝑓_ ) are the theoretical impedances of the first and second electrodes respectively. \n\nThree data sets were obtained using the CIA and the proxy DUT, with component values outlined in Table 1. This process highlighted that the CIA was affected by parasitic inductance, as the CIA could not accurately measure the phase at frequencies above 10 kHz and the magnitude above 100 kHz. To quantify the accuracy of the system, a root mean square error (RMSE) was applied to the data captured using the CIA, _𝑍_ CIA( _𝑓_ ), and the theoretical impedance, _𝑍𝑇_ ( _𝑓_ ), \n\n**==> picture [11 x 12] intentionally omitted <==**\n\n**==> picture [252 x 35] intentionally omitted <==**\n\n**==> picture [125 x 135] intentionally omitted <==**\n\n**==> picture [51 x 139] intentionally omitted <==**\n\n**Fig. 2.** (a) Passive circuitry used to emulate the human electrode–skin interface using a single or double exponential model. (b) Equivalent circuit of the passive circuitry. \n\n**Table 1** \n\nComponent values used for the three control DUT data sets. \n\n||Data<br>1|set|ZTA<br>_𝑅_1(Ω)<br>998.2|_𝑅_2(kΩ)<br>333.5|_𝐶_1(nF)<br>3.4|ZTB<br>_𝑅_4(Ω)<br>998.8|_𝑅_3(kΩ)<br>219.5|_𝐶_2(nF)<br>0.96|\n|---|---|---|---|---|---|---|---|---|\n||2||998.2|46.9|1029.0|998.8|47.2|1000|\n||3||998.2|333.5|1.2|998.8|219.5|1.1|\n\n\n\nwhere K = 40 (the number of discrete excitation frequencies).",
+  "markdown": "**Table 1 Component values used for the three control DUT data sets.**\n\n| Data | set | ZTA 𝑅1(Ω) | 𝑅2(kΩ) | 𝐶1(nF) | ZTB 𝑅4(Ω) | 𝑅3(kΩ) | 𝐶2(nF) |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| 1 |  | 998.2 | 333.5 | 3.4 | 998.8 | 219.5 | 0.96 |\n| 2 |  | 998.2 | 46.9 | 1029.0 | 998.8 | 47.2 | 1000 |\n| 3 |  | 998.2 | 333.5 | 1.2 | 998.8 | 219.5 | 1.1 |"
+}

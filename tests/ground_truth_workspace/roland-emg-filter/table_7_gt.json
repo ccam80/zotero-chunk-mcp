@@ -1,0 +1,18 @@
+{
+  "table_id": "Z9X4JVZ5_table_7",
+  "paper": "roland-emg-filter",
+  "item_key": "Z9X4JVZ5",
+  "page_num": 20,
+  "table_index": 7,
+  "caption": "Table 7. Effect of reducing sampling and clock frequency on power consumption and signal quality.",
+  "headers": ["Sampling Frequency fS (kHz)", "\u00b5C Clock Frequency (MHz)", "Power Consumption (mW)", "SNR"],
+  "rows": [
+    ["10.0", "48", "31.5", "12.6"],
+    ["5.0", "16", "20.5", "12.6"],
+    ["2.0", "8", "15.9", "11.2"],
+    ["1.0", "4", "14.4", "10.1"],
+    ["0.5", "2", "13.7", "7.8"]
+  ],
+  "notes": "Header 'Sampling Frequency fS (kHz)' uses subscript S in the original (fS). Header '\u00b5C Clock Frequency (MHz)' uses the micro symbol (\u00b5C = microcontroller).",
+  "verified": false
+}

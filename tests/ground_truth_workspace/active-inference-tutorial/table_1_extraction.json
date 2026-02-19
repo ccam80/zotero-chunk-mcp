@@ -1,0 +1,60 @@
+{
+  "paper": "active-inference-tutorial",
+  "item_key": "SCPXVBLY",
+  "page_num": 15,
+  "table_index": 1,
+  "caption": "Table 1 Model variables.",
+  "caption_position": "",
+  "headers": [],
+  "rows": [
+    [
+      "Model variable*",
+      "General definition",
+      "Model specification for explore–exploit task (described in detail Section 3)"
+    ],
+    [
+      "oτ",
+      "Observable outcomes at time τ.",
+      "Outcome modalities: 1. Hints (no hint, hint-left, hint-right) 2. Reward (start, lose, win) 3. Observed behavior (start, take hint, choose left, choose right)"
+    ],
+    [
+      "sτ",
+      "Hidden states at time τ. One vector of possible state values for each state factor (i.e., each independent set of states; e.g., visual vs. auditory states).",
+      "Hidden state factors: 1. Context (left machine is better vs. right machine is better) 2. Choices (start, take hint, choose left, choose right)"
+    ],
+    [
+      "π",
+      "A vector encoding the distribution over policies reflecting the predicted value of each policy. Each policy is a series of allowable actions in a vector U, where actions correspond to different state transitions (i.e., different Bπ,τ matrices) that can be chosen by the agent for each state factor. Policies are chosen by sampling from this distribution.",
+      "Allowable policies include the decision to: 1. Stay in the start state 2. Get the hint and then choose the left machine 3. Get the hint and then choose the right machine 4. Immediately choose the left machine (and then return to the start state) 5. Immediately choose the right machine (and then return to the start state)"
+    ],
+    [
+      "A matrix: p(oτ |sτ )",
+      "A matrix encoding beliefs about the relationship between hidden states and observable outcomes at each time point τ (i.e., the probability that specific outcomes will be observed given specific hidden states at specific times). Note that in the POMDP structure typically used in the active inference literature (and which we describe in this tutorial), the likelihood is assumed to remain constant across time points in a trial, and hence will not differ at different values for τ (although one could adjust this if so desired). The likelihood is also assumed to be identical across policies, and so there is no indexing with respect to π. When there is more than one outcome modality, there is one A matrix per outcome modality. When there is more than one state factor, these matrices become high-dimensional and are technically referred to as tensors. For example, a second state factor corresponds to a third matrix dimension, a third state factor corresponds to a fourth matrix dimension, and so forth.",
+      "Encodes beliefs about the relationship between: 1. Probability that the hint is accurate in each context 2. Probability of reward in each context 3. Identity mapping between choice states and observed behavior"
+    ],
+    [
+      "Bπ,τ matrix: p(sτ+1|sτ , π)",
+      "A matrix encoding beliefs about how hidden states will evolve over time (transition probabilities). For states that are under the control of the agent, there are multiple Bπ,τ matrices, where each matrix corresponds to one action (state transition) that the agent may choose at a given time point (if consistent with an allowable policy). When there is more than one hidden state factor, there is one or more Bπ,τ matrices per state factor (depending on policies).",
+      "Encodes beliefs that: 1. Context does not change within a trial 2. Transitions from any choice state to any other are possible, depending on the policy."
+    ],
+    [
+      "C matrix: p(oτ |C)",
+      "A matrix encoding the degree to which some observed outcomes are preferred over others (technically modeled as prior expectations over outcomes). When there is more than one outcome modality, there is one C matrix per outcome modality. Rows indicate possible observations; columns indicate time points. Note that each column of values in C is passed through a softmax function (transforming it into a proper probability distribution) and then log-transformed (using the natural log). Thus, preferences become log-probabilities over outcomes.",
+      "Encodes the stronger preference for wins than losses. Wins are also more preferred at the second time point than the third time point."
+    ]
+  ],
+  "num_rows": 7,
+  "num_cols": 3,
+  "fill_rate": 1.0,
+  "bbox": [
+    37.615997314453125,
+    70.45909881591797,
+    542.35595703125,
+    649.401123046875
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "rawdict",
+  "footnotes": "",
+  "reference_context": "2, the observation for _τ_ = 2 would be updated to: \n\n**==> picture [56 x 24] intentionally omitted <==**\n\n**==> picture [252 x 87] intentionally omitted <==**\n\nbeliefs about states for all time points to be updated at each time point _t_ when these observation vectors are updated. \n\n\n**==> picture [361 x 239] intentionally omitted <==**\n\n**Fig. 4.** Depiction of the explore–exploit task example. Note that the states and outcomes shown on the right are only examples. Table 1 and Section 3 list all states, outcomes, and policies required to build a generative model for this task. \n\nHaving now clarified time indexing, we will move on to other model elements. At the first time point in a trial _(τ_ = 1 _)_ , the model starts out with a prior over categorical states, _p (sτ_ =1 _)_ , encoded in a vector denoted by _D_ – one value per possible state (e.g., which slot machine is more likely to pay out). When there are multiple state factors, there will be one _D_ vector per factor. As touched on above, multiple state factors are necessary to account for multiple types of beliefs one can hold simultaneously. One common example is holding separate beliefs about an object’s location and its identity. In the explore–exploit task example, this could include beliefs about which slot machine is better and beliefs about available choice states (e.g., the state of having taken the hint).",
+  "markdown": "**Table 1 Model variables.**\n\n| Model variable* | General definition | Model specification for explore–exploit task (described in detail Section 3) |\n| oτ | Observable outcomes at time τ. | Outcome modalities: 1. Hints (no hint, hint-left, hint-right) 2. Reward (start, lose, win) 3. Observed behavior (start, take hint, choose left, choose right) |\n| sτ | Hidden states at time τ. One vector of possible state values for each state factor (i.e., each independent set of states; e.g., visual vs. auditory states). | Hidden state factors: 1. Context (left machine is better vs. right machine is better) 2. Choices (start, take hint, choose left, choose right) |\n| π | A vector encoding the distribution over policies reflecting the predicted value of each policy. Each policy is a series of allowable actions in a vector U, where actions correspond to different state transitions (i.e., different Bπ,τ matrices) that can be chosen by the agent for each state factor. Policies are chosen by sampling from this distribution. | Allowable policies include the decision to: 1. Stay in the start state 2. Get the hint and then choose the left machine 3. Get the hint and then choose the right machine 4. Immediately choose the left machine (and then return to the start state) 5. Immediately choose the right machine (and then return to the start state) |\n| A matrix: p(oτ |sτ ) | A matrix encoding beliefs about the relationship between hidden states and observable outcomes at each time point τ (i.e., the probability that specific outcomes will be observed given specific hidden states at specific times). Note that in the POMDP structure typically used in the active inference literature (and which we describe in this tutorial), the likelihood is assumed to remain constant across time points in a trial, and hence will not differ at different values for τ (although one could adjust this if so desired). The likelihood is also assumed to be identical across policies, and so there is no indexing with respect to π. When there is more than one outcome modality, there is one A matrix per outcome modality. When there is more than one state factor, these matrices become high-dimensional and are technically referred to as tensors. For example, a second state factor corresponds to a third matrix dimension, a third state factor corresponds to a fourth matrix dimension, and so forth. | Encodes beliefs about the relationship between: 1. Probability that the hint is accurate in each context 2. Probability of reward in each context 3. Identity mapping between choice states and observed behavior |\n| Bπ,τ matrix: p(sτ+1|sτ , π) | A matrix encoding beliefs about how hidden states will evolve over time (transition probabilities). For states that are under the control of the agent, there are multiple Bπ,τ matrices, where each matrix corresponds to one action (state transition) that the agent may choose at a given time point (if consistent with an allowable policy). When there is more than one hidden state factor, there is one or more Bπ,τ matrices per state factor (depending on policies). | Encodes beliefs that: 1. Context does not change within a trial 2. Transitions from any choice state to any other are possible, depending on the policy. |\n| C matrix: p(oτ |C) | A matrix encoding the degree to which some observed outcomes are preferred over others (technically modeled as prior expectations over outcomes). When there is more than one outcome modality, there is one C matrix per outcome modality. Rows indicate possible observations; columns indicate time points. Note that each column of values in C is passed through a softmax function (transforming it into a proper probability distribution) and then log-transformed (using the natural log). Thus, preferences become log-probabilities over outcomes. | Encodes the stronger preference for wins than losses. Wins are also more preferred at the second time point than the third time point. |"
+}

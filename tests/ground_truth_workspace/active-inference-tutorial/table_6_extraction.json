@@ -1,0 +1,114 @@
+{
+  "paper": "active-inference-tutorial",
+  "item_key": "SCPXVBLY",
+  "page_num": 30,
+  "table_index": 6,
+  "caption": "Table 3 Output fields for spm_MDP_VB_X_tutorial.m simulation script.",
+  "caption_position": "",
+  "headers": [
+    "MDP Field",
+    "Model Element",
+    "Structure",
+    "Description"
+  ],
+  "rows": [
+    [
+      "MDP.F",
+      "Negative variational free energy of each policy over time.",
+      "Rows = policies. Columns = time points.",
+      "Negative variational free energy of each policy at each time point in the trial. For example, if there are 2 policies and 6 time points there will be a 2 × 6 matrix containing the negative variational free energy of each policy at each point in the trial."
+    ],
+    [
+      "MDP.G",
+      "Negative expected free energy of each policy over time.",
+      "Rows = policies. Columns = time points.",
+      "Negative expected free energy of each policy at each time point in the trial. For example, if there are 2 policies and 6 time points there will be a 2 × 6 matrix containing the negative expected free energy of each policy at each point in the trial."
+    ],
+    [
+      "MDP.H",
+      "Total negative variational free energy over time.",
+      "Columns = time points.",
+      "Total negative variational free energy averaged across states and policies at each time point. For example, if there are 8 time points there will be a 1 × 8 row vector containing the total negative free energy at each time point."
+    ],
+    [
+      "MDP.Fa",
+      "MDP.Fa is the negative free energy of",
+      "Columns = one per outcome modality or",
+      "KL divergence between the parameters of the"
+    ],
+    [
+      "MDP.Fd",
+      "parameter ‘a’ (if learning A matrix). There are",
+      "hidden state factor (i.e., depending on the",
+      "matrix/vector that is being learned at the"
+    ],
+    [
+      "MDP.Fb",
+      "also analogous fields if learning other",
+      "specific parameters being learned). If the agent",
+      "beginning of each trial and at the end of each"
+    ],
+    [
+      "...",
+      "matrices/vectors (e.g., MDP.Fd for learning the parameters of the D vector, etc.).",
+      "is learning parameters of a single vector (e.g., E), this will be a single column.",
+      "trial. Each column in the vector may represent an outcome modality (i.e., in the case of the A matrix), a hidden state factor (i.e., in the case of the B matrix and D vector), or any other vector (e.g., the E vector)."
+    ],
+    [
+      "MDP.O",
+      "Outcome vectors.",
+      "Rows = outcome modalities. Columns = time points.",
+      "Vectors (one per cell) specifying the outcomes for each modality at each time point. Observed outcomes are encoded as 1s, with 0s otherwise."
+    ],
+    [
+      "MDP.P",
+      "Probability of emitting an action.",
+      "Rows = one per controllable state factor. Columns = actions. Third dimension = time point.",
+      "The probability of emitting each particular action, expressed as a softmax function of a vector containing the probability of each action summed over each policy. For example, assume that there are two possible actions, with a posterior over policies of [.4 .4 .2], with policy 1 and 2 leading to action 1, and policy 3 leading to action 2. The probability of action 1 and 2 is therefore [.8 .2]. This vector is then passed through another softmax function controlled by the inverse temperature parameter α, which by default is extremely large (α = 512). Actions are then sampled from the resulting distribution, where higher α values promote more deterministic action selection (i.e., by choosing the action with the highest probability)."
+    ],
+    [
+      "MDP.Q",
+      "Posteriors over states under each policy at the end of the trial.",
+      "1 cell per state factor. Rows = states. Columns = time points. Third dimension = policy number.",
+      "Posterior probability of each state conditioned on each policy at the end of the trial after successive rounds of updating at each time point."
+    ],
+    [
+      "MDP.R",
+      "Posteriors over policies.",
+      "Rows = policies. Columns = time points.",
+      "Posterior over policies at each time point."
+    ],
+    [
+      "MDP.X",
+      "Overall posteriors over states at the end of the trial. These are Bayesian model averages of the posteriors over states under each policy.",
+      "1 cell per state factor. Rows = states. Columns = time points.",
+      "This means taking a weighted average of the posteriors over states under each policy, where the weighting is determined by the posterior probability of each policy."
+    ],
+    [
+      "MDP.un",
+      "Neuronal encoding of policies.",
+      "1 cell per policy dimension. Rows = policies. Columns = iterations of message passing (16 per time point). For example, 16 iterations, and 8 time points gives a vector with 128 columns).",
+      "Simulated neuronal encoding of the posterior probability of each policy at each iteration of message passing."
+    ],
+    [
+      "MDP.vn",
+      "Neuronal encoding of state prediction errors.",
+      "1 cell per state factor. Rows = iterations of message passing (16 per time point). Columns = states. Third Dimension: time point the belief is about (τ). Fourth Dimension: time point the belief is at (t).",
+      "Bayesian model average of state prediction errors at each iteration of message passing (weighted by the posterior probability of the associated policies)."
+    ]
+  ],
+  "num_rows": 14,
+  "num_cols": 4,
+  "fill_rate": 1.0,
+  "bbox": [
+    42.14899826049805,
+    74.68494415283203,
+    553.127685546875,
+    717.3811645507812
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "rawdict",
+  "footnotes": "",
+  "reference_context": "plotting routine can also take additional optional inputs: \n\n## **spm** _ **MDP** _ **VB** _ **trial** ( **MDP** _,_ **Gf** _,_ **Gg** ) _._ \n\n**Gf** : state factors to plot. \n\n**Gg** : outcome modalities to plot. \n\nFor example, **spm** _ **MDP** _ **VB** _ **trial** ( **MDP** _,_ **1** : **2** _,_ **2** : **3** ) would plot the first two state factors and the second and third outcome modalities. \n\nAt this point, the reader is encouraged to set the variable _**Sim**_ in the first section of the accompanying tutorial code (i.e., **Step** _ **by** _ **Step** _ **AI** _ **Guide** _._ **m** , line 51) to _**Sim**_ = 1 and then click \n\n**‘Run’** , which will run the model and this plotting script. Before running this script, remember to make sure SPM12 is installed and that the ‘DEM’ folder within the SPM folder structure is added as a path in MATLAB (...spm12\\toolbox\\DEM). \n\nBased on the current model specification, a representative plot of simulation results is shown in Fig. 8A. This and similar plots are generated from specific output fields in the MDP structure (Table 3 describes each output field). The two panels in the top-left of Fig. 8A show posteriors over states _at the end of the trial_ (i.e., the states the model believes it was in at each time point _τ_ when at the last time point _t_ ). Here time goes from left to right, darker indicates higher probability, and the cyan dots denote the true states. Here, the model believes it was in the ‘leftbetter context’ and that it chose to take the hint and then chose the left slot machine.",
+  "markdown": "**Table 3 Output fields for spm_MDP_VB_X_tutorial.m simulation script.**\n\n| MDP Field | Model Element | Structure | Description |\n| --- | --- | --- | --- |\n| MDP.F | Negative variational free energy of each policy over time. | Rows = policies. Columns = time points. | Negative variational free energy of each policy at each time point in the trial. For example, if there are 2 policies and 6 time points there will be a 2 × 6 matrix containing the negative variational free energy of each policy at each point in the trial. |\n| MDP.G | Negative expected free energy of each policy over time. | Rows = policies. Columns = time points. | Negative expected free energy of each policy at each time point in the trial. For example, if there are 2 policies and 6 time points there will be a 2 × 6 matrix containing the negative expected free energy of each policy at each point in the trial. |\n| MDP.H | Total negative variational free energy over time. | Columns = time points. | Total negative variational free energy averaged across states and policies at each time point. For example, if there are 8 time points there will be a 1 × 8 row vector containing the total negative free energy at each time point. |\n| MDP.Fa | MDP.Fa is the negative free energy of | Columns = one per outcome modality or | KL divergence between the parameters of the |\n| MDP.Fd | parameter ‘a’ (if learning A matrix). There are | hidden state factor (i.e., depending on the | matrix/vector that is being learned at the |\n| MDP.Fb | also analogous fields if learning other | specific parameters being learned). If the agent | beginning of each trial and at the end of each |\n| ... | matrices/vectors (e.g., MDP.Fd for learning the parameters of the D vector, etc.). | is learning parameters of a single vector (e.g., E), this will be a single column. | trial. Each column in the vector may represent an outcome modality (i.e., in the case of the A matrix), a hidden state factor (i.e., in the case of the B matrix and D vector), or any other vector (e.g., the E vector). |\n| MDP.O | Outcome vectors. | Rows = outcome modalities. Columns = time points. | Vectors (one per cell) specifying the outcomes for each modality at each time point. Observed outcomes are encoded as 1s, with 0s otherwise. |\n| MDP.P | Probability of emitting an action. | Rows = one per controllable state factor. Columns = actions. Third dimension = time point. | The probability of emitting each particular action, expressed as a softmax function of a vector containing the probability of each action summed over each policy. For example, assume that there are two possible actions, with a posterior over policies of [.4 .4 .2], with policy 1 and 2 leading to action 1, and policy 3 leading to action 2. The probability of action 1 and 2 is therefore [.8 .2]. This vector is then passed through another softmax function controlled by the inverse temperature parameter α, which by default is extremely large (α = 512). Actions are then sampled from the resulting distribution, where higher α values promote more deterministic action selection (i.e., by choosing the action with the highest probability). |\n| MDP.Q | Posteriors over states under each policy at the end of the trial. | 1 cell per state factor. Rows = states. Columns = time points. Third dimension = policy number. | Posterior probability of each state conditioned on each policy at the end of the trial after successive rounds of updating at each time point. |\n| MDP.R | Posteriors over policies. | Rows = policies. Columns = time points. | Posterior over policies at each time point. |\n| MDP.X | Overall posteriors over states at the end of the trial. These are Bayesian model averages of the posteriors over states under each policy. | 1 cell per state factor. Rows = states. Columns = time points. | This means taking a weighted average of the posteriors over states under each policy, where the weighting is determined by the posterior probability of each policy. |\n| MDP.un | Neuronal encoding of policies. | 1 cell per policy dimension. Rows = policies. Columns = iterations of message passing (16 per time point). For example, 16 iterations, and 8 time points gives a vector with 128 columns). | Simulated neuronal encoding of the posterior probability of each policy at each iteration of message passing. |\n| MDP.vn | Neuronal encoding of state prediction errors. | 1 cell per state factor. Rows = iterations of message passing (16 per time point). Columns = states. Third Dimension: time point the belief is about (τ). Fourth Dimension: time point the belief is at (t). | Bayesian model average of state prediction errors at each iteration of message passing (weighted by the posterior probability of the associated policies). |"
+}

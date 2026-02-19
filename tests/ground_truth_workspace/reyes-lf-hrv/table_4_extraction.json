@@ -1,0 +1,145 @@
+{
+  "paper": "reyes-lf-hrv",
+  "item_key": "AQ3D94VC",
+  "page_num": 7,
+  "table_index": 4,
+  "caption": "Table 5. Hypothetical Database Displaying HRV Indices Together with a Dependent Variable (DV) for 10 Subjects",
+  "caption_position": "",
+  "headers": [
+    "Subject",
+    "SPD",
+    "VLF",
+    "LF",
+    "HF",
+    "LF/HF",
+    "LFnu",
+    "HFnu",
+    "DV"
+  ],
+  "rows": [
+    [
+      "1",
+      "21",
+      "5",
+      "10",
+      "6",
+      "1.67",
+      "63",
+      "38",
+      "1"
+    ],
+    [
+      "2",
+      "20",
+      "4.50",
+      "9",
+      "6.50",
+      "1.38",
+      "58",
+      "42",
+      "2"
+    ],
+    [
+      "3",
+      "25",
+      "6",
+      "12",
+      "7",
+      "1.71",
+      "63",
+      "37",
+      "3"
+    ],
+    [
+      "4",
+      "19.20",
+      "3",
+      "9",
+      "7.20",
+      "1.25",
+      "56",
+      "44",
+      "4"
+    ],
+    [
+      "5",
+      "25.50",
+      "5",
+      "13",
+      "7.50",
+      "1.73",
+      "63",
+      "37",
+      "5"
+    ],
+    [
+      "6",
+      "19",
+      "3",
+      "8",
+      "8",
+      "1",
+      "50",
+      "50",
+      "6"
+    ],
+    [
+      "7",
+      "29.50",
+      "6",
+      "15",
+      "8.50",
+      "1.76",
+      "64",
+      "36",
+      "7"
+    ],
+    [
+      "8",
+      "21",
+      "5",
+      "7",
+      "9",
+      "0.78",
+      "44",
+      "56",
+      "8"
+    ],
+    [
+      "9",
+      "29.50",
+      "6",
+      "14",
+      "9.50",
+      "1.47",
+      "60",
+      "40",
+      "9"
+    ],
+    [
+      "10",
+      "21",
+      "5",
+      "6",
+      "10",
+      "0.60",
+      "38",
+      "63",
+      "10"
+    ]
+  ],
+  "num_rows": 10,
+  "num_cols": 9,
+  "fill_rate": 1.0,
+  "bbox": [
+    314.3111877441406,
+    92.57850646972656,
+    553.4520874023438,
+    195.67938232421875
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "rawdict",
+  "footnotes": "",
+  "reference_context": "that VLF, LF, and HF power accounted for almost the complete spectral power density (SPD). Therefore, computing normalized LF and HF is widely restricted to building a ratio between both parameters. The formula LFnu = LF/ SPD - VLF, for example, is roughly equivalent to LFnu = LF/LF + HF. This holds completely true when the area of interest in SPD is defined in the range between 0.0 and 0.40 Hz. The reciprocal relationship between LF and HF power when they are normalized or expressed as a ratio makes them dubious indices. We view these mathematical transformations in a hypothetical example. Table 5 displays hypothetical data of LF, HF, VLF, SPD, LFnu, HFnu, and the LF/HF ratio for 10 cases. A hypothetical dependent variable ranging from 1 to 10 is also included. In this example, correlations of the absolute HRV components with the dependent variable are _r_ = -.078 and _r_ = .996 for LF and HF, respectively. Correlations with the dependent variable for normalized units are _r_ = -.601 (LFnu) and _r_ = .601 (HFnu). The correlation between the LF/HF ratio and the dependent variable is _r_ = -.561. The normalized components are inversely related to one another, and they show equal correlations (but of opposite directions) with a third variable. Knowing the power value of one component (LFnu or HFnu), one can perfectly deduce the value of the other.",
+  "markdown": "**Table 5. Hypothetical Database Displaying HRV Indices Together with a Dependent Variable (DV) for 10 Subjects**\n\n| Subject | SPD | VLF | LF | HF | LF/HF | LFnu | HFnu | DV |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n| 1 | 21 | 5 | 10 | 6 | 1.67 | 63 | 38 | 1 |\n| 2 | 20 | 4.50 | 9 | 6.50 | 1.38 | 58 | 42 | 2 |\n| 3 | 25 | 6 | 12 | 7 | 1.71 | 63 | 37 | 3 |\n| 4 | 19.20 | 3 | 9 | 7.20 | 1.25 | 56 | 44 | 4 |\n| 5 | 25.50 | 5 | 13 | 7.50 | 1.73 | 63 | 37 | 5 |\n| 6 | 19 | 3 | 8 | 8 | 1 | 50 | 50 | 6 |\n| 7 | 29.50 | 6 | 15 | 8.50 | 1.76 | 64 | 36 | 7 |\n| 8 | 21 | 5 | 7 | 9 | 0.78 | 44 | 56 | 8 |\n| 9 | 29.50 | 6 | 14 | 9.50 | 1.47 | 60 | 40 | 9 |\n| 10 | 21 | 5 | 6 | 10 | 0.60 | 38 | 63 | 10 |"
+}

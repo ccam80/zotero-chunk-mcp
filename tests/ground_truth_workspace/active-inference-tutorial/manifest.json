@@ -1,0 +1,87 @@
+{
+  "paper": "active-inference-tutorial",
+  "item_key": "SCPXVBLY",
+  "num_tables": 8,
+  "tables": [
+    {
+      "table_index": 0,
+      "table_id": "SCPXVBLY_orphan_p1_t0",
+      "page_num": 1,
+      "caption": "c MRC Cognition and Brain Sciences Unit, University of Cambridge, Cambridge, UK",
+      "artifact_type": "article_info_box",
+      "image_path": "table_0.png",
+      "extraction_path": "table_0_extraction.json",
+      "gt_path": "table_0_gt.json"
+    },
+    {
+      "table_index": 1,
+      "table_id": "SCPXVBLY_table_1",
+      "page_num": 15,
+      "caption": "Table 1 Model variables.",
+      "artifact_type": null,
+      "image_path": "table_1.png",
+      "extraction_path": "table_1_extraction.json",
+      "gt_path": "table_1_gt.json"
+    },
+    {
+      "table_index": 2,
+      "table_id": "SCPXVBLY_table_1",
+      "page_num": 16,
+      "caption": "Table 1 (continued).",
+      "artifact_type": null,
+      "image_path": "table_2.png",
+      "extraction_path": "table_2_extraction.json",
+      "gt_path": "table_2_gt.json"
+    },
+    {
+      "table_index": 3,
+      "table_id": "SCPXVBLY_table_2",
+      "page_num": 18,
+      "caption": "Table 2 Matrix formulation of equations used for inference.",
+      "artifact_type": null,
+      "image_path": "table_3.png",
+      "extraction_path": "table_3_extraction.json",
+      "gt_path": "table_3_gt.json"
+    },
+    {
+      "table_index": 4,
+      "table_id": "SCPXVBLY_table_2",
+      "page_num": 19,
+      "caption": "Table 2 (continued).",
+      "artifact_type": null,
+      "image_path": "table_4.png",
+      "extraction_path": "table_4_extraction.json",
+      "gt_path": "table_4_gt.json"
+    },
+    {
+      "table_index": 5,
+      "table_id": "SCPXVBLY_table_2",
+      "page_num": 20,
+      "caption": "Table 2 (continued).",
+      "artifact_type": null,
+      "image_path": "table_5.png",
+      "extraction_path": "table_5_extraction.json",
+      "gt_path": "table_5_gt.json"
+    },
+    {
+      "table_index": 6,
+      "table_id": "SCPXVBLY_table_3",
+      "page_num": 30,
+      "caption": "Table 3 Output fields for spm_MDP_VB_X_tutorial.m simulation script.",
+      "artifact_type": null,
+      "image_path": "table_6.png",
+      "extraction_path": "table_6_extraction.json",
+      "gt_path": "table_6_gt.json"
+    },
+    {
+      "table_index": 7,
+      "table_id": "SCPXVBLY_table_3",
+      "page_num": 31,
+      "caption": "Table 3 (continued).",
+      "artifact_type": null,
+      "image_path": "table_7.png",
+      "extraction_path": "table_7_extraction.json",
+      "gt_path": "table_7_gt.json"
+    }
+  ]
+}

@@ -1,0 +1,134 @@
+{
+  "paper": "huang-emd-1998",
+  "item_key": "XIAINRVS",
+  "page_num": 1,
+  "table_index": 0,
+  "caption": "Received 3 June 1996; accepted 4 November 1996",
+  "caption_position": "",
+  "headers": [
+    "page",
+    "",
+    ""
+  ],
+  "rows": [
+    [
+      "1.",
+      "Introduction",
+      "904"
+    ],
+    [
+      "2.",
+      "Review of non-stationary data processing methods",
+      "907"
+    ],
+    [
+      "(a )",
+      "The spectrogram",
+      "907"
+    ],
+    [
+      "(b )",
+      "The wavelet analysis",
+      "907"
+    ],
+    [
+      "(c )",
+      "The Wigner–Ville distribution",
+      "908"
+    ],
+    [
+      "(d )",
+      "Evolutionary spectrum",
+      "909"
+    ],
+    [
+      "(e )",
+      "The empirical orthogonal function expansion (EOF)",
+      "909"
+    ],
+    [
+      "(f )",
+      "Other miscellaneous methods",
+      "910"
+    ],
+    [
+      "3.",
+      "Instantaneous frequency",
+      "911"
+    ],
+    [
+      "4.",
+      "Intrinsic mode functions",
+      "915"
+    ],
+    [
+      "5.",
+      "The empirical mode decomposition method: the sifting process",
+      "917"
+    ],
+    [
+      "6.",
+      "Completeness and orthogonality",
+      "923"
+    ],
+    [
+      "7.",
+      "The Hilbert spectrum",
+      "928"
+    ],
+    [
+      "8.",
+      "Validation and calibration of the Hilbert spectrum",
+      "933"
+    ],
+    [
+      "9.",
+      "Applications",
+      "948"
+    ],
+    [
+      "(a )",
+      "Numerical results from classic nonlinear systems",
+      "949"
+    ],
+    [
+      "(b )",
+      "Observational data from laboratory and field experiments",
+      "962"
+    ],
+    [
+      "c⃝1998",
+      "",
+      ""
+    ],
+    [
+      "Proc. R. Soc. Lond. A (1998) 454, 903–995",
+      "The Royal Society",
+      ""
+    ],
+    [
+      "903",
+      "",
+      ""
+    ],
+    [
+      "Printed in Great Britain",
+      "TEX Paper",
+      ""
+    ]
+  ],
+  "num_rows": 21,
+  "num_cols": 3,
+  "fill_rate": 0.9047619047619048,
+  "bbox": [
+    100.34600067138672,
+    478.860595703125,
+    482.97808837890625,
+    726.6385498046875
+  ],
+  "artifact_type": "table_of_contents",
+  "extraction_strategy": "rawdict",
+  "footnotes": "",
+  "reference_context": "",
+  "markdown": "**Received 3 June 1996; accepted 4 November 1996**\n\n| page |  |  |\n| --- | --- | --- |\n| 1. | Introduction | 904 |\n| 2. | Review of non-stationary data processing methods | 907 |\n| (a ) | The spectrogram | 907 |\n| (b ) | The wavelet analysis | 907 |\n| (c ) | The Wigner–Ville distribution | 908 |\n| (d ) | Evolutionary spectrum | 909 |\n| (e ) | The empirical orthogonal function expansion (EOF) | 909 |\n| (f ) | Other miscellaneous methods | 910 |\n| 3. | Instantaneous frequency | 911 |\n| 4. | Intrinsic mode functions | 915 |\n| 5. | The empirical mode decomposition method: the sifting process | 917 |\n| 6. | Completeness and orthogonality | 923 |\n| 7. | The Hilbert spectrum | 928 |\n| 8. | Validation and calibration of the Hilbert spectrum | 933 |\n| 9. | Applications | 948 |\n| (a ) | Numerical results from classic nonlinear systems | 949 |\n| (b ) | Observational data from laboratory and field experiments | 962 |\n| c⃝1998 |  |  |\n| Proc. R. Soc. Lond. A (1998) 454, 903–995 | The Royal Society |  |\n| 903 |  |  |\n| Printed in Great Britain | TEX Paper |  |"
+}

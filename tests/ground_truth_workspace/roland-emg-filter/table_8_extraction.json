@@ -1,0 +1,80 @@
+{
+  "paper": "roland-emg-filter",
+  "item_key": "Z9X4JVZ5",
+  "page_num": 22,
+  "table_index": 8,
+  "caption": "Abbreviations",
+  "caption_position": "",
+  "headers": [
+    "ADC",
+    "Analog-to-digital conversion"
+  ],
+  "rows": [
+    [
+      "BLE",
+      "Bluetooth Low Energy"
+    ],
+    [
+      "DAC",
+      "Digital-to-analog converter"
+    ],
+    [
+      "DSP",
+      "Digital signal processing"
+    ],
+    [
+      "DC",
+      "Direct current"
+    ],
+    [
+      "EMG",
+      "Electromyography"
+    ],
+    [
+      "FDA",
+      "Filter Designer app"
+    ],
+    [
+      "FIR",
+      "Finite impulse response"
+    ],
+    [
+      "IIR",
+      "Infinite impulse response"
+    ],
+    [
+      "µC",
+      "Microcontroller"
+    ],
+    [
+      "OpAmp",
+      "Operational amplifier"
+    ],
+    [
+      "PLI",
+      "Power-line interference"
+    ],
+    [
+      "SNR",
+      "Signal-to-noise ratio"
+    ],
+    [
+      "STFT",
+      "Short-time Fourier transform"
+    ]
+  ],
+  "num_rows": 13,
+  "num_cols": 2,
+  "fill_rate": 1.0,
+  "bbox": [
+    76.53500366210938,
+    295.48175048828125,
+    236.2894287109375,
+    467.4615478515625
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "rawdict",
+  "footnotes": "",
+  "reference_context": "",
+  "markdown": "**Abbreviations**\n\n| ADC | Analog-to-digital conversion |\n| --- | --- |\n| BLE | Bluetooth Low Energy |\n| DAC | Digital-to-analog converter |\n| DSP | Digital signal processing |\n| DC | Direct current |\n| EMG | Electromyography |\n| FDA | Filter Designer app |\n| FIR | Finite impulse response |\n| IIR | Infinite impulse response |\n| µC | Microcontroller |\n| OpAmp | Operational amplifier |\n| PLI | Power-line interference |\n| SNR | Signal-to-noise ratio |\n| STFT | Short-time Fourier transform |"
+}

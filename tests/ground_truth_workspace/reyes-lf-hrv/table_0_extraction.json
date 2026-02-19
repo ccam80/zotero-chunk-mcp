@@ -1,0 +1,128 @@
+{
+  "paper": "reyes-lf-hrv",
+  "item_key": "AQ3D94VC",
+  "page_num": 3,
+  "table_index": 0,
+  "caption": "Table 1. Means and Standard Deviations (in Parentheses) of HRV Parameters Before and After Pharmacological Blockade",
+  "caption_position": "",
+  "headers": [
+    "",
+    "BL (pre drug)",
+    "Task (pre drug)",
+    "BL (post drug)",
+    "Task (post drug)",
+    "h2 (LB), h2 (Task)"
+  ],
+  "rows": [
+    [
+      "IBI",
+      "",
+      "",
+      "",
+      "",
+      ""
+    ],
+    [
+      "Atropine",
+      "938 (126)",
+      "871 (122)",
+      "563 (29)",
+      "550 (38)",
+      "0.906, 0.870"
+    ],
+    [
+      "b-blocker",
+      "876 (136)",
+      "845 (134)",
+      "1129 (155)",
+      "1109 (156)",
+      "0.980, 0.992"
+    ],
+    [
+      "VLF",
+      "",
+      "",
+      "",
+      "",
+      ""
+    ],
+    [
+      "Atropine",
+      "266 (273)",
+      "77 (44)",
+      "14 (23)",
+      "5 (2)",
+      "0.494, 0.752"
+    ],
+    [
+      "b-blocker",
+      "332 (579)",
+      "102 (105)",
+      "266 (156)",
+      "123 (75)",
+      "0.018, 0.062"
+    ],
+    [
+      "LF",
+      "",
+      "",
+      "",
+      "",
+      ""
+    ],
+    [
+      "Atropine",
+      "555 (421)",
+      "152 (122)",
+      "7 (7)",
+      "2 (1)",
+      "0.675, 0.643"
+    ],
+    [
+      "b-blocker",
+      "642 (1052)",
+      "305 (283)",
+      "509 (293)",
+      "366 (279)",
+      "0.031, 0.254"
+    ],
+    [
+      "HF",
+      "",
+      "",
+      "",
+      "",
+      ""
+    ],
+    [
+      "Atropine",
+      "547 (531)",
+      "175 (71)",
+      "1 (1)",
+      "1 (1)",
+      "0.559, 0.876"
+    ],
+    [
+      "b-blocker",
+      "578 (789)",
+      "206 (82)",
+      "502 (322)",
+      "443 (364)",
+      "0.011, 0.342"
+    ]
+  ],
+  "num_rows": 12,
+  "num_cols": 6,
+  "fill_rate": 0.7222222222222222,
+  "bbox": [
+    57.206695556640625,
+    80.70177459716797,
+    553.4557495117188,
+    202.87953186035156
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "rawdict",
+  "footnotes": "",
+  "reference_context": "itz et al., 1991; Zhong, Jan, Ju, & Chon, 2006). \n\nThe following results were obtained by reanalysis of a study of our own on HRV effects of pharmacological vagal and sympathetic blockade. Six healthy participants were assessed twice in a seated position. They received atropine (0.03 mg/kg i.v.) on Day 1 and the b _1_ -selective b-blocking agent metroprolol (10–15 mg i.v.) on Day 2 or vice versa. Before and after drug application, cardiovascular parameters were obtained at rest and during a memory search and counting task. HRV was analyzed by means of fast Fourier transformations (FFT) using the software Kubios HRV (version 2; Niskanen et al., 2004). Drug effects on the three frequency bands are shown in Table 1, and Figures 1 and 2 display corresponding spectral profiles. Atropine administration was followed by HRV decrease in all three frequency bands (all _ps_ < .05). This held true for the baseline (reductions of 94.7%, 98.7%, and 99.8% for VLF, LF, and HF oscillations, respectively) and task periods (reductions of 93.5%, 98.7%, and 99.4%, for VLF, LF, and HF oscillations, respectively). As can be seen in Figures 1 and 2, HRV in the entire spectrum almost disappeared. The administration of the b1-blocker showed only slight effects on HRV. During task execution HRV increased somewhat.",
+  "markdown": "**Table 1. Means and Standard Deviations (in Parentheses) of HRV Parameters Before and After Pharmacological Blockade**\n\n|  | BL (pre drug) | Task (pre drug) | BL (post drug) | Task (post drug) | h2 (LB), h2 (Task) |\n| --- | --- | --- | --- | --- | --- |\n| IBI |  |  |  |  |  |\n| Atropine | 938 (126) | 871 (122) | 563 (29) | 550 (38) | 0.906, 0.870 |\n| b-blocker | 876 (136) | 845 (134) | 1129 (155) | 1109 (156) | 0.980, 0.992 |\n| VLF |  |  |  |  |  |\n| Atropine | 266 (273) | 77 (44) | 14 (23) | 5 (2) | 0.494, 0.752 |\n| b-blocker | 332 (579) | 102 (105) | 266 (156) | 123 (75) | 0.018, 0.062 |\n| LF |  |  |  |  |  |\n| Atropine | 555 (421) | 152 (122) | 7 (7) | 2 (1) | 0.675, 0.643 |\n| b-blocker | 642 (1052) | 305 (283) | 509 (293) | 366 (279) | 0.031, 0.254 |\n| HF |  |  |  |  |  |\n| Atropine | 547 (531) | 175 (71) | 1 (1) | 1 (1) | 0.559, 0.876 |\n| b-blocker | 578 (789) | 206 (82) | 502 (322) | 443 (364) | 0.011, 0.342 |"
+}

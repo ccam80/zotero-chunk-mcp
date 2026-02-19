@@ -1,0 +1,47 @@
+{
+  "paper": "yang-ppv-meta",
+  "item_key": "DPYRZTFI",
+  "num_tables": 4,
+  "tables": [
+    {
+      "table_index": 0,
+      "table_id": "DPYRZTFI_table_1",
+      "page_num": 4,
+      "caption": "Table 1 Selected spectrum characteristics of included studies",
+      "artifact_type": null,
+      "image_path": "table_0.png",
+      "extraction_path": "table_0_extraction.json",
+      "gt_path": "table_0_gt.json"
+    },
+    {
+      "table_index": 1,
+      "table_id": "DPYRZTFI_table_2",
+      "page_num": 5,
+      "caption": "Table 2 Selected methodological characteristics of included studies",
+      "artifact_type": null,
+      "image_path": "table_1.png",
+      "extraction_path": "table_1_extraction.json",
+      "gt_path": "table_1_gt.json"
+    },
+    {
+      "table_index": 2,
+      "table_id": "DPYRZTFI_table_3",
+      "page_num": 6,
+      "caption": "Table 3 Diagnostic performance of pulse pressure variation from included studies",
+      "artifact_type": null,
+      "image_path": "table_2.png",
+      "extraction_path": "table_2_extraction.json",
+      "gt_path": "table_2_gt.json"
+    },
+    {
+      "table_index": 3,
+      "table_id": "DPYRZTFI_orphan_p7_t3",
+      "page_num": 7,
+      "caption": "Uncaptioned table on page 7",
+      "artifact_type": "figure_data_table",
+      "image_path": "table_3.png",
+      "extraction_path": "table_3_extraction.json",
+      "gt_path": "table_3_gt.json"
+    }
+  ]
+}

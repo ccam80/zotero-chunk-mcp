@@ -1,0 +1,16 @@
+{
+  "table_id": "VP3NJ74M_table_6",
+  "paper": "fortune-impedance",
+  "item_key": "VP3NJ74M",
+  "page_num": 6,
+  "table_index": 6,
+  "caption": "Table 6",
+  "headers": ["Electrode configuration", "R'_A (k\u03a9)", "C'_A (nF)", "R'_B (k\u03a9)", "C'_B (nF)"],
+  "rows": [
+    ["Ag/AgCl_NSP", "1884 \u00b1 3158", "144.8 \u00b1 237.2", "1748 \u00b1 1886", "141.8 \u00b1 207.4"],
+    ["Ag/AgCl_SP", "99.6 \u00b1 115.2", "6.6 \u00b1 9.9", "102.9 \u00b1 118.6", "6.8 \u00b1 10.4"],
+    ["Ag_SP", "2811 \u00b1 3736", "202.2 \u00b1 403.7", "2816 \u00b1 3465", "487.9 \u00b1 1153"]
+  ],
+  "notes": "",
+  "verified": false
+}

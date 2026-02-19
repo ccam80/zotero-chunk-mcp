@@ -1,0 +1,15 @@
+{
+  "table_id": "SCPXVBLY_table_1",
+  "paper": "active-inference-tutorial",
+  "item_key": "SCPXVBLY",
+  "page_num": 16,
+  "table_index": 2,
+  "caption": "Table 1 (continued).",
+  "headers": ["Model variable*", "General definition", "Model specification for explore\u2013exploit task (described in detail Section 3)"],
+  "rows": [
+    ["D vector: p(s\u2081)", "A vector encoding beliefs about (a probability distribution over) initial hidden states. When there is more than one hidden state factor, there is one D vector per state factor.", "The agent begins in an initial state of maximal uncertainty about the context state (prior to learning), but complete certainty that it will start in the \u2018start\u2019 choice state."],
+    ["E vector: p(\u03c0)", "A distribution encoding beliefs about what policies will be chosen a priori (a prior probability distribution over policies, implemented as a vector assigning one value to each policy), based on the number of times different actions have been chosen in the past.", "The agent has no initial habits to choose one slot machine or another (prior to learning)."]
+  ],
+  "notes": "Continuation of Table 1 from page 15. Footnote: *While, for consistency, we have used the standard notation found in the active inference literature, it is important to note that it does not always clearly distinguish between distributions and the possible values taken by random variables under those distributions. For example, \u03c0 refers to the distribution over policies, but when... (text truncated at page bottom).",
+  "verified": false
+}

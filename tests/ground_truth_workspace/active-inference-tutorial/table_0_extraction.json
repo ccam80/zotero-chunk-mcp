@@ -1,0 +1,69 @@
+{
+  "paper": "active-inference-tutorial",
+  "item_key": "SCPXVBLY",
+  "page_num": 1,
+  "table_index": 0,
+  "caption": "c MRC Cognition and Brain Sciences Unit, University of Cambridge, Cambridge, UK",
+  "caption_position": "",
+  "headers": [
+    "a r t i c l e",
+    "i n f o",
+    "a b s t r a c t"
+  ],
+  "rows": [
+    [
+      "Article history:",
+      "",
+      "The active inference framework, and in particular its recent formulation as a partially observable"
+    ],
+    [
+      "Received 1 March 2021",
+      "",
+      "Markov decision process (POMDP), has gained increasing popularity in recent years as a useful"
+    ],
+    [
+      "Received in revised form 11 September 2021 Accepted 15 November 2021 Available online 4 February 2022",
+      "",
+      "approach for modeling neurocognitive processes. This framework is highly general and flexible in its ability to be customized to model any cognitive process, as well as simulate predicted neuronal responses based on its accompanying neural process theory. It also affords both simulation experiments"
+    ],
+    [
+      "Keywords:",
+      "",
+      "for proof of principle and behavioral modeling for empirical studies. However, there are limited"
+    ],
+    [
+      "Active inference",
+      "",
+      "resources that explain how to build and run these models in practice, which limits their widespread"
+    ],
+    [
+      "Computational neuroscience",
+      "",
+      "use. Most introductions assume a technical background in programming, mathematics, and machine"
+    ],
+    [
+      "Bayesian inference",
+      "",
+      "learning. In this paper we offer a step-by-step tutorial on how to build POMDPs, run simulations using"
+    ],
+    [
+      "Learning Decision-making Machine learning",
+      "",
+      "standard MATLAB routines, and fit these models to empirical data. We assume a minimal background in programming and mathematics, thoroughly explain all equations, and provide exemplar scripts that can be customized for both theoretical and empirical studies. Our goal is to provide the reader with the requisite background knowledge and practical tools to apply active inference to their own research. We also provide optional technical sections and multiple appendices, which offer the interested reader additional technical details. This tutorial should provide the reader with all the tools necessary to use these models and to follow emerging advances in active inference research. © 2021 The Author(s). Published by Elsevier Inc. This is an open access article under the CC BY-NC-ND license (http://creativecommons.org/licenses/by-nc-nd/4.0/)."
+    ]
+  ],
+  "num_rows": 8,
+  "num_cols": 3,
+  "fill_rate": 0.6666666666666666,
+  "bbox": [
+    37.61600112915039,
+    267.1307067871094,
+    557.6639404296875,
+    457.1090087890625
+  ],
+  "artifact_type": "article_info_box",
+  "extraction_strategy": "rawdict",
+  "footnotes": "",
+  "reference_context": "",
+  "markdown": "**c MRC Cognition and Brain Sciences Unit, University of Cambridge, Cambridge, UK**\n\n| a r t i c l e | i n f o | a b s t r a c t |\n| --- | --- | --- |\n| Article history: |  | The active inference framework, and in particular its recent formulation as a partially observable |\n| Received 1 March 2021 |  | Markov decision process (POMDP), has gained increasing popularity in recent years as a useful |\n| Received in revised form 11 September 2021 Accepted 15 November 2021 Available online 4 February 2022 |  | approach for modeling neurocognitive processes. This framework is highly general and flexible in its ability to be customized to model any cognitive process, as well as simulate predicted neuronal responses based on its accompanying neural process theory. It also affords both simulation experiments |\n| Keywords: |  | for proof of principle and behavioral modeling for empirical studies. However, there are limited |\n| Active inference |  | resources that explain how to build and run these models in practice, which limits their widespread |\n| Computational neuroscience |  | use. Most introductions assume a technical background in programming, mathematics, and machine |\n| Bayesian inference |  | learning. In this paper we offer a step-by-step tutorial on how to build POMDPs, run simulations using |\n| Learning Decision-making Machine learning |  | standard MATLAB routines, and fit these models to empirical data. We assume a minimal background in programming and mathematics, thoroughly explain all equations, and provide exemplar scripts that can be customized for both theoretical and empirical studies. Our goal is to provide the reader with the requisite background knowledge and practical tools to apply active inference to their own research. We also provide optional technical sections and multiple appendices, which offer the interested reader additional technical details. This tutorial should provide the reader with all the tools necessary to use these models and to follow emerging advances in active inference research. © 2021 The Author(s). Published by Elsevier Inc. This is an open access article under the CC BY-NC-ND license (http://creativecommons.org/licenses/by-nc-nd/4.0/). |"
+}

@@ -1,0 +1,60 @@
+{
+  "paper": "roland-emg-filter",
+  "item_key": "Z9X4JVZ5",
+  "page_num": 20,
+  "table_index": 7,
+  "caption": "Table 7. Effect of reducing sampling and clock frequency on power consumption and signal quality.",
+  "caption_position": "",
+  "headers": [
+    "Sampling Frequency fS (kHz)",
+    "µC Clock Frequency (MHz)",
+    "Power Consumption (mW)",
+    "SNR"
+  ],
+  "rows": [
+    [
+      "10.0",
+      "48",
+      "31.5",
+      "12.6"
+    ],
+    [
+      "5.0",
+      "16",
+      "20.5",
+      "12.6"
+    ],
+    [
+      "2.0",
+      "8",
+      "15.9",
+      "11.2"
+    ],
+    [
+      "1.0",
+      "4",
+      "14.4",
+      "10.1"
+    ],
+    [
+      "0.5",
+      "2",
+      "13.7",
+      "7.8"
+    ]
+  ],
+  "num_rows": 5,
+  "num_cols": 4,
+  "fill_rate": 1.0,
+  "bbox": [
+    97.95500183105469,
+    195.29542541503906,
+    497.3179016113281,
+    266.0124816894531
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "words-column",
+  "footnotes": "",
+  "reference_context": "rise also floating point implementations. The relation between µC clock µC clockC clock frequency and power consumption is given in Table 7. Due to the fact that the ADC clock is connected to the µC clock, the ADC settings have to be checked and recalculated accordingly. \n\nsensor configuration or data transfer to the PC. In deep sleep mode, the power consumption of the \n\nBLE module is negligible. However, the high clock frequency was selected to avoid limitations in \n\nthe experiments, which comprise also floating point implementations. The relation between µC clock µC clockC clock \n\n\n## _4.8. Signal Quality Dependent on DSP Sampling Frequency_ \n\nThe reduction of the DSP sampling frequency allows a reduction of the clock frequency, which further reduces the power consumption, see Table 7. Figure 17 shows that a reduction of the DSP sampling frequency also reduces the SNR as high frequency noise is reflected to the EMG frequency range. \n\nfrequency range. \n\n**Table 7.** Effect of reducing sampling and clock frequency on power consumption and signal quality. \n\n|**Sampling**|**Frequency**|**_fS_ (kHz)**|**µC**|**Clock**|**Frequency**|**(MHz)**|**Power**|**Consumption**|**(mW)**|**SNR**|\n|---|---|---|---|---|---|---|---|---|---|---|\n||10.0||||48|||31.5||12.6|\n||5.0||||16|||20.5||12.6|\n||2.0||||8|||15.9||11.2|\n||1.0||||4|||14.4||10.1|\n||0.5||||2|||13.7||7.8|\n\n\n\n**==> picture [297 x 187] intentionally omitted <==**\n\n**----- Start of picture text -----**<br>\n15<br>10<br>5<br>0<br>10 5 2 1 0.5<br>DSP Sampling Frequency fS (kHz)<br>SNR ()<br>**----- End of picture text -----**<br>\n\n\n*",
+  "markdown": "**Table 7. Effect of reducing sampling and clock frequency on power consumption and signal quality.**\n\n| Sampling Frequency fS (kHz) | µC Clock Frequency (MHz) | Power Consumption (mW) | SNR |\n| --- | --- | --- | --- |\n| 10.0 | 48 | 31.5 | 12.6 |\n| 5.0 | 16 | 20.5 | 12.6 |\n| 2.0 | 8 | 15.9 | 11.2 |\n| 1.0 | 4 | 14.4 | 10.1 |\n| 0.5 | 2 | 13.7 | 7.8 |"
+}

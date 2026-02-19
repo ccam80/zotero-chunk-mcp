@@ -68,6 +68,28 @@ When a `find_tables()` result is wrong:
 The correct response to "find_tables() merges two tables" is "detect the merge and
 split using word positions and caption detection", not "this is a PyMuPDF limitation".
 
+### Test Integrity
+
+Test conditions and assertions are NEVER modified to fit the PDF corpus, perceived
+limitations of extraction methods, or to make a failing test pass. If a test fails,
+the code is wrong — fix the code, not the test.
+
+Tests assert 100% functionality or are regarded as a complete failure. There is no
+"80% correct is good enough." If a table has 10 columns, the extraction must find
+10 columns. If a cell contains "0.047", the extraction must return "0.047".
+
+Tests on synthetic data (programmatically generated PDFs, mock objects) are syntax
+checks only. They verify that functions accept the right arguments and return the
+right types. They tell you NOTHING about whether extraction works on real papers.
+The only data that matters is real-paper performance measured by the stress test.
+
+### Extraction Time Budget
+
+Extra extraction time is acceptable. The pipeline should try every available method
+and pick the best result, not skip methods to save time. Correctness always beats
+speed. If running all methods takes 30 seconds per table instead of 3 seconds, that
+is fine.
+
 ### Performance Testing
 
 **The stress test is the ground truth.** Synthetic unit tests validate individual

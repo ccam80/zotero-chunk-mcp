@@ -1,0 +1,57 @@
+{
+  "paper": "reyes-lf-hrv",
+  "item_key": "AQ3D94VC",
+  "num_tables": 5,
+  "tables": [
+    {
+      "table_index": 0,
+      "table_id": "AQ3D94VC_table_1",
+      "page_num": 3,
+      "caption": "Table 1. Means and Standard Deviations (in Parentheses) of HRV Parameters Before and After Pharmacological Blockade",
+      "artifact_type": null,
+      "image_path": "table_0.png",
+      "extraction_path": "table_0_extraction.json",
+      "gt_path": "table_0_gt.json"
+    },
+    {
+      "table_index": 1,
+      "table_id": "AQ3D94VC_table_2",
+      "page_num": 4,
+      "caption": "Table 2. Means and Standard Deviations (in Parentheses) of HRV Parameters of Physically Active (A) and Sedentary (S) Participants in the Martín-Vázquez and Reyes del Paso (2010) Study during Baseline and a Mental Arithmetic Task",
+      "artifact_type": null,
+      "image_path": "table_1.png",
+      "extraction_path": "table_1_extraction.json",
+      "gt_path": "table_1_gt.json"
+    },
+    {
+      "table_index": 2,
+      "table_id": "AQ3D94VC_table_3",
+      "page_num": 6,
+      "caption": "Table 3. Correlations of HRV Parameters Obtained by Fast Fourier Transformations with Interbeat Interval (IBI), Pulse Transit Time (PTT), and Baroreflex Sensitivity (BRS) Recorded during Baseline (BL) and Cognitive Load (Task) in the Duschek, Muckenthaler, et al. (2009; Panel A, n = 60) and Duschek et al. (2013; Panel B, n = 54) Studies",
+      "artifact_type": null,
+      "image_path": "table_2.png",
+      "extraction_path": "table_2_extraction.json",
+      "gt_path": "table_2_gt.json"
+    },
+    {
+      "table_index": 3,
+      "table_id": "AQ3D94VC_table_4",
+      "page_num": 6,
+      "caption": "Table 4. Correlations of HRV Parameters Obtained by the Autoregression Technique with Interbeat Interval (IBI), Pre- Ejection Period (PEP), and Baroreflex Sensitivity (BRS) in the Physical Exercise Study (cf. Table 2) by Martín-Vázquez and Reyes del Paso (2010; Panel A, n = 40) and in the Chronic Pain Study by Reyes del Paso, Garrido, et al. (2010; Panel B, n = 64)",
+      "artifact_type": null,
+      "image_path": "table_3.png",
+      "extraction_path": "table_3_extraction.json",
+      "gt_path": "table_3_gt.json"
+    },
+    {
+      "table_index": 4,
+      "table_id": "AQ3D94VC_table_5",
+      "page_num": 7,
+      "caption": "Table 5. Hypothetical Database Displaying HRV Indices Together with a Dependent Variable (DV) for 10 Subjects",
+      "artifact_type": null,
+      "image_path": "table_4.png",
+      "extraction_path": "table_4_extraction.json",
+      "gt_path": "table_4_gt.json"
+    }
+  ]
+}

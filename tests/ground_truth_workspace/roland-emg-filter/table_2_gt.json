@@ -1,0 +1,31 @@
+{
+  "table_id": "Z9X4JVZ5_table_2",
+  "paper": "roland-emg-filter",
+  "item_key": "Z9X4JVZ5",
+  "page_num": 10,
+  "table_index": 2,
+  "caption": "Table 2. Floating-point highpass filter coefficients.",
+  "headers": ["Filter", "a[0]", "a[1]", "a[2]", "b[0]", "b[1]", "b[2]"],
+  "rows": [
+    ["20 Hz Che", "1", "-1.9836", "0.9839", "1", "-2", "1"],
+    ["30 Hz Che", "1", "-1.9754", "0.9759", "1", "-2", "1"],
+    ["40 Hz Che", "1", "-1.9664", "0.9674", "1", "-2", "1"],
+    ["50 Hz Che", "1", "-1.9580", "0.9596", "1", "-2", "1"],
+    ["60 Hz Che", "1", "-1.9496", "0.9518", "1", "-2", "1"],
+    ["70 Hz Che", "1", "-1.9418", "0.9449", "1", "-2", "1"],
+    ["80 Hz Che", "1", "-1.9333", "0.9370", "1", "-2", "1"],
+    ["90 Hz Che", "1", "-1.9247", "0.9294", "1", "-2", "1"],
+    ["100 Hz Che", "1", "-1.9168", "0.9225", "1", "-2", "1"],
+    ["20 Hz But", "1", "-1.9824", "0.9825", "1", "-2", "1"],
+    ["30 Hz But", "1", "-1.9733", "0.9735", "1", "-2", "1"],
+    ["40 Hz But", "1", "-1.9645", "0.9651", "1", "-2", "1"],
+    ["50 Hz But", "1", "-1.9556", "0.9565", "1", "-2", "1"],
+    ["60 Hz But", "1", "-1.9467", "0.9481", "1", "-2", "1"],
+    ["70 Hz But", "1", "-1.9378", "0.9397", "1", "-2", "1"],
+    ["80 Hz But", "1", "-1.9289", "0.9314", "1", "-2", "1"],
+    ["90 Hz But", "1", "-1.9201", "0.9231", "1", "-2", "1"],
+    ["100 Hz But", "1", "-1.9112", "0.9150", "1", "-2", "1"]
+  ],
+  "notes": "Filter names in italic. 'Che' = Chebyshev, 'But' = Butterworth. Image also contains Figure 8 (two frequency-response plots) below the table. The image rendering is small; some digit values may need verification against the original PDF.",
+  "verified": false
+}

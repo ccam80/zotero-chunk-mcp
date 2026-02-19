@@ -1,0 +1,17 @@
+{
+  "paper": "hallett-tms-primer",
+  "item_key": "C626CYVT",
+  "num_tables": 1,
+  "tables": [
+    {
+      "table_index": 0,
+      "table_id": "C626CYVT_table_1",
+      "page_num": 6,
+      "caption": "Table 1. Summary of Noninvasive Methods for Excitation and Inhibition",
+      "artifact_type": null,
+      "image_path": "table_0.png",
+      "extraction_path": "table_0_extraction.json",
+      "gt_path": "table_0_gt.json"
+    }
+  ]
+}

@@ -2094,8 +2094,26 @@ def _extract_tables_native(
         table_bboxes = [bbox for _, bbox, _, _, _ in page_tables]
         matched_captions = _match_by_proximity(table_bboxes, caption_hits)
 
+        # Build caption text → bbox lookup for bbox clipping
+        caption_bbox_lookup: dict[str, tuple] = {}
+        for _yc, _ctxt, _cbbox in caption_hits:
+            caption_bbox_lookup[_ctxt] = _cbbox
+
         for i, (_, bbox, headers, rows, strat_name) in enumerate(page_tables):
             caption = matched_captions[i]
+
+            # Clip table bbox to exclude caption that falls inside it.
+            # When find_tables() captures a caption (and any artifacts above
+            # it, like equations) inside the table bbox, those extra rows
+            # poison downstream column detection and repair.  Trim the bbox
+            # top to the caption's bottom edge so word-based re-extraction
+            # sees only actual table content.
+            if caption and caption in caption_bbox_lookup:
+                cap_bbox = caption_bbox_lookup[caption]
+                cap_bottom = cap_bbox[3]
+                # Caption must be inside the table bbox (not just above it)
+                if cap_bottom > bbox[1] and cap_bottom < bbox[3]:
+                    bbox = (bbox[0], cap_bottom, bbox[2], bbox[3])
 
             # Absorbed caption handling:
             # - No external match: use regex fallback to find "Table N" in grid

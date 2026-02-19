@@ -1,0 +1,56 @@
+{
+  "paper": "friston-life",
+  "item_key": "YMWV46JA",
+  "page_num": 2,
+  "table_index": 0,
+  "caption": "Table 1. Definitions of the tuple ðV; C; S; A; L; p; qÞ underlying active inference.",
+  "caption_position": "",
+  "headers": [],
+  "rows": [
+    [
+      "a sample space V or non-empty set from which random fluctuations or outcomes v [ V are drawn"
+    ],
+    [
+      "external states C",
+      "C A V ! R states of the world that cause sensory states and depend on action"
+    ],
+    [
+      "sensory states S",
+      "C A V ! R the agent’s sensations that constitute a probabilistic mapping from action and external states"
+    ],
+    [
+      "action states A",
+      "S L V ! R an agent’s action that depends"
+    ],
+    [
+      "on its sensory and internal states internal states L",
+      "L S V ! R the states of the agent that"
+    ],
+    [
+      "cause action and depend on sensory states ergodic density pðc; s; a; ljmÞ a probability density function over"
+    ],
+    [
+      "external c [ C, sensory s [ S, active a [ A and internal states"
+    ],
+    [
+      "l [ L for a system denoted by m variational density q(cjl) an arbitrary probability density function"
+    ],
+    [
+      "over external states that is parametrized by internal states"
+    ]
+  ],
+  "num_rows": 9,
+  "num_cols": 2,
+  "fill_rate": 1.0,
+  "bbox": [
+    311.8106689453125,
+    41.99320983886719,
+    552.7269897460938,
+    63.51240921020508
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "",
+  "footnotes": "",
+  "reference_context": "m. We will refer to this probability measure as the ergodic density. \n\nA Markov blanket is a set of states that separates two other sets in a statistical sense. The term Markov blanket was introduced in the context of Bayesian networks or graphs [28] and refers to the children of a set (the set of states that \n\nTable 1. Definitions of the tuple ðV; C; S; A; L; p; qÞ underlying active 2 inference. \n\na sample space V or non-empty set from which random fluctuations or outcomes v [ V are drawn external states C : C � A � V ! R states of the world that cause sensory states and depend on action sensory states S : C � A � V ! R the agent’s sensations that constitute a probabilistic mapping from action and external states action states A : S � L � V ! R an agent’s action that depends on its sensory and internal states internal states L : L � S � V ! R the states of the agent that cause action and depend on sensory states ergodic density pðc; s; a; ljmÞ a probability density function over external c [ C, sensory s [ S, active a [ A and internal states l [ L for a system denoted by m variational density q(cjl) an arbitrary probability density function over external states that is parametrized by internal states \n\nare influenced), its parents (the set of states that influence it) and the parents of its children. The notion of influence or dependency is central to a Markov blanket and its existence implies that any state is—or is not—coupled to another. For example, the system could comprise an ensemble of subsystems, each occupying its own position in a Euclidean space.",
+  "markdown": "**Table 1. Definitions of the tuple ðV; C; S; A; L; p; qÞ underlying active inference.**\n\n| a sample space V or non-empty set from which random fluctuations or outcomes v [ V are drawn |  |\n| external states C | C A V ! R states of the world that cause sensory states and depend on action |\n| sensory states S | C A V ! R the agent’s sensations that constitute a probabilistic mapping from action and external states |\n| action states A | S L V ! R an agent’s action that depends |\n| on its sensory and internal states internal states L | L S V ! R the states of the agent that |\n| cause action and depend on sensory states ergodic density pðc; s; a; ljmÞ a probability density function over |  |\n| external c [ C, sensory s [ S, active a [ A and internal states |  |\n| l [ L for a system denoted by m variational density q(cjl) an arbitrary probability density function |  |\n| over external states that is parametrized by internal states |  |"
+}

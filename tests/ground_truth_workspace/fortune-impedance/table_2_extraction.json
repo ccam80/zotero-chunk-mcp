@@ -1,0 +1,73 @@
+{
+  "paper": "fortune-impedance",
+  "item_key": "VP3NJ74M",
+  "page_num": 5,
+  "table_index": 2,
+  "caption": "Table 2 Error between the custom impedance analyser (CIA) and the theoretical impedance of the control DUT over the range of 1 Hz–100 kHz (magnitude) and 1 Hz–10 kHz (phase), quantified by the root-mean-square error normalised using the mean of the theoretical impedance of the control DUT.",
+  "caption_position": "",
+  "headers": [
+    "ZA",
+    "ZB",
+    "",
+    "",
+    ""
+  ],
+  "rows": [
+    [
+      "|𝑍|",
+      "|𝑍|",
+      "",
+      "",
+      ""
+    ],
+    [
+      "Data set",
+      "(%)",
+      "𝜙(%)",
+      "(%)",
+      "𝜙(%)"
+    ],
+    [
+      "1",
+      "4.7",
+      "2.7",
+      "5.7",
+      "5.3"
+    ],
+    [
+      "2",
+      "5.3",
+      "1.6",
+      "5.6",
+      "1.5"
+    ],
+    [
+      "3",
+      "3.8",
+      "3.4",
+      "4.6",
+      "4.2"
+    ],
+    [
+      "Mean (SD)",
+      "4.6 (0.7)",
+      "2.6 (0.9)",
+      "5.3 (0.6)",
+      "3.6 (2.0)"
+    ]
+  ],
+  "num_rows": 6,
+  "num_cols": 5,
+  "fill_rate": 0.9,
+  "bbox": [
+    42.119998931884766,
+    100.859375,
+    284.15045166015625,
+    159.5083465576172
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "rawdict",
+  "footnotes": "",
+  "reference_context": "le compensation components for electrode A, and _𝑅_[′] _𝐵_[and] _[ 𝐶] 𝐵_[′][are the] variable compensation components for electrode B. These components will be digitally tunable, allowing the electrode–skin impedance to be measured and automatically balanced. As the electrode–skin impedance has a temporal relationship, the electrode–skin impedance will need to be measured and balanced repeatedly. \n\nNon-linear least squares (NLLS) regression was used to simultaneously minimise the magnitude and phase imbalance of the experimental electrode–skin impedance data, therefore, simulating electrode–skin \n\n\n**Table 2** \n\nError between the custom impedance analyser (CIA) and the theoretical impedance of the control DUT over the range of 1 Hz–100 kHz (magnitude) and 1 Hz–10 kHz (phase), quantified by the root-mean-square error normalised using the mean of the theoretical impedance of the control DUT. \n\n|||ZA|||ZB||\n|---|---|---|---|---|---|---|\n|Data|set||_𝑍_||(%)|_𝜙_(%)||_𝑍_|(%)|_𝜙_(%)|\n|1||4.7||2.7|5.7|5.3|\n|2||5.3||1.6|5.6|1.5|\n|3||3.8||3.4|4.6|4.2|\n|Mean|(SD)|4.6|(0.7)|2.6 (0.9)|5.3 (0.6)|3.6 (2.0)|\n\n\n\nimpedance compensation. As the residual error was a function of both magnitude and phase, the frequency range was limited to that of the phase data (1 Hz–9.4 kHz). The NLLS regression was implemented using the interior point algorithm in MATLAB (R2019b, MathWorks). The bounds of the NLLS regression was set to physical limits desired for the compensation network.",
+  "markdown": "**Table 2 Error between the custom impedance analyser (CIA) and the theoretical impedance of the control DUT over the range of 1 Hz–100 kHz (magnitude) and 1 Hz–10 kHz (phase), quantified by the root-mean-square error normalised using the mean of the theoretical impedance of the control DUT.**\n\n| ZA | ZB |  |  |  |\n| --- | --- | --- | --- | --- |\n| |𝑍| | |𝑍| |  |  |  |\n| Data set | (%) | 𝜙(%) | (%) | 𝜙(%) |\n| 1 | 4.7 | 2.7 | 5.7 | 5.3 |\n| 2 | 5.3 | 1.6 | 5.6 | 1.5 |\n| 3 | 3.8 | 3.4 | 4.6 | 4.2 |\n| Mean (SD) | 4.6 (0.7) | 2.6 (0.9) | 5.3 (0.6) | 3.6 (2.0) |"
+}

@@ -1,0 +1,36 @@
+{
+  "paper": "huang-emd-1998",
+  "item_key": "XIAINRVS",
+  "page_num": 2,
+  "table_index": 1,
+  "caption": "N. E. Huang and others",
+  "caption_position": "",
+  "headers": [
+    "10. Discussion",
+    "987"
+  ],
+  "rows": [
+    [
+      "11. Conclusions",
+      "991"
+    ],
+    [
+      "References",
+      "993"
+    ]
+  ],
+  "num_rows": 2,
+  "num_cols": 2,
+  "fill_rate": 1.0,
+  "bbox": [
+    100.34600067138672,
+    111.2261734008789,
+    482.9256896972656,
+    145.99856567382812
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "words-column",
+  "footnotes": "",
+  "reference_context": "",
+  "markdown": "**N. E. Huang and others**\n\n| 10. Discussion | 987 |\n| --- | --- |\n| 11. Conclusions | 991 |\n| References | 993 |"
+}

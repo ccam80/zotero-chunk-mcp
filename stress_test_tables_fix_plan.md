@@ -1,234 +1,280 @@
-# Table Extraction Pipeline — Post-Implementation Audit & Revised Plan
+# Table Extraction — Fix Plan
 
-## Summary
+## Current State
 
-7 fixes were implemented. Investigation on real papers reveals:
+0 MAJOR, 15 MINOR failures (6 abstract, 5 section, 3 table-content-quality, 1 chunk-count).
+9 tables with fill < 70%. Root cause: single global gap threshold cannot
+represent tables with heterogeneous row structures.
 
-| Fix | Status | Effect on real papers |
-|-----|--------|---------------------|
-| 1. Headers from rawdict | Implemented, minimal impact | Only 1 table (laird-fick T3) has different output. Keep but low value. |
-| 2. Control char stripping | **Working** | Strips chars from 24 cells in helm-coregulation. |
-| 3. Caption swap (Euclidean) | Implemented, narrow scope | Triggers only for fortune pg5 (T2/T3). Reyes tables are NOT side-by-side. |
-| 4. Absorbed caption substring | **Not working** | Misses active-inference T4 (caption split across cells) and roland T2 (caption in row 2). |
-| 5. Merged-word headers | **Working** | Fixes 8+ headers across yang T0/T1, laird-fick T4. |
-| 6. Column detection | **Wrong approach, causes regression** | Never fires for target (active-inference T2). Causes helm regression (7->6 cols, 58%->41% fill). |
-| 7. Artifact real-caption guard | **Working** | All expected artifacts classified correctly. |
+## Previously Implemented Fixes — Status
 
-Baseline was 15 MINOR. Current is 16 MINOR (+1 helm-coregulation table-1 regression from Fix 6).
-
----
-
-## Fix 1: Headers from rawdict
-
-### What it does
-Uses `cleaned_rows[0]` (from multi-strategy winner, usually rawdict) for internal headers instead of `tab.header.names` (midpoint path). For external headers, re-extracts via `_table_mod.extract_cells`.
-
-### Investigation findings
-- Across all 10 papers, only **1 table** (laird-fick T3) has `tab.header.names` differ from `tab.extract()[0]`. In that case `header.names` picked up a stray word "patients" that `extract()[0]` missed.
-- The real header improvements (e.g. fortune T1 decimal displacement `9982\n.` -> `998.2`) come from multi-strategy extraction scoring, not from Fix 1 itself.
-- Fix 1's contribution is that `cleaned_rows[0]` uses the winning strategy's output. Without Fix 1, headers always go through midpoint even when rawdict won for the body.
-
-### Verdict
-**Keep as-is.** Low independent impact but architecturally correct -- headers should come from the same extraction strategy as the body. No regressions.
+| Fix | Status | Action |
+|-----|--------|--------|
+| 1. Headers from rawdict | Working, low impact | Keep |
+| 2. Control char stripping | **Actively harmful** — strips β from helm T2 | Rework (Fix 3 below) |
+| 3. Caption swap (Euclidean) | Working for fortune pg5 | Keep |
+| 4. Absorbed caption substring | Not working (2 bugs) | Rework (Fix 4 below) |
+| 5. Merged-word headers | Working, clear value | Keep |
+| 6. Column detection comparison | Wrong approach, regression | **Removed** |
+| 7. Artifact real-caption guard | Working correctly | Keep |
 
 ---
 
-## Fix 2: Control character stripping
+## Fix 1: Remove `_word_based_column_detection` — DONE
 
-### What it does
-Strips `\x00-\x08`, `\x0b-\x0c`, `\x0e-\x1f` from cell text at the start of `_clean_cell_text()`.
-
-### Investigation findings
-- **helm-coregulation**: 24 raw cells on page 5 contain `\x08` (backspace), `\x03` (ETX), `\x02` (STX). All stripped successfully -- zero control chars in extracted output.
-- **friston-life**: No control characters in raw source. Fix 2 is a no-op here.
-- No regressions. Preserves `\t`, `\n`, `\r` which are used as signals downstream.
-
-### Verdict
-**Keep as-is.** Working correctly, clean implementation, zero risk.
+Deleted the function and its call site. It duplicated `_repair_low_fill_table`,
+never fired for its intended target, and caused the helm regression.
 
 ---
 
-## Fix 3: Caption swap in 2-column papers
+## Fix 2: Hotspot column detection + continuation merge
 
-### What it does
-Detects side-by-side objects (y-overlap > 30% of shorter height), switches from ordinal y-sort matching to Euclidean distance matching.
+Replaces `_find_column_gap_threshold`, `_repair_low_fill_table`, and
+`_merge_over_divided_rows`. Applied to ALL tables as the primary extraction
+path. Multi-strategy extraction (rawdict/midpoint/words) is also replaced —
+hotspot builds its own grid from word positions, so decimal displacement
+doesn't exist (whole words assigned to columns, not characters to cells).
 
-### Investigation findings
-- **fortune-impedance pg5**: T2 (x=42-284) and T3 (x=311-553) are fully side-by-side (y-overlap ratio 1.00). Fix 3 triggers. Captions correctly assigned (Table 2 -> left, Table 3 -> right).
-- **fortune-impedance pg6**: T5 and T6 share identical bboxes (116-480, 507-657). Fix 3 triggers but this looks like a duplicate/merged extraction issue, not a side-by-side layout.
-- **reyes-lf-hrv**: No side-by-side tables at all. pg6 has T2 (y=136-276) and T3 (y=554-693) -- vertically stacked, not side-by-side. Fix 3 **never fires** for this paper.
-- **roland-emg-filter**: Despite being 2-column IEEE, all tables span full width. No side-by-side tables.
+`find_tables()` is retained only for **bbox detection**.
 
-### Verdict
-**Keep as-is.** Correctly handles the fortune pg5 case. Reyes tables were incorrectly identified as a target in the original plan -- they're vertically stacked.
+### The problem
 
----
+`_find_column_gap_threshold` pools ALL word gaps from ALL rows into one
+distribution and looks for a single separating threshold. This fails when:
 
-## Fix 4: Absorbed caption via substring match
+1. **Math micro-gaps** (active-inference Table 2): 0.0005pt gaps from math
+   fragments poison the ratio break → threshold 0.016pt → 24 columns.
+2. **Single-word cells** (helm Table 2, reyes Table 5): All gaps are
+   inter-column. No bimodal distribution exists to separate.
+3. **Prose cells** (active-inference Table 2): Intra-cell word spacing
+   (2.8pt) matches body text. Global threshold either over-splits or
+   under-splits.
 
-### What it does
-When a caption IS matched externally, `_strip_known_caption_from_table()` checks if the caption text also leaked into the headers or first 3 rows of the table grid, and removes it.
+These are the SAME problem: a single global threshold cannot represent a
+table where different rows have different gap structures.
 
-### Investigation findings -- NOT WORKING for 2 targets:
+### Per-table findings
 
-**active-inference T4** -- Caption `Table 2 (continued).` absorbed into headers as `['Table', '2', '(continued).', '']`. The function's substring logic SHOULD match (`"table 2"` prefix is in joined header text), and the per-cell guard SHOULD pass. But this table comes from `_split_at_internal_captions()`. The absorbed caption is in a data row of the PRE-SPLIT table. `_strip_known_caption_from_table` runs BEFORE `_split_at_internal_captions`, so it operates on the wrong grid.
+#### active-inference Table 2 (p18-19) — 24c/42% → should be 4c
 
-**roland T2** -- Caption `"Table 2. Floating-point highpass filter coefficients."` appears in row 2. Rows 0-1 contain equation text (`"GHP[z] = ..."`, `"HPin[z] ..."`). The function's `else: break` early-exit stops scanning at row 0 (non-matching) and never reaches row 2.
+- Header row has 4 clear columns at x=[107.5, 223.9, 378.3].
+- Most rows are continuations with text in 1-2 columns.
+- Old global threshold at 378.3 over-splits — prose cells in single
+  columns get divided. With gap-interval detection, these prose cells
+  produce no gap at that x-position, so the spurious boundary won't form.
 
-### Bugs
+#### helm Table 2 (p6) — 6c/39% → should be 6c
 
-1. **Early-exit logic** (`else: break`) stops scanning at the first non-matching row. Absorbed captions can appear after equation/header rows. Fix: scan all rows in range, don't stop at first non-match.
+- Header: 6 words, ALL gaps are inter-column (17-32pt). No word-level gaps.
+- Inline header rows ("Baseline", "Conversation") at x≈48, coefficient
+  labels (β₀ₘ, β₁f) at x≈121-133. These are exclusive-or with data columns.
+- β encoded as `\x06` in `Universal-GreekwithMathP` — deleted by Fix 2.
 
-2. **Ordering problem** -- `_strip_known_caption_from_table` runs before `_split_at_internal_captions`. For continuation tables created by the split, the absorbed caption is in a data row of the pre-split table. Fix: also run caption stripping on each segment AFTER splitting.
+#### roland Table 2 (p10) — 10c/50% → should be 7c
 
-### Reproposal
+- R0-R2: equations captured in table bbox (not table data).
+- R3: absorbed caption.
+- R4: header, R5-R22: data (7 cols, extremely consistent).
+- R23+: figure data captured below table.
 
-```python
-# Bug A fix: remove early-exit, scan all rows in range 0..min(4, len)
-for ri, row in enumerate(cleaned_rows):
-    if ri > 3:
-        break
-    if _row_matches_caption(row):
-        remove_indices.add(ri)
-    elif row and _cell_contains_caption(row[0]):
-        # clear just the first cell if other cells have data
-        ...
+#### active-inference Table 3 continued (p31) — 4c/53% → should be 4c
 
-# Bug B fix: after _split_at_internal_captions, strip each segment's caption
-for seg in segments:
-    if seg["caption"]:
-        seg["headers"], seg["rows"] = _strip_known_caption_from_table(
-            seg["caption"], seg["headers"], seg["rows"]
-        )
+- Column count correct but fill low from continuation rows.
+
+#### reyes Table 5 (p7) — 2c/55% → should be 9c
+
+- Every row: 9 single-word cells. All gaps 10-27pt. No intra-word gaps.
+- Hotspot consensus: 9 cols, 100% agreement.
+
+#### reyes Table 2 (p4) — 6c/56% → should be 6c
+
+- Full data rows: 6 cols. Partial data rows: 3 cols (cols 0-2 only).
+- Inline headers ("IBI", "SPD", "VLF", "LF HF") as single-word rows.
+
+#### yang Table 2 (p5) — 13c → should be 15c
+
+- Year→Vt gap is 6.13pt, recurs at x≈205 across all data rows.
+- Continuation rows: R7 ("blood flow Doppler"), R12 ("colleagues [31]").
+
+#### yang Table 3 (p6) — 11c → correct at 11c
+
+- Working. 100% consensus.
+
+#### roland Table 3 (p16) — 9c/60% → should be 5c
+
+- All rows: 5 cols, 100% consensus. Working.
+
+### Core idea
+
+Column boundaries are **x-positions where gaps consistently appear across
+rows**. The unit of detection is the gap x-position, not a gap size threshold.
+
+### Algorithm
+
+**Step 1: Extract words and cluster into rows**
+
+1. Get words from bbox via `page.get_text("words", clip=bbox)`.
+2. Cluster into rows using existing `_adaptive_row_tolerance()`.
+3. Sort words within each row by x-position.
+
+**Step 2: Collect gap-hotspot candidates**
+
+For each row:
+1. Compute gaps between adjacent words: `word[i+1].x0 - word[i].x1`.
+2. Filter out micro-gaps: gaps must be ≥ median_word_height × 0.25 (~2pt).
+   This kills math micro-gaps (0.0005pt) without touching real column
+   gaps (smallest in corpus: 6pt).
+3. Record the x0 of the word AFTER each surviving gap as a hotspot candidate.
+
+No body-text reference needed. No "large gap" threshold. ALL non-micro gaps
+produce hotspot candidates. Column boundaries emerge from x-position
+consensus, not from gap size filtering.
+
+**Step 3: Cluster candidates into column boundaries**
+
+1. Sort all hotspot candidates by x-position.
+2. Cluster within a tolerance (median word width from the table's own words).
+3. Each cluster's representative x-position = median of its members.
+4. Cluster support = number of DISTINCT rows contributing.
+5. Minimum support threshold for initial pass: need to determine
+   adaptively. Probably a fraction of total non-caption rows. Must be
+   low enough to catch columns that only appear in some rows (partial
+   data rows in reyes Table 2), but high enough to exclude noise from
+   equation/figure artifact rows.
+6. Surviving clusters = column boundaries. Count + 1 = column count.
+
+Header row weighting: the first non-caption row with ≥ 3 gaps gets its
+hotspot candidates counted with extra weight (e.g., each header hotspot =
+N votes where N = ceil(total_rows × 0.3)). This ensures headers anchor
+column structure even when most data rows are continuations.
+
+**Step 4: Assign words to columns**
+
+For each row, assign each word to a column based on its x-position relative
+to the column boundary x-positions. Words before the first boundary → col 0.
+Words between boundary[i] and boundary[i+1] → col i+1. Etc.
+
+Concatenate words within each cell with spaces.
+
+**Step 5: Detect and merge continuation rows**
+
+A continuation row is a row where long cell text in one (or a few) columns
+wraps to a new line. The continuation text stays within its column — it
+never crosses column boundaries. The other columns in that row are empty.
+Because the empty columns produce gaps at every boundary position, a
+continuation row supports ALL column boundaries in the matrix (max row sum).
+
+Detection: after word-to-column assignment, a row is a continuation if:
+- Its populated columns are a strict subset of the previous primary row's
+  populated columns, AND
+- The populated columns are adjacent (no populated-empty-populated pattern
+  that would indicate a misaligned data row)
+
+Merge: append continuation row's cell text to the previous primary row's
+corresponding cells.
+
+**Step 6: Iterative refinement (add-only)**
+
+After initial assignment, check for rows with gaps at x-positions not near
+any current hotspot. If multiple non-continuation rows share a gap position
+→ add as new hotspot → re-run from Step 4.
+
+Iterations only ADD hotspots, never remove. This ensures monotone
+convergence toward the correct column count (can only increase, never
+decrease toward 1).
+
+Terminate when no new hotspots are found.
+
+**Step 7: Inline header detection (post-continuation)**
+
+After continuation merging, detect columns with exclusive-or population
+pattern: a column is an inline-header column if, whenever it is populated,
+no other columns are populated in that row, and whenever other columns are
+populated, it is empty.
+
+Fix: forward-fill the inline header value into all empty positions in that
+column below it until the next header row. Delete the pure-header rows.
+
+This converts:
+```
+| Baseline |          |      |      |
+|          | β₀ₘ      | 0.47 | 0.03 |
+|          | β₁f      |-0.16 | 0.03 |
+| Convers. |          |      |      |
+|          | β₀ₘ      | 0.35 | 0.04 |
+```
+Into:
+```
+| Baseline | β₀ₘ      | 0.47 | 0.03 |
+| Baseline | β₁f      |-0.16 | 0.03 |
+| Convers. | β₀ₘ      | 0.35 | 0.04 |
 ```
 
----
+### Pipeline change
 
-## Fix 5: Merged-word headers
-
-### What it does
-After header extraction, cross-checks rawdict headers against words-strategy row 0. When rawdict has no space but words does, uses the words version.
-
-### Investigation findings
-Actively producing correct different output:
-
-| Paper | Table | Rawdict header | After Fix 5 |
-|-------|-------|---------------|-------------|
-| yang T0 | Table 1 | `Samplesize` | `Sample size` |
-| yang T1 | Table 2 | `Bodyweight` | `Body weight` |
-| yang T1 | Table 2 | `Respiratoryrate` | `Respiratory rate` |
-| yang T1 | Table 2 | `Infusiontime` | `Infusion time` |
-| yang T1 | Table 2 | `Methodfor` | `Method for` |
-| yang T1 | Table 2 | `Vt(ml/kg)` | `Vt (ml/kg)` |
-| laird-fick T4 | Table 5 | `Distancefromrectum` | `Distance from rectum` |
-
-No false positives.
-
-### Verdict
-**Keep as-is.** Clear value, working correctly, no regressions.
-
----
-
-## Fix 6: Column detection -- run both, pick fewer columns
-
-### What it does
-Runs `_word_based_column_detection()` on every table's bbox, then replaces the native grid when word-based has fewer columns (and, after the latest edit, better fill rate).
-
-### Investigation findings -- WRONG APPROACH
-
-**Target: active-inference T2 (pages 18-19, "24 cols, 42% fill" in baseline)**
-
-Actual pipeline trace for page 18:
-
-| Stage | Cols | Rows | Fill | What happened |
-|-------|------|------|------|---------------|
-| Multi-strategy (rawdict wins) | 15 | 59 | 12% | Raw extraction |
-| Fix 6: word-based | 24 | 83 | 42% | 24 > 15 cols -> Fix 6 **does nothing** |
-| `_repair_low_fill_table` | 24 | 82 | 42% | 42% > 12% -> repair replaces |
-
-Fix 6 **never fires** for its intended target because word-based produces MORE columns (24) than native (15). The 24-col/42% result in the DB comes from `_repair_low_fill_table`, not Fix 6.
-
-**Root cause of the 24-column problem**: `_find_column_gap_threshold` Tier 1 (ratio break) fires on the wrong discontinuity.
-
-Actual gap distribution for this table (751 positive gaps):
-
+Current:
 ```
-     0-0.5pt:    5    ← math expression fragments: "(" touching "ln", "(B†", etc
-     0.5-1pt:    0
-       1-2pt:   29
-       2-3pt:  629    ← normal intra-word spacing (bulk of gaps)
-       3-5pt:   19
-      5-10pt:   11    ← transition zone
-     10-20pt:    8    ← actual column gaps start here
-     20-50pt:   25    ← inter-column gaps
-       50+pt:   25    ← large column gaps
+find_tables() → bbox + native grid
+    → multi_strategy_extract(native grid) → headers, rows
+    → absorbed_caption → header_data_sep → repair → merge → remove_empty → split → footnotes
 ```
 
-The 5 tiny gaps (0.0005pt) come from math expressions where pymupdf splits `(ln` into `(` and `ln` as separate words with nearly zero space. The ratio-break finds the first jump > 2x: 0.0005 -> 0.499 (ratio 960), setting threshold at `sqrt(0.0005 * 0.499) = 0.016pt`. This means EVERY word boundary (2-3pt) becomes a column separator.
+New:
+```
+find_tables() → bbox only
+    → hotspot_extract(page, bbox) → headers, rows (with continuations merged)
+    → absorbed_caption → header_data_sep → remove_empty → split → footnotes
+```
 
-The algorithm's intent is to find the break between intra-word gaps and inter-column gaps (~2-3pt vs ~10+pt). But it fires on a much earlier discontinuity (math fragments vs normal text) that has nothing to do with column structure.
-
-**Regression: helm-coregulation table-1**
-
-- Native: 7 cols, 12 rows, 58% fill (correct)
-- Word-based: 6 cols, 32 rows, 41% fill (wrong -- splits rows, worse fill)
-- The original unconditional "fewer columns wins" code picked words (6 < 7), causing the regression.
-- The revised code (fewer cols AND better fill) should block this (41% < 58%), but the stress test was run with the old code.
-
-### Verdict: REMOVE entirely
-
-1. **Redundant**: `_repair_low_fill_table` already handles the same case with the same algorithm.
-2. **Wrong target**: Word-based produces MORE columns for active-inference T2, so Fix 6 can never help.
-3. **Root cause is in `_find_column_gap_threshold`**: The ratio-break fires on math-expression micro-gaps (5 occurrences) before reaching the real intra-word vs inter-column break. Fixing this would help both `_repair_low_fill_table` and any future column detection.
+`_repair_low_fill_table`, `_find_column_gap_threshold`, `_merge_over_divided_rows`,
+and `_extract_cell_text_multi_strategy` are all removed.
 
 ---
 
-## Fix 7: Artifact tables -- real caption guard
+## Fix 3: Font-aware control character stripping
 
-### What it does
-In `_classify_artifact()`, replaces `if not table.caption:` with `if not has_real_caption:` where `has_real_caption` checks if the caption matches "Table N" patterns.
+### Problem
 
-### Investigation findings
-Working correctly. Current artifact classifications:
+Helm Table 2: β encoded as `\x06` in font `Universal-GreekwithMathP`.
+Current control-char stripping (`\x00-\x08`) deletes every β. Output
+shows "0m" instead of "β₀ₘ".
 
-| Paper | Table | Artifact type | Caption |
-|-------|-------|--------------|---------|
-| active-inference T0 | article_info_box | Author affiliation text |
-| fortune T0 | article_info_box | Department/university text |
-| huang T0 | table_of_contents | "Received" date line |
-| roland T0 | diagram_as_table | Uncaptioned (circuit diagram) |
-| yang T3 | figure_data_table | Uncaptioned (figure data) |
+### Root cause
 
-No false positives. No tables with spurious (non-"Table N") captions escaping detection.
+`\x06` (ACK) is a control character in Unicode but a valid glyph in the
+PDF's custom Greek font. Stripping blindly by codepoint without checking
+the font.
 
-### Verdict
-**Keep as-is.** Working correctly, no regressions.
+### Fix
+
+This now needs to work in the hotspot extraction path rather than
+`_clean_cell_text()`. When assembling cell text from words, check whether
+control characters come from specialized fonts (name containing "Greek",
+"Math", "Symbol"). If so, attempt Unicode mapping via font metadata or
+preserve as-is. Only strip control characters from standard text fonts.
+
+Since hotspot extraction uses `page.get_text("words")` which returns plain
+text without font info, we may need a rawdict pass specifically for cells
+that contain control characters — detect them in the words output, then
+look up the font from rawdict for just those characters.
 
 ---
 
-## Action Plan
+## Fix 4: Absorbed caption bugs
 
-### Keep as-is (no changes needed)
-- Fix 1 -- Headers from rawdict
-- Fix 2 -- Control character stripping
-- Fix 3 -- Caption swap Euclidean matching
-- Fix 5 -- Merged-word headers
-- Fix 7 -- Artifact real-caption guard
+### Problem
 
-### Rework
-- **Fix 4** -- Absorbed caption substring match:
-  - Bug A: Remove `else: break` early-exit. Scan rows 0..min(3, len) without stopping at first non-match.
-  - Bug B: Also run `_strip_known_caption_from_table` on each segment AFTER `_split_at_internal_captions`.
+Two bugs in `_strip_absorbed_caption()`:
 
-### Remove
-- **Fix 6** -- Column detection comparison. Remove `_word_based_column_detection` call site and the helper function.
+1. **Early-exit**: `else: break` stops at first non-matching row. Absorbed
+   captions can appear after equation rows (roland Table 2, row 2 is an
+   equation, row 3 is the absorbed caption).
+2. **Ordering**: Runs before `_split_at_internal_captions`. Continuation
+   table segments never get their absorbed captions stripped.
 
-### New fix needed (replacing Fix 6's intent)
-- **`_find_column_gap_threshold` math-fragment gap filtering**: The ratio-break algorithm fires on 5 tiny gaps (0.0005pt) from math expression fragments like `(` touching `ln`. The bulk of gaps are at 2-3pt (intra-word) with real column gaps at 10+pt. The ratio break should skip the first discontinuity and find the second one (2-3pt vs 10+pt).
+### Fix
 
-  Options:
-  1. **Skip the first ratio break if the gap is far below the median**: if `unique[i] < median_gap * 0.1`, skip this break and continue looking. This would skip the 0.0005→0.499 break (0.0005 < 0.277) and find the real break between ~5pt and ~10pt.
-  2. **Filter gaps below a minimum before ratio analysis**: Remove gaps < 0.1pt (a hard floor, which violates CLAUDE.md's no-hard-coded-thresholds rule) or gaps below `median_gap * some_fraction`.
-  3. **Use the second or third ratio break instead of the first**: Scan all ratio breaks and pick the one closest to the median gap.
-
-  Option 1 is simplest and data-derived (uses the gap distribution's own median). Would fix active-inference T2 in `_repair_low_fill_table` without needing a separate Fix 6 at all.
+1. Remove the `else: break` — scan all rows (or first N rows) for caption
+   pattern, don't stop at first non-match.
+2. Move absorbed caption stripping to run after split, so each segment
+   gets its own pass.

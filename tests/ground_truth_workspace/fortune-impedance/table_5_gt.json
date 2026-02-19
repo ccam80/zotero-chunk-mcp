@@ -1,0 +1,16 @@
+{
+  "table_id": "VP3NJ74M_table_5",
+  "paper": "fortune-impedance",
+  "item_key": "VP3NJ74M",
+  "page_num": 6,
+  "table_index": 5,
+  "caption": "Table 5 Mean electrode\u2013skin impedance imbalance and imbalance reduction after applying the compensation network, quantified using a root mean square error between Z_A and Z_B over 1 Hz\u20139.4 kHz.",
+  "headers": ["Electrode configuration", "|Z| (k\u03a9)", "\u03c6 (deg)", "|Z| (k\u03a9)", "\u03c6 (deg)"],
+  "rows": [
+    ["Ag/AgCl_NSP", "25.0 \u00b1 29.0", "3.8 \u00b1 2.1", "284.3 \u00b1 361.8", "11.9 \u00b1 15.8"],
+    ["Ag/AgCl_SP", "0.4 \u00b1 1.0", "0.3 \u00b1 0.6", "4.6 \u00b1 8.1", "6.2 \u00b1 6.7"],
+    ["Ag_SP", "12.9 \u00b1 15.4", "2.2 \u00b1 1.4", "86.7 \u00b1 143.1", "2.5 \u00b1 2.3"]
+  ],
+  "notes": "Two-level column headers: Absolute imbalance spans |Z|(k\u03a9) and \u03c6(deg); Imbalance reduction spans |Z|(k\u03a9) and \u03c6(deg). Lowest-level headers used.",
+  "verified": false
+}

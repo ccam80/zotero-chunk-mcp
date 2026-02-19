@@ -1,0 +1,27 @@
+{
+  "paper": "helm-coregulation",
+  "item_key": "9GKLLJH9",
+  "num_tables": 2,
+  "tables": [
+    {
+      "table_index": 0,
+      "table_id": "9GKLLJH9_table_1",
+      "page_num": 5,
+      "caption": "Table 1 Comparisons of Model Fit for Different Tests of Coregulation",
+      "artifact_type": null,
+      "image_path": "table_0.png",
+      "extraction_path": "table_0_extraction.json",
+      "gt_path": "table_0_gt.json"
+    },
+    {
+      "table_index": 1,
+      "table_id": "9GKLLJH9_table_2",
+      "page_num": 6,
+      "caption": "Table 2 Coefficients From Best-Fitting Cross-Lagged Panel Model (Model 6)",
+      "artifact_type": null,
+      "image_path": "table_1.png",
+      "extraction_path": "table_1_extraction.json",
+      "gt_path": "table_1_gt.json"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "paper": "fortune-impedance",
+  "item_key": "VP3NJ74M",
+  "page_num": 1,
+  "table_index": 0,
+  "caption": "b Department of Electrical and Computer Engineering, University of Canterbury, Christchurch, New Zealand",
+  "caption_position": "",
+  "headers": [
+    "A R T I C L E",
+    "I N F O",
+    "A B S T R A C T"
+  ],
+  "rows": [
+    [
+      "Keywords:",
+      "",
+      "Objective: To measure the magnitude and phase imbalance of the electrode–skin interface for silver/silver"
+    ],
+    [
+      "Electrode–skin interface",
+      "",
+      "chloride (Ag/AgCl) and silver (Ag) electrode pairs, highlighting the need to balance both the magnitude and"
+    ],
+    [
+      "Electrode–tissue interface Impedance Compensation Balancing Crosstalk",
+      "",
+      "phase of the electrode–skin interface. Methods: The electrode–skin impedance imbalance between two electrodes placed on ten healthy subjects was recorded over a frequency range of 1 Hz–100 kHz, using three electrode configurations: Ag/AgCl electrodes without skin preparation (Ag/AgClNSP), Ag/AgCl electrodes with skin preparation (Ag/AgClSP), and Ag"
+    ],
+    [
+      "sEMG",
+      "",
+      "electrodes with skin preparation (Ag-SP). A compensation network was developed to simulate impedance"
+    ],
+    [
+      "EMG",
+      "",
+      "imbalance reduction using the experimental data. Results: The mean electrode–skin impedance imbalance at 50 Hz was (37.6 ± 47.1) k𝛺and (15.0 ± 18.3) degrees using the Ag/AgClNSP electrode configuration; (4.52 ± 7.65) k𝛺and (4.6 ± 6.9) degrees using the Ag/AgClSP electrode configuration; and (36.2 ± 45.1) k𝛺and (3.4 ± 3.6) degrees using the Ag-SP electrode configuration. The compensation network resulted in a mean reduction in impedance imbalance over the bioelectrical signal range (1 Hz–500 Hz) of 284.3 k𝛺and 11.9 degrees; 4.6 k𝛺and 6.2 degrees; 86.7 k𝛺and 2.5 degrees for the Ag/AgClNSP, Ag/AgClSP and Ag-SP electrode configurations respectively. Conclusion: This study confirmed that the electrode–skin impedance imbalance can be large, and varies between subjects. Although abrasive skin preparation reduces the electrode–skin impedance imbalance, it does not guarantee a balanced electrode–skin interface, therefore, balancing the electrode–skin impedance using a compensation network has the potential to decrease bioelectrical signal interference. Significance: As bioelectrical signal interference is a function of electrode–skin impedance imbalance, to improve noise immunity of bioelectrical signal recordings, added compensatory impedance is required to balance the electrode–skin interface."
+    ]
+  ],
+  "num_rows": 5,
+  "num_cols": 3,
+  "fill_rate": 0.6666666666666666,
+  "bbox": [
+    37.587005615234375,
+    251.09970092773438,
+    556.3344116210938,
+    469.42034912109375
+  ],
+  "artifact_type": "article_info_box",
+  "extraction_strategy": "rawdict",
+  "footnotes": "",
+  "reference_context": "",
+  "markdown": "**b Department of Electrical and Computer Engineering, University of Canterbury, Christchurch, New Zealand**\n\n| A R T I C L E | I N F O | A B S T R A C T |\n| --- | --- | --- |\n| Keywords: |  | Objective: To measure the magnitude and phase imbalance of the electrode–skin interface for silver/silver |\n| Electrode–skin interface |  | chloride (Ag/AgCl) and silver (Ag) electrode pairs, highlighting the need to balance both the magnitude and |\n| Electrode–tissue interface Impedance Compensation Balancing Crosstalk |  | phase of the electrode–skin interface. Methods: The electrode–skin impedance imbalance between two electrodes placed on ten healthy subjects was recorded over a frequency range of 1 Hz–100 kHz, using three electrode configurations: Ag/AgCl electrodes without skin preparation (Ag/AgClNSP), Ag/AgCl electrodes with skin preparation (Ag/AgClSP), and Ag |\n| sEMG |  | electrodes with skin preparation (Ag-SP). A compensation network was developed to simulate impedance |\n| EMG |  | imbalance reduction using the experimental data. Results: The mean electrode–skin impedance imbalance at 50 Hz was (37.6 ± 47.1) k𝛺and (15.0 ± 18.3) degrees using the Ag/AgClNSP electrode configuration; (4.52 ± 7.65) k𝛺and (4.6 ± 6.9) degrees using the Ag/AgClSP electrode configuration; and (36.2 ± 45.1) k𝛺and (3.4 ± 3.6) degrees using the Ag-SP electrode configuration. The compensation network resulted in a mean reduction in impedance imbalance over the bioelectrical signal range (1 Hz–500 Hz) of 284.3 k𝛺and 11.9 degrees; 4.6 k𝛺and 6.2 degrees; 86.7 k𝛺and 2.5 degrees for the Ag/AgClNSP, Ag/AgClSP and Ag-SP electrode configurations respectively. Conclusion: This study confirmed that the electrode–skin impedance imbalance can be large, and varies between subjects. Although abrasive skin preparation reduces the electrode–skin impedance imbalance, it does not guarantee a balanced electrode–skin interface, therefore, balancing the electrode–skin impedance using a compensation network has the potential to decrease bioelectrical signal interference. Significance: As bioelectrical signal interference is a function of electrode–skin impedance imbalance, to improve noise immunity of bioelectrical signal recordings, added compensatory impedance is required to balance the electrode–skin interface. |"
+}

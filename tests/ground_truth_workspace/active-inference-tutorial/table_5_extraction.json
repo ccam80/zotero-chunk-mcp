@@ -1,0 +1,43 @@
+{
+  "paper": "active-inference-tutorial",
+  "item_key": "SCPXVBLY",
+  "page_num": 20,
+  "table_index": 5,
+  "caption": "Table 2 (continued).",
+  "caption_position": "",
+  "headers": [],
+  "rows": [
+    [
+      "Model update",
+      "Update equation",
+      "Explanation",
+      "Model-specific description for"
+    ],
+    [
+      "component",
+      "",
+      "",
+      "explore–exploit task (described in detail Section 3)"
+    ],
+    [
+      "Expected free energy precision",
+      "p(γ) = Γ (1, β) E[γ] = γ = 1/β Iterated to convergence: π0 ←σ(ln E -γ G) π ←σ(ln E -F -γ G) Gerror ←(π -π0) · (-G) βupdate ←β -β0 + Gerror β ←β -βupdate/ψ γ ←1/β",
+      "The β term, and its prior value β0, is a hyperparameter on the expected free energy precision term (γ). Specifically, β is the ’rate’ parameter of a gamma distribution (Γ ) with a ‘shape’ parameter value of 1. The expected value of this distribution, E [γ] = γ , is equal to the reciprocal of β. Note that we use the non-italicized γ to refer to the random variable and use the italicized γ to refer to the scalar value of that variable. This scalar is what is subsequently updated based on the equations shown here. The γ term controls the precision of G, based on the agent’s confidence in its estimates of expected free energy. This confidence changes when new observations are consistent or inconsistent with G. More specifically, γ modulates the influence of G on policy selection based upon a G prediction error (Gerror). This is calculated based on the difference between the initial distribution over policies (π0) and the posterior distribution after making a new observation (π). The difference between these terms reflects the extent to which new observations (scored by F) make policies more or less likely. If the vector encoding the posterior over policies increases in magnitude in comparison to the prior, and still points in the same direction, the difference vector between the posterior and the prior will point in the same direction as the -G vector (i.e., less than a 90◦ angle apart; see Fig. 9). If so, the value of γ will increase, thereby increasing the impact of G on policy selection. In contrast, if the difference vector between the posterior and the prior does not point in the same direction as the -G vector (i.e., greater than a 90◦angle apart), γ will decrease and thereby reduce the impact of G on policy selection (i.e., as the agent’s confidence in its estimates of expected free energy has decreased). Note that the βupdate term mediating these updates technically corresponds to the gradient of free energy with respect to γ (∇γ F). The subsequent update in the value of γ is such that G contributes to the posterior over policies in an optimal manner. β and Gerror are often discussed in relation to dopamine in the active inference literature. Note that β0 is the initial prior (which is not updated), and β is the initial posterior, which is subsequently updated to provide a new estimate for γ = 1/β. The variable ψ is a step size parameter that reduces the magnitude of each update and promotes stable convergence to final values of γ . For a derivation of these equations, see Appendix in Sales, Friston, Jones, Pickering, and Moran (2019).",
+      "A higher value for β would reduce an agent’s confidence in the best policy based on the values in G. This might lead the agent to select a slot machine more randomly or based to a greater extent on its past choices (i.e., if it has a precise prior over policies in the vector E)."
+    ]
+  ],
+  "num_rows": 3,
+  "num_cols": 4,
+  "fill_rate": 0.8333333333333334,
+  "bbox": [
+    37.615997314453125,
+    61.89110565185547,
+    553.1254272460938,
+    518.81591796875
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "rawdict",
+  "footnotes": "",
+  "reference_context": "ode a strong prior preference for a large reward, a moderate preference for a small reward, and low preference for no reward. \n\nPrior beliefs about policies _p (π)_ are encoded in a (column) vector _E_ (one row per policy) — increasing the probability that some policies will be chosen over others (i.e., independent of observed/expected outcomes). This can be used to model the influence of habits. For example, if an agent has chosen a particular policy many times in the past, this can lead to a stronger expectation that this policy will be chosen again. In the explore– exploit task example, _E_ could be used to model a simple choice bias in which a participant is more likely to choose one slot machine over another (independent of previous reward learning). However, it is important to distinguish between this type of prior belief and the initial distribution over policies from which actions are sampled before making an observation ( _π_ 0). As explained further below (and in Table 2), this latter distribution depends on _E_ , _G_ , and _γ_ , where the influences of habits and expected future outcomes each have an influence on initial choices. \n\nEach allowable action ( _u_ ) is encoded as a possible state transition (one of several **B** matrices that can be chosen for a state factor). In this case, each possible action is encoded in a vector _U_ , and the possible sequences of actions (where each allowable sequence defines a policy) are encoded in a matrix denoted by **V** (one row per time point, one column per policy, and a third dimension for state factor).",
+  "markdown": "**Table 2 (continued).**\n\n| Model update | Update equation | Explanation | Model-specific description for |\n| component |  |  | explore–exploit task (described in detail Section 3) |\n| Expected free energy precision | p(γ) = Γ (1, β) E[γ] = γ = 1/β Iterated to convergence: π0 ←σ(ln E -γ G) π ←σ(ln E -F -γ G) Gerror ←(π -π0) · (-G) βupdate ←β -β0 + Gerror β ←β -βupdate/ψ γ ←1/β | The β term, and its prior value β0, is a hyperparameter on the expected free energy precision term (γ). Specifically, β is the ’rate’ parameter of a gamma distribution (Γ ) with a ‘shape’ parameter value of 1. The expected value of this distribution, E [γ] = γ , is equal to the reciprocal of β. Note that we use the non-italicized γ to refer to the random variable and use the italicized γ to refer to the scalar value of that variable. This scalar is what is subsequently updated based on the equations shown here. The γ term controls the precision of G, based on the agent’s confidence in its estimates of expected free energy. This confidence changes when new observations are consistent or inconsistent with G. More specifically, γ modulates the influence of G on policy selection based upon a G prediction error (Gerror). This is calculated based on the difference between the initial distribution over policies (π0) and the posterior distribution after making a new observation (π). The difference between these terms reflects the extent to which new observations (scored by F) make policies more or less likely. If the vector encoding the posterior over policies increases in magnitude in comparison to the prior, and still points in the same direction, the difference vector between the posterior and the prior will point in the same direction as the -G vector (i.e., less than a 90◦ angle apart; see Fig. 9). If so, the value of γ will increase, thereby increasing the impact of G on policy selection. In contrast, if the difference vector between the posterior and the prior does not point in the same direction as the -G vector (i.e., greater than a 90◦angle apart), γ will decrease and thereby reduce the impact of G on policy selection (i.e., as the agent’s confidence in its estimates of expected free energy has decreased). Note that the βupdate term mediating these updates technically corresponds to the gradient of free energy with respect to γ (∇γ F). The subsequent update in the value of γ is such that G contributes to the posterior over policies in an optimal manner. β and Gerror are often discussed in relation to dopamine in the active inference literature. Note that β0 is the initial prior (which is not updated), and β is the initial posterior, which is subsequently updated to provide a new estimate for γ = 1/β. The variable ψ is a step size parameter that reduces the magnitude of each update and promotes stable convergence to final values of γ . For a derivation of these equations, see Appendix in Sales, Friston, Jones, Pickering, and Moran (2019). | A higher value for β would reduce an agent’s confidence in the best policy based on the values in G. This might lead the agent to select a slot machine more randomly or based to a greater extent on its past choices (i.e., if it has a precise prior over policies in the vector E). |"
+}

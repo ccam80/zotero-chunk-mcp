@@ -1,0 +1,48 @@
+{
+  "paper": "roland-emg-filter",
+  "item_key": "Z9X4JVZ5",
+  "page_num": 19,
+  "table_index": 6,
+  "caption": "Table 6. Comparison of runtime per sample of various lowpass-filter C implementations at a 48 MHz clock.",
+  "caption_position": "",
+  "headers": [
+    "",
+    "(µs)"
+  ],
+  "rows": [
+    [
+      "(i) Selected Lowpass Filter (1st order IIR)",
+      "1.28"
+    ],
+    [
+      "(ii) Fixed-point Lowpass Filter (1st order IIR, direct form II)",
+      "1.67"
+    ],
+    [
+      "(iii) Floating-Point Lowpass Filter (1st order IIR, direct form II)",
+      "20.12"
+    ],
+    [
+      "(iv) Floating-Point Lowpass Filter (5th order FIR)",
+      "49.80"
+    ],
+    [
+      "(v) Floating-Point Lowpass Filter (8th order FIR)",
+      "73.60"
+    ]
+  ],
+  "num_rows": 5,
+  "num_cols": 2,
+  "fill_rate": 1.0,
+  "bbox": [
+    159.2410125732422,
+    501.03643798828125,
+    436.03387451171875,
+    571.75341796875
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "rawdict",
+  "footnotes": "",
+  "reference_context": "othed signal does not affect the drive speed. \n\n_4.6. Runtime_ \n\n_4.6. Runtime_ \n\nThe runtimes of the implemented signal processing chain for various filters are listed in Table 5. Different lowpass implementations at a 48 MHz clock frequency are compared in Table 6. The runtime is inversely proportional to the clock frequency, i.e., decreasing the clock frequency by half will double the runtime. Avoiding FIR filters is recommended for real-time ultra-low-power systems, as runtime is significantly longer, depending on the order of the filter. Furthermore, the fifth-order FIR filter has a poorer damping characteristic than the presented IIR filter. In many EMG systems, FIR filters have window sizes of 50–350 ms [44], implying a filter order of 500–3500. Such filters cannot be calculated in real-time with this system. The selected implementation requires less calculation effort than the \n\nthe runtime. Avoiding FIR filters is recommended for real-time ultra-low-power systems, as runtime is \n\nin real-time with this system. The selected implementation requires less calculation effort than the \n\n\nfloating-point moving-average filter. Even when the fixed-point implementations are compared, our lowpass architecture decreases runtime. \n\n**==> picture [303 x 177] intentionally omitted <==**\n\n**----- Start of picture text -----**<br>\n3 Short Strong Contraction<br>Weak Contraction<br>Relaxed Muscle<br>2 Threshold<br>1<br>0<br>0 1 2 3 4<br>Time (s)<br>Amplitude (V)<br>**----- End of picture text -----**<br>\n\n\n**Figure 16.** Rectified and smoothed EMG signal for various movements with th",
+  "markdown": "**Table 6. Comparison of runtime per sample of various lowpass-filter C implementations at a 48 MHz clock.**\n\n|  | (µs) |\n| --- | --- |\n| (i) Selected Lowpass Filter (1st order IIR) | 1.28 |\n| (ii) Fixed-point Lowpass Filter (1st order IIR, direct form II) | 1.67 |\n| (iii) Floating-Point Lowpass Filter (1st order IIR, direct form II) | 20.12 |\n| (iv) Floating-Point Lowpass Filter (5th order FIR) | 49.80 |\n| (v) Floating-Point Lowpass Filter (8th order FIR) | 73.60 |"
+}

@@ -1,0 +1,128 @@
+{
+  "paper": "laird-fick-polyps",
+  "item_key": "5SIZVS65",
+  "page_num": 6,
+  "table_index": 4,
+  "caption": "Table 5 Distribution of polyps by location among 13,881 patients",
+  "caption_position": "",
+  "headers": [
+    "Location",
+    "Distance from rectum",
+    "Totalb",
+    "Sexa",
+    "",
+    "p-value"
+  ],
+  "rows": [
+    [
+      "",
+      "(in centimeters)",
+      "n (%)",
+      "Female",
+      "Male",
+      ""
+    ],
+    [
+      "",
+      "",
+      "",
+      "n (%)",
+      "n (%)",
+      ""
+    ],
+    [
+      "Right",
+      "132–147",
+      "3943 (28.4)",
+      "1842 (46.7)",
+      "2101 (53.3)",
+      "<.0001"
+    ],
+    [
+      "Transverse and flexures",
+      "82–132",
+      "3288 (23.7)",
+      "1351 (41.1)",
+      "1937 (58.9)",
+      "<.0001"
+    ],
+    [
+      "Ascending and transverse",
+      "n/a",
+      "864 (6.2)",
+      "330 (38.2)",
+      "534 (61.8)",
+      "<.0001"
+    ],
+    [
+      "Left",
+      "57–82",
+      "1379 (9.9)",
+      "645 (46.8)",
+      "734 (53.2)",
+      "0.017"
+    ],
+    [
+      "Sigmoid",
+      "15–57",
+      "2382 (17.2)",
+      "1178 (49.5)",
+      "1204 (50.6)",
+      "0.594"
+    ],
+    [
+      "Rectum",
+      "4 to 14",
+      "94 (0.70)",
+      "48 (51.1)",
+      "46 (48.9)",
+      "0.837"
+    ],
+    [
+      "Left and (transverse or ascending)",
+      "n/a",
+      "1607 (11.6)",
+      "638 (39.7)",
+      "969 (60.3)",
+      "<.0001"
+    ],
+    [
+      "Left and sigmoid",
+      "n/a",
+      "180 (1.3)",
+      "76 (42.2)",
+      "104 (57.8)",
+      "0.037"
+    ],
+    [
+      "Not specified",
+      "n/a",
+      "144 (1.0)",
+      "68 (47.2)",
+      "76 (52.8)",
+      "0.510"
+    ],
+    [
+      "Total",
+      "",
+      "13881 (100.0)",
+      "6176 (44.5)",
+      "7705 (55.5)",
+      "<.0001"
+    ]
+  ],
+  "num_rows": 12,
+  "num_cols": 6,
+  "fill_rate": 0.9027777777777778,
+  "bbox": [
+    56.692901611328125,
+    100.86380767822266,
+    538.0650634765625,
+    271.1887512207031
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "rawdict",
+  "footnotes": "",
+  "reference_context": "ex had lower odds relative to males (Table 4). Both age and sex effects were significant; an age by sex interaction was not found. \n\n## Location \n\nMore than half the patients had biopsy specimens isolated within either the right colon (n = 3,943; 28.4 %), the transverse colon (n = 3,288; 23.7 %), or a combination of the two (n = 864; 6.2 %) (Table 5) – regions beyond the reach of a sigmoidoscope. Only 29.1 % of patients had specimens isolated to the left side of the colon: left colon (n = 1,379; 9.9 %), sigmoid colon (n = 2,382; 17.2 %), rectum (n = 94; 0.7 %), or a combination of these sites (n = 180; 1.3 %). A minority of patients (n = 1,607; 11.6 %) had polyps on both the left side of \n\nTable 4 Odds ratios and 95 % confidence intervals for association of age with multiple versus single polyp classification in 13,881 patients \n\n|patients||||||\n|---|---|---|---|---|---|\n||Histology|Odds|95 % Confidence||p-value|\n||Frequency<br>Multiple/Single|Ratio|Limits|||\n|Females: Age||||||\n|50- < 60 referent|755/1754|1.00||||\n|60- < 70|659/1389|1.10|0.97|1.25|0.130|\n|70- < 80|441/810|1.27|1.10|1.46|0.001|\n|80-95<br>Males: Age|123/245|1.17|0.92|1.47|0.195|\n|50- < 60 referent|1127/2192|1.00||||\n|60- < 70|931/1657|1.09|0.98|1.22|0.106|\n|70- < 80|562/938|1.17|1.03|1.32|0.018|\n|80-95|115/183|1.22|0.96|1.56|0.107|\n|Adjusteda<br>Male referent|2735/4970|1.00||||\n|Female|1978/4198|0.85|0.79|0.91|<.0001|\n|Age, 5 yr increase|…|1.05|1.03|1.07|<.0001|\n\n\n\naEstimates from multiple logistic regression with Sex and Age \n\nthe colon and either the ascending or transverse colon.",
+  "markdown": "**Table 5 Distribution of polyps by location among 13,881 patients**\n\n| Location | Distance from rectum | Totalb | Sexa |  | p-value |\n| --- | --- | --- | --- | --- | --- |\n|  | (in centimeters) | n (%) | Female | Male |  |\n|  |  |  | n (%) | n (%) |  |\n| Right | 132–147 | 3943 (28.4) | 1842 (46.7) | 2101 (53.3) | <.0001 |\n| Transverse and flexures | 82–132 | 3288 (23.7) | 1351 (41.1) | 1937 (58.9) | <.0001 |\n| Ascending and transverse | n/a | 864 (6.2) | 330 (38.2) | 534 (61.8) | <.0001 |\n| Left | 57–82 | 1379 (9.9) | 645 (46.8) | 734 (53.2) | 0.017 |\n| Sigmoid | 15–57 | 2382 (17.2) | 1178 (49.5) | 1204 (50.6) | 0.594 |\n| Rectum | 4 to 14 | 94 (0.70) | 48 (51.1) | 46 (48.9) | 0.837 |\n| Left and (transverse or ascending) | n/a | 1607 (11.6) | 638 (39.7) | 969 (60.3) | <.0001 |\n| Left and sigmoid | n/a | 180 (1.3) | 76 (42.2) | 104 (57.8) | 0.037 |\n| Not specified | n/a | 144 (1.0) | 68 (47.2) | 76 (52.8) | 0.510 |\n| Total |  | 13881 (100.0) | 6176 (44.5) | 7705 (55.5) | <.0001 |"
+}

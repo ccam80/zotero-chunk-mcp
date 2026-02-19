@@ -1,0 +1,90 @@
+{
+  "paper": "roland-emg-filter",
+  "item_key": "Z9X4JVZ5",
+  "page_num": 16,
+  "table_index": 3,
+  "caption": "Table 3. Poles of comb filters with quantized coefficients.",
+  "caption_position": "",
+  "headers": [
+    "fC",
+    "1 Hz",
+    "3 Hz",
+    "5 Hz",
+    "7 Hz",
+    "",
+    "",
+    "",
+    ""
+  ],
+  "rows": [
+    [
+      "Chebyshev",
+      "0.914",
+      "0.119i",
+      "0.723",
+      "0.310i",
+      "0.527",
+      "0.435i",
+      "0.335",
+      "0.511i"
+    ],
+    [
+      "±",
+      "±",
+      "±",
+      "±",
+      "",
+      "",
+      "",
+      "",
+      ""
+    ],
+    [
+      "Butterworth",
+      "0.912",
+      "0.077i",
+      "0.738",
+      "0.206i",
+      "0.572",
+      "0.292i",
+      "0.413",
+      "0.352i"
+    ],
+    [
+      "±",
+      "±",
+      "±",
+      "±",
+      "",
+      "",
+      "",
+      "",
+      ""
+    ],
+    [
+      "Filter",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+    ]
+  ],
+  "num_rows": 5,
+  "num_cols": 9,
+  "fill_rate": 0.6,
+  "bbox": [
+    128.89227294921875,
+    431.8934326171875,
+    472.6219177246094,
+    492.14093017578125
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "rawdict",
+  "footnotes": "",
+  "reference_context": "tart of picture text -----**<br>\n( a ) REL Che FFT ( b ) REL But FFT<br>1 Hz · 10 [−] [2] 3 Hz 5 Hz 7 Hz 3rd Order 1 Hz · 10 [−] [2] 3 Hz 5 Hz 7 Hz 3rd Order<br>0.05 0.05<br>0.025 0.025<br>0 0<br>46 48 50 52 54 46 48 50 52 54<br>Frequency (Hz) Frequency (Hz)<br>( c ) CON Che FFT ( d ) CON But FFT<br>1 Hz 3 Hz 5 Hz 7 Hz 3rd Order 1 Hz 3 Hz 5 Hz 7 Hz 3rd Order<br>6 6<br>4 4<br>2 2<br>0 0<br>46 48 50 52 54 46 48 50 52 54<br>Frequency (Hz) Frequency (Hz)<br>Amplitude (mV) Amplitude (mV)<br>Amplitude (mV) Amplitude (mV)<br>**----- End of picture text -----**<br>\n\n\n**Figure 11.** Measurement results of various comb filter implementations (magnification in frequency domain); ( **a** ) Chebyshev-filtered signal at relaxed muscle; ( **b** ) Butterworth-filtered signal at relaxed muscle; ( **c** ) Chebyshev-filtered signal at contracted muscle; ( **d** ) Butterworth-filtered signal at contracted muscle. \n\n\n## Comb Filter Stability \n\nThe poles are listed in Table 3 and plotted in Figure 12 to illustrate the filter stability. All filters are stable, as the absolute value is <1 in all implementations. For FIR filters, stability is given in all cases. For IIR filters, poles closer to the origin of the unit circle are preferred in the implementation because oscillations abate more rapidly. The selected 5 Hz Butterworth comb filter fully meets the stability requirements. \n\ncases. For IIR filters, poles closer to the origin of the unit circle are preferred in the implementation \n\nbecause oscillations abate more rapidly.",
+  "markdown": "**Table 3. Poles of comb filters with quantized coefficients.**\n\n| fC | 1 Hz | 3 Hz | 5 Hz | 7 Hz |  |  |  |  |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n| Chebyshev | 0.914 | 0.119i | 0.723 | 0.310i | 0.527 | 0.435i | 0.335 | 0.511i |\n| ± | ± | ± | ± |  |  |  |  |  |\n| Butterworth | 0.912 | 0.077i | 0.738 | 0.206i | 0.572 | 0.292i | 0.413 | 0.352i |\n| ± | ± | ± | ± |  |  |  |  |  |\n| Filter |  |  |  |  |  |  |  |  |"
+}

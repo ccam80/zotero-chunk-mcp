@@ -1,0 +1,27 @@
+{
+  "paper": "huang-emd-1998",
+  "item_key": "XIAINRVS",
+  "num_tables": 2,
+  "tables": [
+    {
+      "table_index": 0,
+      "table_id": "XIAINRVS_orphan_p1_t0",
+      "page_num": 1,
+      "caption": "Received 3 June 1996; accepted 4 November 1996",
+      "artifact_type": "table_of_contents",
+      "image_path": "table_0.png",
+      "extraction_path": "table_0_extraction.json",
+      "gt_path": "table_0_gt.json"
+    },
+    {
+      "table_index": 1,
+      "table_id": "XIAINRVS_orphan_p2_t1",
+      "page_num": 2,
+      "caption": "N. E. Huang and others",
+      "artifact_type": null,
+      "image_path": "table_1.png",
+      "extraction_path": "table_1_extraction.json",
+      "gt_path": "table_1_gt.json"
+    }
+  ]
+}

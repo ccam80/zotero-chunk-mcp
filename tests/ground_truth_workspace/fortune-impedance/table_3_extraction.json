@@ -1,0 +1,115 @@
+{
+  "paper": "fortune-impedance",
+  "item_key": "VP3NJ74M",
+  "page_num": 5,
+  "table_index": 3,
+  "caption": "Table 3 Error between the custom impedance analyser (CIA) and the Keysight impedance analyser (KIA) measured combined impedance of electrodes A and B on human subjects over the range of 1 Hz–100 kHz (magnitude) and 1 Hz–9.4 kHz (phase), quantified by the root-mean-square error normalised using the mean of the KIA.",
+  "caption_position": "",
+  "headers": [
+    "",
+    "Ag/AgClNSP",
+    "",
+    "Ag/AgClSP",
+    ""
+  ],
+  "rows": [
+    [
+      "Subject",
+      "|𝑍| (%)",
+      "𝜙(%)",
+      "|𝑍| (%)",
+      "𝜙(%)"
+    ],
+    [
+      "1",
+      "3.3",
+      "0.9",
+      "1.7",
+      "14.9"
+    ],
+    [
+      "2",
+      "7.6",
+      "3.7",
+      "6.4",
+      "11.3"
+    ],
+    [
+      "3",
+      "14.4",
+      "2.7",
+      "3.4",
+      "4.4"
+    ],
+    [
+      "4",
+      "1.8",
+      "0.8",
+      "1.2",
+      "24.0"
+    ],
+    [
+      "5",
+      "16.9",
+      "1.7",
+      "1.6",
+      "19.0"
+    ],
+    [
+      "6",
+      "9.4",
+      "0.6",
+      "3.2",
+      "4.2"
+    ],
+    [
+      "7",
+      "4.4",
+      "1.3",
+      "17.4",
+      "5.5"
+    ],
+    [
+      "8",
+      "64.8",
+      "12.8",
+      "11.3",
+      "9.8"
+    ],
+    [
+      "9",
+      "1.5",
+      "0.9",
+      "8.6",
+      "4.2"
+    ],
+    [
+      "10",
+      "0.8",
+      "1.1",
+      "2.6",
+      "8.9"
+    ],
+    [
+      "Mean (SD)",
+      "12.5 (19.2)",
+      "2.7 (3.7)",
+      "5.7 (5.3)",
+      "10.6 (6.8)"
+    ]
+  ],
+  "num_rows": 12,
+  "num_cols": 5,
+  "fill_rate": 1.0,
+  "bbox": [
+    311.1369934082031,
+    100.84481811523438,
+    553.1671752929688,
+    219.5453338623047
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "rawdict",
+  "footnotes": "",
+  "reference_context": "LS regression was run using coarse exit conditions to decrease the processing time of the solver. The initial conditions that resulted in the least error, were run again with finer exit criteria. A RMSE between the two compensated impedance data sets was calculated over the phase data frequency span, permitting a quantitative simulated impedance imbalance reduction. \n\n## **4. Results** \n\n## _4.1. Proxy Device Under Test (DUT)_ \n\nThe accuracy of the CIA using the proxy DUT is outlined in Table 2, resulting in a mean error and standard deviation of (4.6 ± 0.7) % for the magnitude and (2.6 ± 0.9) % for the phase of electrode A; and (5.3 ± 0.6) % for the magnitude and (3.6 ± 2.0) % for the phase of electrode B. These results indicate that impedance measurement methods using the CIA can accurately measure magnitude up to 100 kHz, and phase up to 10 kHz. \n\n## _4.2. Subject trial_ \n\nThe accuracy of the CIA for the ten subjects is outlined in Table 3, resulting in a mean error and standard deviation of (12.5 ± 19.2) % for the magnitude and (2.7 ± 3.7) % for the phase using the Ag/AgClNSP electrode configuration, and (5.7 ± 5.3) % for the magnitude and (10.6 ± 6.8) % for the phase using the Ag/AgClSP electrode configuration. \n\nThe imbalance of the electrode–skin interface for the ten subjects and three electrode configurations as measured by the CIA is outlined in Table 4, resulting in a mean imbalance and standard deviation at mains frequency (50 Hz) of (37.6 ± 47.1) kΩ for the magnitude and (15.0 ± 18.3) degrees for the phase using the Ag/AgClNSP electrode configuration, (4.52 ± 7",
+  "markdown": "**Table 3 Error between the custom impedance analyser (CIA) and the Keysight impedance analyser (KIA) measured combined impedance of electrodes A and B on human subjects over the range of 1 Hz–100 kHz (magnitude) and 1 Hz–9.4 kHz (phase), quantified by the root-mean-square error normalised using the mean of the KIA.**\n\n|  | Ag/AgClNSP |  | Ag/AgClSP |  |\n| --- | --- | --- | --- | --- |\n| Subject | |𝑍| (%) | 𝜙(%) | |𝑍| (%) | 𝜙(%) |\n| 1 | 3.3 | 0.9 | 1.7 | 14.9 |\n| 2 | 7.6 | 3.7 | 6.4 | 11.3 |\n| 3 | 14.4 | 2.7 | 3.4 | 4.4 |\n| 4 | 1.8 | 0.8 | 1.2 | 24.0 |\n| 5 | 16.9 | 1.7 | 1.6 | 19.0 |\n| 6 | 9.4 | 0.6 | 3.2 | 4.2 |\n| 7 | 4.4 | 1.3 | 17.4 | 5.5 |\n| 8 | 64.8 | 12.8 | 11.3 | 9.8 |\n| 9 | 1.5 | 0.9 | 8.6 | 4.2 |\n| 10 | 0.8 | 1.1 | 2.6 | 8.9 |\n| Mean (SD) | 12.5 (19.2) | 2.7 (3.7) | 5.7 (5.3) | 10.6 (6.8) |"
+}

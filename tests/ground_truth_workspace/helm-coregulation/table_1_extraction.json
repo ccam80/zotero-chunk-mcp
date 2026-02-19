@@ -1,0 +1,48 @@
+{
+  "paper": "helm-coregulation",
+  "item_key": "9GKLLJH9",
+  "page_num": 6,
+  "table_index": 1,
+  "caption": "Table 2 Coefficients From Best-Fitting Cross-Lagged Panel Model (Model 6)",
+  "caption_position": "",
+  "headers": [
+    "Task",
+    "Coefficient",
+    "Estimate",
+    "SE",
+    "t",
+    "p"
+  ],
+  "rows": [
+    [
+      "Baseline",
+      "0m 1m 2m 0f 1f 2f",
+      "6.30 0.62 0.01 6.50 0.62 0.01",
+      "0.12 0.03 0.03 0.13 0.03 0.03",
+      "50.42 18.88 0.08 50.49 18.88 0.08",
+      "0.01 0.01 0.93 0.01 0.01 0.93"
+    ],
+    [
+      "Conversation",
+      "0m 1m 2m",
+      "6.50 0.40 0.09",
+      "0.12 0.04 0.03",
+      "52.31 9.09 2.87",
+      "0.01 0.01 0.01"
+    ]
+  ],
+  "num_rows": 2,
+  "num_cols": 6,
+  "fill_rate": 1.0,
+  "bbox": [
+    47.999603271484375,
+    118.40787506103516,
+    288.0240173339844,
+    292.2356262207031
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "words",
+  "footnotes": "",
+  "reference_context": "ive effect (�1 _f_ ��.09, _p_ � .07) and men a significantly lower autoregressive effect (�1 _m_ ��.13, _p_ � .02) during the conversation tasks. These results imply that men have less stability in RSA than women during conversation tasks, but both have similar cross-partner effects. \n\nGiven these model comparisons, the most parsimonious model that still adequately summarizes the data is Model 6. This model suggests a significant increase in men’s average RSA, a slight decrease in stability for women’s RSA, a larger decrease in stability for men’s RSA, and a significant increase in between-partner correlation of RSA from the baseline to the conversation tasks. Table 2 presents the parameter estimates and standard errors from this model. A conceptual depiction of these results is given in Figure 1, and examples of data from two couples are provided in Figure 2. \n\nTwo extra models were used to test whether the cross-partner effects changed across the different conversation tasks (positive, neutral, and negative) and across the conversation role (talking, listening, and freely talking). However, the models fitted previously (i.e., Models 1–7) are not nested within these two new models. Therefore, statistical fit cannot be compared between them, and they are not included in Table 1. The first model tested if the cross-partner effect changed during different conversation tasks (-2LL � 4367.4), and the second model investigated differ- \n\n> 1 These models can also be fitted as structural equation models, which can include a residual covariance.",
+  "markdown": "**Table 2 Coefficients From Best-Fitting Cross-Lagged Panel Model (Model 6)**\n\n| Task | Coefficient | Estimate | SE | t | p |\n| --- | --- | --- | --- | --- | --- |\n| Baseline | 0m 1m 2m 0f 1f 2f | 6.30 0.62 0.01 6.50 0.62 0.01 | 0.12 0.03 0.03 0.13 0.03 0.03 | 50.42 18.88 0.08 50.49 18.88 0.08 | 0.01 0.01 0.93 0.01 0.01 0.93 |\n| Conversation | 0m 1m 2m | 6.50 0.40 0.09 | 0.12 0.04 0.03 | 52.31 9.09 2.87 | 0.01 0.01 0.01 |\n\n*6.56 .12 53.30 .01 0f .53 .04 13.24 .01 1f .09 .03 2.87 .01 2f Note. the average RSA throughout the task; the degree of 0 1 autocorrelation; sub- quantifies the level of cross-partner correlation; 2 scripts m and f male and female, respectively.*"
+}

@@ -30,6 +30,16 @@ import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from zotero_chunk_rag.table_extraction.debug_db import (
+    create_extended_tables,
+    write_ground_truth_diff,
+)
+from zotero_chunk_rag.table_extraction.ground_truth import (
+    GROUND_TRUTH_DB_PATH,
+    compare_extraction,
+    make_table_id,
+)
+
 # ---------------------------------------------------------------------------
 # Corpus selection: 10 papers chosen for maximum diversity
 # ---------------------------------------------------------------------------
@@ -1433,6 +1443,7 @@ def write_debug_database(
 
     con = sqlite3.connect(str(db_path))
     con.executescript(_SCHEMA)
+    create_extended_tables(con)
 
     # --- run metadata ---
     meta_rows = [
@@ -1534,6 +1545,23 @@ def write_debug_database(
                 ),
             )
 
+        # --- ground truth diffs ---
+        if Path(GROUND_TRUTH_DB_PATH).exists():
+            run_id = time.strftime("%Y-%m-%dT%H:%M:%S")
+            for tab in extraction.tables:
+                if tab.artifact_type is not None:
+                    continue
+                table_id = make_table_id(
+                    item_key, tab.caption, tab.page_num, tab.table_index
+                )
+                try:
+                    result = compare_extraction(
+                        GROUND_TRUTH_DB_PATH, table_id, tab.headers, tab.rows
+                    )
+                except KeyError:
+                    continue
+                write_ground_truth_diff(con, table_id, run_id, result)
+
         # --- figures ---
         for fig in extraction.figures:
             has_img = 1 if (fig.image_path and fig.image_path.exists()) else 0
@@ -1584,6 +1612,60 @@ def write_debug_database(
 
 
 # ---------------------------------------------------------------------------
+# Ground truth summary helper
+# ---------------------------------------------------------------------------
+
+
+def _build_gt_summary_markdown(db_path: Path) -> list[str]:
+    """Query ground_truth_diffs from the debug DB and return markdown lines.
+
+    Returns an empty list when no ground truth diffs have been recorded
+    (e.g. because ground_truth.db does not exist).
+    """
+    con = sqlite3.connect(str(db_path))
+    try:
+        rows = con.execute(
+            "SELECT gtd.table_id, p.short_name, gtd.cell_accuracy_pct, "
+            "gtd.num_splits, gtd.num_merges, gtd.num_cell_diffs "
+            "FROM ground_truth_diffs gtd "
+            "LEFT JOIN papers p ON p.item_key = substr(gtd.table_id, 1, "
+            "  CASE WHEN instr(gtd.table_id, '_table_') > 0 "
+            "       THEN instr(gtd.table_id, '_table_') - 1 "
+            "       ELSE instr(gtd.table_id, '_orphan_') - 1 END) "
+            "ORDER BY gtd.table_id"
+        ).fetchall()
+    finally:
+        con.close()
+
+    if not rows:
+        return []
+
+    lines: list[str] = []
+    lines.append("## Ground Truth Comparison")
+    lines.append("")
+    lines.append("| Paper | Table ID | Cell Accuracy | Splits | Merges | Cell Diffs |")
+    lines.append("|-------|----------|---------------|--------|--------|------------|")
+    accuracy_values: list[float] = []
+    for table_id, short_name, cell_accuracy_pct, num_splits, num_merges, num_cell_diffs in rows:
+        paper_label = short_name if short_name else table_id.split("_")[0]
+        lines.append(
+            f"| {paper_label} | {table_id} | {cell_accuracy_pct:.1f}% "
+            f"| {num_splits} | {num_merges} | {num_cell_diffs} |"
+        )
+        accuracy_values.append(cell_accuracy_pct)
+
+    if accuracy_values:
+        overall = sum(accuracy_values) / len(accuracy_values)
+        lines.append("")
+        lines.append(
+            f"**Overall corpus cell accuracy**: {overall:.1f}% "
+            f"({len(accuracy_values)} tables compared)"
+        )
+    lines.append("")
+    return lines
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -1618,6 +1700,14 @@ if __name__ == "__main__":
         print(f"Debug database saved to: {db_path} ({db_path.stat().st_size:,} bytes)")
         print(f"  Query with: sqlite3 {db_path} \"SELECT short_name, quality_grade FROM papers\"")
         print(f"  Tables: run_metadata, papers, sections, pages, extracted_tables, extracted_figures, chunks, test_results")
+
+        # Append ground truth comparison summary to the report file if any diffs exist
+        gt_md_lines = _build_gt_summary_markdown(db_path)
+        if gt_md_lines:
+            gt_section = "\n".join(gt_md_lines)
+            with open(report_path, "a", encoding="utf-8") as fh:
+                fh.write("\n" + gt_section + "\n")
+            print(gt_section)
 
     # Exit with appropriate code
     if report.major_failures > 0:

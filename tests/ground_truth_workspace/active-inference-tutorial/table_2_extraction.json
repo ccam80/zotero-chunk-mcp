@@ -1,0 +1,40 @@
+{
+  "paper": "active-inference-tutorial",
+  "item_key": "SCPXVBLY",
+  "page_num": 16,
+  "table_index": 2,
+  "caption": "Table 1 (continued).",
+  "caption_position": "",
+  "headers": [],
+  "rows": [
+    [
+      "Model variable*",
+      "General definition",
+      "Model specification for explore–exploit task (described in detail Section 3)"
+    ],
+    [
+      "D vector: p(s1)",
+      "A vector encoding beliefs about (a probability distribution over) initial hidden states. When there is more than one hidden state factor, there is one D vector per state factor.",
+      "The agent begins in an initial state of maximal uncertainty about the context state (prior to learning), but complete certainty that it will start in the ‘start’ choice state."
+    ],
+    [
+      "E vector: p(π)",
+      "A distribution encoding beliefs about what policies will be chosen a priori (a prior probability distribution over policies, implemented as a vector assigning one value to each policy), based on the number of times different actions have been chosen in the past.",
+      "The agent has no initial habits to choose one slot machine or another (prior to learning)."
+    ]
+  ],
+  "num_rows": 3,
+  "num_cols": 3,
+  "fill_rate": 1.0,
+  "bbox": [
+    42.14899826049805,
+    66.11695098876953,
+    549.842529296875,
+    156.3420867919922
+  ],
+  "artifact_type": null,
+  "extraction_strategy": "rawdict",
+  "footnotes": "",
+  "reference_context": "2, the observation for _τ_ = 2 would be updated to: \n\n**==> picture [56 x 24] intentionally omitted <==**\n\n**==> picture [252 x 87] intentionally omitted <==**\n\nbeliefs about states for all time points to be updated at each time point _t_ when these observation vectors are updated. \n\n\n**==> picture [361 x 239] intentionally omitted <==**\n\n**Fig. 4.** Depiction of the explore–exploit task example. Note that the states and outcomes shown on the right are only examples. Table 1 and Section 3 list all states, outcomes, and policies required to build a generative model for this task. \n\nHaving now clarified time indexing, we will move on to other model elements. At the first time point in a trial _(τ_ = 1 _)_ , the model starts out with a prior over categorical states, _p (sτ_ =1 _)_ , encoded in a vector denoted by _D_ – one value per possible state (e.g., which slot machine is more likely to pay out). When there are multiple state factors, there will be one _D_ vector per factor. As touched on above, multiple state factors are necessary to account for multiple types of beliefs one can hold simultaneously. One common example is holding separate beliefs about an object’s location and its identity. In the explore–exploit task example, this could include beliefs about which slot machine is better and beliefs about available choice states (e.g., the state of having taken the hint).",
+  "markdown": "**Table 1 (continued).**\n\n| Model variable* | General definition | Model specification for explore–exploit task (described in detail Section 3) |\n| D vector: p(s1) | A vector encoding beliefs about (a probability distribution over) initial hidden states. When there is more than one hidden state factor, there is one D vector per state factor. | The agent begins in an initial state of maximal uncertainty about the context state (prior to learning), but complete certainty that it will start in the ‘start’ choice state. |\n| E vector: p(π) | A distribution encoding beliefs about what policies will be chosen a priori (a prior probability distribution over policies, implemented as a vector assigning one value to each policy), based on the number of times different actions have been chosen in the past. | The agent has no initial habits to choose one slot machine or another (prior to learning). |"
+}

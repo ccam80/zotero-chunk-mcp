@@ -1,0 +1,24 @@
+{
+  "table_id": "VP3NJ74M_table_3",
+  "paper": "fortune-impedance",
+  "item_key": "VP3NJ74M",
+  "page_num": 5,
+  "table_index": 3,
+  "caption": "Table 3 Error between the custom impedance analyser (CIA) and the Keysight impedance analyser (KIA) measured combined impedance of electrodes A and B on human subjects over the range of 1 Hz\u2013100 kHz (magnitude) and 1 Hz\u20139.4 kHz (phase), quantified by the root-mean-square error normalised using the mean of the KIA.",
+  "headers": ["Subject", "|Z| (%)", "\u03c6 (%)", "|Z| (%)", "\u03c6 (%)"],
+  "rows": [
+    ["1", "3.3", "0.9", "1.7", "14.9"],
+    ["2", "7.6", "3.7", "6.4", "11.3"],
+    ["3", "14.4", "2.7", "3.4", "4.4"],
+    ["4", "1.8", "0.8", "1.2", "24.0"],
+    ["5", "16.9", "1.7", "1.6", "19.0"],
+    ["6", "9.4", "0.6", "3.2", "4.2"],
+    ["7", "4.4", "1.3", "17.4", "5.5"],
+    ["8", "64.8", "12.8", "11.3", "9.8"],
+    ["9", "1.5", "0.9", "8.6", "4.2"],
+    ["10", "0.8", "1.1", "2.6", "8.9"],
+    ["Mean (SD)", "12.5 (19.2)", "2.7 (3.7)", "5.7 (5.3)", "10.6 (6.8)"]
+  ],
+  "notes": "Two-level column headers: Ag/AgCl_NSP spans |Z|(%) and \u03c6(%); Ag/AgCl_SP spans |Z|(%) and \u03c6(%). Lowest-level headers used.",
+  "verified": false
+}

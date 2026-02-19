@@ -1,0 +1,17 @@
+{
+  "paper": "friston-life",
+  "item_key": "YMWV46JA",
+  "num_tables": 1,
+  "tables": [
+    {
+      "table_index": 0,
+      "table_id": "YMWV46JA_table_1",
+      "page_num": 2,
+      "caption": "Table 1. Definitions of the tuple ðV; C; S; A; L; p; qÞ underlying active inference.",
+      "artifact_type": null,
+      "image_path": "table_0.png",
+      "extraction_path": "table_0_extraction.json",
+      "gt_path": "table_0_gt.json"
+    }
+  ]
+}
