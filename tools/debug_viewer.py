@@ -84,9 +84,14 @@ def _populate_table_widget(
     widget: QTableWidget,
     headers: list[str],
     rows: list[list[str]],
-    cell_colors: dict[tuple[int, int], QColor] | None = None,
+    cell_marks: dict[tuple[int, int], bool] | None = None,
 ) -> None:
-    """Fill a QTableWidget from headers + rows, optionally coloring cells."""
+    """Fill a QTableWidget from headers + rows.
+
+    *cell_marks* maps ``(row, col)`` to ``True`` (match) or ``False``
+    (mismatch).  Matched cells get a green tick prefix, mismatched cells
+    get a red cross prefix with red text.  Unmarked cells are left plain.
+    """
     widget.clear()
     n_cols = len(headers) if headers else (len(rows[0]) if rows else 0)
     widget.setColumnCount(n_cols)
@@ -95,9 +100,16 @@ def _populate_table_widget(
         widget.setHorizontalHeaderLabels(headers)
     for r_idx, row in enumerate(rows):
         for c_idx, cell in enumerate(row):
-            item = QTableWidgetItem(str(cell))
-            if cell_colors and (r_idx, c_idx) in cell_colors:
-                item.setBackground(cell_colors[(r_idx, c_idx)])
+            text = str(cell)
+            if cell_marks and (r_idx, c_idx) in cell_marks:
+                if cell_marks[(r_idx, c_idx)]:
+                    text = "\u2713 " + text  # tick
+                else:
+                    text = "\u2717 " + text  # cross
+            item = QTableWidgetItem(text)
+            if cell_marks and (r_idx, c_idx) in cell_marks:
+                if not cell_marks[(r_idx, c_idx)]:
+                    item.setForeground(QColor("#c62828"))  # dark red text
             widget.setItem(r_idx, c_idx, item)
     widget.resizeColumnsToContents()
 
@@ -1016,14 +1028,15 @@ class DebugViewer(QMainWindow):
         gt_headers: list[str] = gt_data[0] if gt_data else []
         gt_rows: list[list[str]] = gt_data[1] if gt_data else []
 
-        # Compute cell diff colors if GT available
-        cell_colors: dict[tuple[int, int], QColor] = {}
+        # Per-cell GT match/mismatch marks
+        cell_marks: dict[tuple[int, int], bool] = {}
         gt_diff_info = {}
         if gt_data and ext_headers and ext_rows:
             try:
                 from zotero_chunk_rag.feature_extraction.ground_truth import (
                     compare_extraction,
                     GROUND_TRUTH_DB_PATH,
+                    _normalize_cell,
                 )
                 cmp = compare_extraction(
                     GROUND_TRUTH_DB_PATH, table_id, ext_headers, ext_rows,
@@ -1038,38 +1051,48 @@ class DebugViewer(QMainWindow):
                     "cell_diffs": len(cmp.cell_diffs),
                     "coverage": cmp.structural_coverage_pct,
                 }
-                # Build set of mismatched cells for coloring
-                mismatched = set()
-                for d in cmp.cell_diffs:
-                    # d.row and d.col are in GT coordinates; need to map to ext
-                    # Find the ext row/col via matched_rows/matched_columns
-                    ext_ri = None
-                    for g, e in cmp.matched_rows:
-                        if g == d.row:
-                            ext_ri = e
-                            break
-                    ext_ci = None
-                    for g, e in cmp.matched_columns:
-                        if g == d.col:
-                            ext_ci = e
-                            break
-                    if ext_ri is not None and ext_ci is not None:
-                        mismatched.add((ext_ri, ext_ci))
+                # Build col map for GT->ext index translation.
+                # Start with header-aligned matches from the comparison,
+                # then add positional fallbacks for unmatched columns so
+                # that a header transcription error (e.g. subscript)
+                # doesn't exclude the entire column from cell marking.
+                col_map = {g: e for g, e in cmp.matched_columns}
+                used_gt = {g for g, _ in cmp.matched_columns}
+                used_ext = {e for _, e in cmp.matched_columns}
+                for g_ci in cmp.missing_columns:
+                    if g_ci not in used_gt and g_ci not in used_ext:
+                        # Same-index ext column available?
+                        if g_ci < len(ext_headers) and g_ci not in used_ext:
+                            col_map[g_ci] = g_ci
+                            used_gt.add(g_ci)
+                            used_ext.add(g_ci)
 
-                # Color all comparable cells
-                green = QColor("#c8e6c9")  # light green
-                red = QColor("#ffcdd2")    # light red
-                for g_ri, e_ri in cmp.matched_rows:
-                    for g_ci, e_ci in cmp.matched_columns:
-                        if (e_ri, e_ci) in mismatched:
-                            cell_colors[(e_ri, e_ci)] = red
-                        else:
-                            cell_colors[(e_ri, e_ci)] = green
+                # Same for rows: add positional fallbacks
+                row_map: list[tuple[int, int]] = list(cmp.matched_rows)
+                used_gt_r = {g for g, _ in cmp.matched_rows}
+                used_ext_r = {e for _, e in cmp.matched_rows}
+                for g_ri in cmp.missing_rows:
+                    if g_ri not in used_gt_r and g_ri not in used_ext_r:
+                        if g_ri < len(ext_rows) and g_ri not in used_ext_r:
+                            row_map.append((g_ri, g_ri))
+                            used_gt_r.add(g_ri)
+                            used_ext_r.add(g_ri)
+
+                # Compare each ext cell against its GT counterpart directly
+                for g_ri, e_ri in row_map:
+                    for g_ci, e_ci in col_map.items():
+                        gt_val = _normalize_cell(
+                            gt_rows[g_ri][g_ci]
+                        ) if g_ci < len(gt_rows[g_ri]) else ""
+                        ext_val = _normalize_cell(
+                            ext_rows[e_ri][e_ci]
+                        ) if e_ci < len(ext_rows[e_ri]) else ""
+                        cell_marks[(e_ri, e_ci)] = (gt_val == ext_val)
             except (KeyError, ImportError):
                 pass
 
         # ── Populate extracted table (0,0) ────────────────────────────
-        _populate_table_widget(self.cmp_ext_table, ext_headers, ext_rows, cell_colors)
+        _populate_table_widget(self.cmp_ext_table, ext_headers, ext_rows, cell_marks)
 
         # ── Populate ground truth table (1,0) ─────────────────────────
         if gt_data:
