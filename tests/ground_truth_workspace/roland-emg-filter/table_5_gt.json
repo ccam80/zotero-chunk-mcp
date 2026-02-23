@@ -5,14 +5,33 @@
   "page_num": 19,
   "table_index": 5,
   "caption": "Table 5. Runtime per sample of filters in C implementation at a 48 MHz clock.",
-  "headers": ["", "(\u00b5s)"],
+  "headers": [
+    "",
+    "(µs)"
+  ],
   "rows": [
-    ["Comb Filter (2nd order IIR)", "8.17"],
-    ["Highpass Filter (2nd order IIR)", "5.88"],
-    ["Lowpass Filter (1st order IIR)", "1.28"],
-    ["Rectification and Smoothing", "2.62"],
-    ["Total Signal Processing Chain Runtime", "17.95"]
+    [
+      "Comb Filter (2nd order IIR)",
+      "8.17"
+    ],
+    [
+      "Highpass Filter (2nd order IIR)",
+      "5.88"
+    ],
+    [
+      "Lowpass Filter (1st order IIR)",
+      "1.28"
+    ],
+    [
+      "Rectification and Smoothing",
+      "2.62"
+    ],
+    [
+      "Total Signal Processing Chain Runtime",
+      "17.95"
+    ]
   ],
   "notes": "The left column has no header label. The 'Total Signal Processing Chain Runtime' row is separated from the individual filter rows by a horizontal rule, indicating it is a summary/total row.",
-  "verified": false
+  "verified": true,
+  "footnotes": ""
 }

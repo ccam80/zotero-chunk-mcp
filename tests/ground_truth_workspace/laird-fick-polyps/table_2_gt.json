@@ -5,14 +5,51 @@
   "page_num": 5,
   "table_index": 2,
   "caption": "Table 3 Prevalence of sessile serrated adenomas, 2007-2012 in 9301 patients",
-  "headers": ["Histology", "Total\u1d43 n (%)", "Female n (%)", "Male n (%)", "p-value"],
-  "rows": [
-    ["Solitary", "215 (2.3)", "109 (50.7)", "106 (49.3)", "0.838"],
-    ["Multiple", "145 (1.6)", "78 (53.8)", "67 (46.2)", "0.361"],
-    ["SSA Other", "57 (0.6)", "28 (49.1)", "29 (50.9)", "0.895"],
-    ["Overall", "417 (4.5)", "215 (51.6)", "202 (48.4)", "0.524"],
-    ["Non SSA", "8884 (95.5)", "4016(45.2)", "4868 (54.8)", "<.0001"]
+  "headers": [
+    "Histology",
+    "Totalᵃ n (%)",
+    "Female n (%)",
+    "Male n (%)",
+    "p-value"
   ],
-  "notes": "Two-level header: 'Sex' spans 'Female n (%)' and 'Male n (%)' sub-columns. Lowest-level headers used. Footnote a (on Total): Percent of patients (n = 9301).",
-  "verified": false
+  "rows": [
+    [
+      "Solitary",
+      "215 (2.3)",
+      "109 (50.7)",
+      "106 (49.3)",
+      "0.838"
+    ],
+    [
+      "Multiple",
+      "145 (1.6)",
+      "78 (53.8)",
+      "67 (46.2)",
+      "0.361"
+    ],
+    [
+      "SSA Other",
+      "57 (0.6)",
+      "28 (49.1)",
+      "29 (50.9)",
+      "0.895"
+    ],
+    [
+      "Overall",
+      "417 (4.5)",
+      "215 (51.6)",
+      "202 (48.4)",
+      "0.524"
+    ],
+    [
+      "Non SSA",
+      "8884 (95.5)",
+      "4016(45.2)",
+      "4868 (54.8)",
+      "<.0001"
+    ]
+  ],
+  "notes": "Two-level header: 'Sex' spans 'Female n (%)' and 'Male n (%)' sub-columns. Lowest-level headers used.",
+  "verified": true,
+  "footnotes": "Footnote a (on Total): Percent of patients (n = 9301)."
 }

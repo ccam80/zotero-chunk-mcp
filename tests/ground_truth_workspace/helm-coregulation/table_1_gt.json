@@ -5,23 +5,129 @@
   "page_num": 6,
   "table_index": 1,
   "caption": "Table 2 Coefficients From Best-Fitting Cross-Lagged Panel Model (Model 6)",
-  "headers": ["Task", "Coefficient", "Estimate", "SE", "t", "p"],
-  "rows": [
-    ["Baseline", "", "", "", "", ""],
-    ["", "\u03b2\u2080\u2098", "6.30", ".12", "50.42", "<.01"],
-    ["", "\u03b2\u2081\u2098", ".62", ".03", "18.88", "<.01"],
-    ["", "\u03b2\u2082\u2098", "\u2212.01", ".03", "\u2212.08", ".93"],
-    ["", "\u03b2\u2080\u1d0b", "6.50", ".13", "50.49", "<.01"],
-    ["", "\u03b2\u2081\u1d0b", ".62", ".03", "18.88", "<.01"],
-    ["", "\u03b2\u2082\u1d0b", "\u2212.01", ".03", "\u2212.08", ".93"],
-    ["Conversation", "", "", "", "", ""],
-    ["", "\u03b2\u2080\u2098", "6.50", ".12", "52.31", "<.01"],
-    ["", "\u03b2\u2081\u2098", ".40", ".04", "9.09", "<.01"],
-    ["", "\u03b2\u2082\u2098", ".09", ".03", "2.87", "<.01"],
-    ["", "\u03b2\u2080\u1d0b", "6.56", ".12", "53.30", "<.01"],
-    ["", "\u03b2\u2081\u1d0b", ".53", ".04", "13.24", "<.01"],
-    ["", "\u03b2\u2082\u1d0b", ".09", ".03", "2.87", "<.01"]
+  "headers": [
+    "Task",
+    "Coefficient",
+    "Estimate",
+    "SE",
+    "t",
+    "p"
   ],
-  "notes": "The image shows the caption continuation '(Model 6)' at the top. 'Baseline' and 'Conversation' are sub-group headings appearing as rows with content only in the Task column; other columns in those rows are empty. Coefficient subscripts use m (male) and f (female). Note (footnote): \u03b2\u2080 = the average RSA throughout the task; \u03b2\u2081 = the degree of autocorrelation; \u03b2\u2082 quantifies the level of cross-partner correlation; subscripts m and f = male and female, respectively.",
-  "verified": false
+  "rows": [
+    [
+      "Baseline",
+      "",
+      "",
+      "",
+      "",
+      ""
+    ],
+    [
+      "",
+      "β₀ₘ",
+      "6.30",
+      ".12",
+      "50.42",
+      "<.01"
+    ],
+    [
+      "",
+      "β₁ₘ",
+      ".62",
+      ".03",
+      "18.88",
+      "<.01"
+    ],
+    [
+      "",
+      "β₂ₘ",
+      "−.01",
+      ".03",
+      "−.08",
+      ".93"
+    ],
+    [
+      "",
+      "β₀ᴋ",
+      "6.50",
+      ".13",
+      "50.49",
+      "<.01"
+    ],
+    [
+      "",
+      "β₁ᴋ",
+      ".62",
+      ".03",
+      "18.88",
+      "<.01"
+    ],
+    [
+      "",
+      "β₂ᴋ",
+      "−.01",
+      ".03",
+      "−.08",
+      ".93"
+    ],
+    [
+      "Conversation",
+      "",
+      "",
+      "",
+      "",
+      ""
+    ],
+    [
+      "",
+      "β₀ₘ",
+      "6.50",
+      ".12",
+      "52.31",
+      "<.01"
+    ],
+    [
+      "",
+      "β₁ₘ",
+      ".40",
+      ".04",
+      "9.09",
+      "<.01"
+    ],
+    [
+      "",
+      "β₂ₘ",
+      ".09",
+      ".03",
+      "2.87",
+      "<.01"
+    ],
+    [
+      "",
+      "β₀ᴋ",
+      "6.56",
+      ".12",
+      "53.30",
+      "<.01"
+    ],
+    [
+      "",
+      "β₁ᴋ",
+      ".53",
+      ".04",
+      "13.24",
+      "<.01"
+    ],
+    [
+      "",
+      "β₂ᴋ",
+      ".09",
+      ".03",
+      "2.87",
+      "<.01"
+    ]
+  ],
+  "notes": "The image shows the caption continuation '(Model 6)' at the top. 'Baseline' and 'Conversation' are sub-group headings appearing as rows with content only in the Task column; other columns in those rows are empty. Coefficient subscripts use m (male) and f (female).",
+  "verified": true,
+  "footnotes": "Note (footnote): β₀ = the average RSA throughout the task; β₁ = the degree of autocorrelation; β₂ quantifies the level of cross-partner correlation; subscripts m and f = male and female, respectively."
 }

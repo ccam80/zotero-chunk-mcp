@@ -1,0 +1,129 @@
+Sensors 2019, 19, 959
+7 of 24
+3.4.2. Fixed-Point Representation
+q15_t, q31_t and q63_t are standard data types for ﬁxed-point representation in C. Fixed-points,
+as described by ARM Ltd. (Cambridge, UK) [34], are implemented for the DSP. They resemble an
+integer data type, and their bit pattern must be used correctly. The coefﬁcients are multiplied by
+quantization factors for correct scaling of the ﬁxed-point values. Calculations with standard Q1.15
+variables result in ﬁxed-points with deviating bit pattern; for instance, a Q2.15 is generated when two
+Q1.15 variables are added. Therefore, the programmer must implement the data type with the correct
+bit pattern while considering truncation and overﬂow or saturation.
+The numerical values must be scaled such that the full operating range is exploited while
+overﬂows are prevented. When calculating with ﬁxed-point data type, the µC processor uses integer
+numbers, and thus the high performance of the integrated single-cycle hardware multiplier of the
+32 bit ARM processor can be exploited. Quantization and overﬂows are taken into account in the ﬁlter
+design. To ensure stability after quantization, the poles of the quantized coefﬁcients were investigated.
+3.4.3. Comb Filter
+The comb ﬁlter was designed as a highpass ﬁlter with a sampling frequency of 50 Hz, which
+is the frequency to be ﬁltered fﬁlt. The amplitude spectrum is mirrored at fﬁlt/2 according to the
+Nyquist–Shannon sampling theorem [21] and it is identical at its harmonics, which leads to a comb
+ﬁlter behavior. The name of the comb ﬁlter (1–7 Hz) is derived from the highpass cutoff frequency fC
+used to design the ﬁlter. Accordingly, the comb ﬁlter cutoff frequencies around 50 Hz are in the range
+of 43–49 Hz and 51–57 Hz. This frequency characteristic is replicated at the harmonics of 50 Hz.
+In this work, we considered applying Bessel [35], Butterworth [36], Chebyshev [37] and Elliptic [38]
+filters. Butterworth and Chebyshev filters were implemented, as they provide a good balance between
+low ringing and overshoot and a steep roll-off. The Bessel and the Elliptic filters were not implemented
+because the former has low roll-off and the latter tends to ring and overshoot.
+The filter was designed with the Matlab R⃝FDA filter tool [39] by first determining the filter zeros,
+poles and gain for an analog lowpass. These were then transformed into state-space form, where the
+lowpass can be converted to the desired filter behavior, such as highpass, bandpass or bandstop. By
+bilinear transformation [40], the analog filter was transformed into a digital filter and then converted
+back to zero-pole gain form. The filter coefficients determined were floating-point numbers (Table 1).
+Additionally, a third-order finite impulse response (FIR) filter which enables fast calculation was
+implemented for comparison. To this end, the frequency-independent scaling due to the filters was
+compensated for equal passband amplification. However, in the final implementation, this scaling
+does not need to be compensated at this point as long as the signal remains within value range of the
+fixed-point variable.
+Table 1. Floating-point comb ﬁlter coefﬁcients.
+Filter
+a[0]
+a[200]
+a[400]
+a[600]
+b[0]
+b[200]
+b[400]
+b[600]
+1 Hz Che
+1
+−1.8278
+0.8501
+-
+1
+−2
+1
+-
+3 Hz Che
+1
+−1.4449
+0.6186
+-
+1
+−2
+1
+-
+5 Hz Che
+1
+−1.0531
+0.4665
+-
+1
+−2
+1
+-
+7 Hz Che
+1
+−0.6680
+0.3730
+-
+1
+−2
+1
+-
+1 Hz But
+1
+−1.8227
+0.8372
+-
+1
+−2
+1
+-
+3 Hz But
+1
+−1.4755
+0.5869
+-
+1
+−2
+1
+-
+5 Hz But
+1
+−1.1430
+0.4128
+-
+1
+−2
+1
+-
+7 Hz But
+1
+−0.8252
+0.2946
+-
+1
+−2
+1
+-
+3rd order
+1
+0
+0
+0
+1
+−0.5
+−0.25
+−0.25
+The ﬁlter frequency f f ilt = 50 Hz corresponds to a 20 ms time period, which equals 200 samples at
+the EMG signal sampling rate fS = 10 kHz. Figure 6 shows the transfer function

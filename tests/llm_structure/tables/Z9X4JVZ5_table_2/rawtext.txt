@@ -1,0 +1,193 @@
+Sensors 2019, 19, 959
+10 of 24
+As these coefficients are implemented in fixed-point format, the denominators and numerators are
+scaled and truncated. Figure 8 shows the transfer function for the highpass with the quantized coefficients:
+GHP[z] = HPout[z]
+HPin[z] = b[0] + b[1]z−1 + b[2]z−2
+a[0] + a[1]z−1 + a[2]z−2 .
+(5)
+Table 2. Floating-point highpass ﬁlter coefﬁcients.
+Filter
+a[0]
+a[1]
+a[2]
+b[0]
+b[1]
+b[2]
+20 Hz Che
+1
+−1.9836
+0.9839
+1
+−2
+1
+30 Hz Che
+1
+−1.9754
+0.9759
+1
+−2
+1
+40 Hz Che
+1
+−1.9664
+0.9674
+1
+−2
+1
+50 Hz Che
+1
+−1.9580
+0.9596
+1
+−2
+1
+60 Hz Che
+1
+−1.9496
+0.9518
+1
+−2
+1
+70 Hz Che
+1
+−1.9418
+0.9447
+1
+−2
+1
+80 Hz Che
+1
+−1.9333
+0.9370
+1
+−2
+1
+90 Hz Che
+1
+−1.9247
+0.9294
+1
+−2
+1
+100 Hz Che
+1
+−1.9168
+0.9225
+1
+−2
+1
+20 Hz But
+1
+−1.9824
+0.9825
+1
+−2
+1
+30 Hz But
+1
+−1.9733
+0.9737
+1
+−2
+1
+40 Hz But
+1
+−1.9645
+0.9651
+1
+−2
+1
+50 Hz But
+1
+−1.9556
+0.9565
+1
+−2
+1
+60 Hz But
+1
+−1.9467
+0.9481
+1
+−2
+1
+70 Hz But
+1
+−1.9378
+0.9397
+1
+−2
+1
+80 Hz But
+1
+−1.9289
+0.9314
+1
+−2
+1
+90 Hz But
+1
+−1.9201
+0.9231
+1
+−2
+1
+100 Hz But
+1
+−1.9112
+0.9150
+1
+−2
+1
+(a)
+0
+50
+100
+150
+200
+−60
+−40
+−20
+0
+Frequency (Hz)
+|gHP[f]| (dB)
+Chebyshev
+(b)
+0
+50
+100
+150
+200
+−60
+−40
+−20
+0
+Frequency (Hz)
+|gHP[f]| (dB)
+Butterworth
+20 Hz
+30 Hz
+40 Hz
+50 Hz
+60 Hz
+70 Hz
+80 Hz
+90 Hz
+100 Hz
+Figure 8.
+Transfer functions with quantization effects included.
+(a) Chebyshev highpass ﬁlter;
+(b) Butterworth highpass ﬁlter.
+Highpass Filter Evaluation
+To determine the optimal choice of ﬁlter characteristic and fC, we recorded EMG signals from
+three subjects both at the left and at the right arm. A 50 Hz comb ﬁlter was implemented at the µC
+for the measurements, but no highpass ﬁlter was implemented for the evaluation. Three contraction
+and three artifact signals were recorded at each arm of each subject. Each measurement lasted 10 s,
+but only 8 s were evaluated because the on-set of the contraction was not considered. The artifacts
+were created by mechanical interferences, which might occur in real-world environments, such as
+tapping, shifting or lifting of the sensor. By using these artifacts for the ﬁlter parameter evaluation,
+the resulting system will be robust against this noise. The entire 10 s of the artifacts were evaluated.
+The oscilloscope [42] was set to a sampling rate of 10 kHz.
+The evaluation was performed in Matlab R⃝[39]. To this end, the ﬁltering was carried out such that
+the µC implementation was represented. The coefﬁcients, the measurement values, the intermediate

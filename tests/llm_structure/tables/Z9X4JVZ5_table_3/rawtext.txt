@@ -1,0 +1,60 @@
+Sensors 2019, 19, 959
+16 of 24
+Comb Filter Stability
+The poles are listed in Table 3 and plotted in Figure 12 to illustrate the ﬁlter stability. All ﬁlters
+are stable, as the absolute value is <1 in all implementations. For FIR ﬁlters, stability is given in all
+cases. For IIR ﬁlters, poles closer to the origin of the unit circle are preferred in the implementation
+because oscillations abate more rapidly. The selected 5 Hz Butterworth comb ﬁlter fully meets the
+stability requirements.
+0
+0.5
+1
+−0.5
+0
+0.5
+1 Hz Che
+3 Hz Che
+5 Hz Che
+7 Hz Che
+1 Hz But
+3 Hz But
+5 Hz But
+7 Hz But
+Real Part
+Imaginary Part
+Figure 12. Poles of Chebyshev and Butterworth comb ﬁlter implementations are located within the
+unit circle.
+Table 3. Poles of comb ﬁlters with quantized coefﬁcients.
+fC
+1 Hz
+3 Hz
+5 Hz
+7 Hz
+Chebyshev
+0.914 ± 0.119i
+0.723 ± 0.310i
+0.527 ± 0.435i
+0.335 ± 0.511i
+Butterworth
+0.912 ± 0.077i
+0.738 ± 0.206i
+0.572 ± 0.292i
+0.413 ± 0.352i
+4.2. Lowpass Filter
+In this section, the parametrization of the lowpass ﬁlter, which is applied after the highpass ﬁlter,
+is evaluated. For the smoothing lowpass, the architecture, runtime and implementation are equivalent
+to the ﬁlter described in this section, and its parametrization is described in Section 3.4.8.
+The lowpass after the highpass ﬁlter has the time constant T = 300 µs and the cutoff frequency
+fC = 531 Hz. A higher fC does not sufﬁciently ﬁlter the high-frequency edges of the quantizations, and
+a lower fC would markedly attenuate the EMG signal.
+Lowpass Filter Stability
+Since the pole at 0.75 is located within the unit circle, the ﬁlter is stable.
+4.3. Highpass Filter
+Figure 13 shows the highpass-ﬁltered artifacts and contraction EMG. An optimal balance of high
+artifact attenuation and low EMG signal attenuation is desired. The null hypothesis that the Root Mean
+Square (RMS) values and the signal loss of the contraction EMG and artifacts are normally distributed
+was not rejected at a 5% signiﬁcance level. The one-sample Kolmogorov-Smirnov test [43] resulted in
+a p = 0.9995 for the RMS of the contraction EMG and in a p = 0.0896 for the RMS of the artifacts. For the
+signal loss, the p-values depend on the applied ﬁlter. The artifacts have lower p-values because the
+probability density function of artifacts is skewed. The standard deviations in Figure 13c result from
+the frequency characteristics of the highly variable artifacts measured. The signal loss is the difference

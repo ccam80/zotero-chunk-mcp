@@ -1,0 +1,92 @@
+male and 6,176 (44.5 %) female. Ages ranged from 50 to
+95 years, with a mean (SD) of 62.8 (9.2) years and me-
+dian of 62 years. Females were slightly older (mean age
+63.3 years) than males (mean age 62.5 years) and due to
+the large sample size, the difference was significant
+(p < .0001). Differences in gender were seen in each
+age category (Table 1).
+Histopathology
+Adenomatous polyps, whether singular or multiple, were
+the most common pathological finding (n = 8,305; 59.9 %),
+followed by hyperplastic polyps (n = 4,600; 33.1 %). In con-
+trast, villous adenomas (n = 545; 3.6 %), moderate to high
+grade dysplasia (n = 49; 0.4 %) and invasive carcinoma
+(n = 22; 0.2 %) were rare (Table 2).
+yp
+g
+p
+more common among males (n = 4920; 63.9 %) than
+females (n = 3385; 54.9 %) (p < .0001 for comparison).
+Single hyperplastic polyps more common among women
+(n = 1699; 51.6 %) than men (n = 1597; 48.4 %) (p =
+0.077); there was no significant difference by sex for
+multiple hyperplastic polyps (p = 0.580) (Fig. 1, Table 2).
+Trends in histopathology based on age were seen as
+well. Adenomas were the most common finding across
+all age groups, and prevalence increased with increasing
+age (Fig. 2).
+Between 2007 and 2012, SSAs were found in a total of
+417 patients (4.5 %), (Table 3). There was no statistical
+difference by sex, in overall SSA or within SSA types.
+However, amongst all 9301 patients, prevalence of SSA
+was higher in females (n = 215; 5.1 %) than in males (n =
+202; 4.0 %) (p = 0.02). Prevalence of SSA was also greater
+in patients ages 50- < 60 years than older adults (7.6 %
+versus 2.0-4.3 %. p < .0001 for distribution of histology
+by age) as seen in Fig. 2.
+Number of polyps
+Polyps were classified as single or multiple in the regis-
+try. The prevalence of multiple polyps was higher in
+men (n = 2,735; 35.5 %) than in women (n = 1,978;
+32.0 %), p < .0001. Multiple polyps were also more com-
+mon with increasing age: age 50–59 years, 32.3 %; 60–69
+years, 34.3 %; 70–79 years, 36.5 %; and 80+ years, 35.7 %
+(p = .001). Using age 50–59 years and sex as referent cat-
+egories, the odds of having multiple (vs single) polyps
+Age
+Totalb, n (%)
+Sexa
+p-value
+Female, n (%)
+Male, n (%)
+50- < 60
+5828 (42.0)
+2509 (43.1)
+3319 (57.0)
+<.0001
+60- < 70
+4636 (33.4)
+2048 (44.2)
+2588 (55.8)
+<.0001
+70- < 80
+2751 (19.8)
+1251 (45.5)
+1500 (54.5)
+<.0001
+80-95
+666 (4.8)
+368 (55.3)
+298 (44.7)
+0.007
+Overall
+13881 (100.0)
+6176 (44.5)
+7705 (55.5)
+<.0001
+Mean (SD), years
+62.8 (9.2)
+63.3 (9.5)
+62.5 (8.9)
+<.0001
+aPercent in row might not sum to 100 due to rounding. Chi-square
+tests compare
+sex distribution by age category, and overall. Mean ages compared by
+Wilcoxon test
+bPercent of all patients (n = 13,881)
+Table 2 Distribution of Sex by Histology among 13,881 patients
+Histopathology
+Totalb
+n (%)
+Sexa
+p-value

@@ -5,15 +5,58 @@
   "page_num": 3,
   "table_index": 0,
   "caption": "Table 1 Distribution of Sex by Age among 13,881 patients",
-  "headers": ["Age", "Total\u1d47, n (%)", "Female, n (%)", "Male, n (%)", "p-value"],
-  "rows": [
-    ["50- < 60", "5828 (42.0)", "2509 (43.1)", "3319 (57.0)", "<.0001"],
-    ["60- < 70", "4636 (33.4)", "2048 (44.2)", "2588 (55.8)", "<.0001"],
-    ["70- < 80", "2751 (19.8)", "1251 (45.5)", "1500 (54.5)", "<.0001"],
-    ["80-95", "666 (4.8)", "368 (55.3)", "298 (44.7)", "0.007"],
-    ["Overall", "13881 (100.0)", "6176 (44.5)", "7705 (55.5)", "<.0001"],
-    ["Mean (SD), years", "62.8 (9.2)", "63.3 (9.5)", "62.5 (8.9)", "<.0001"]
+  "headers": [
+    "Age",
+    "Totalᵇ, n (%)",
+    "Female, n (%)",
+    "Male, n (%)",
+    "p-value"
   ],
-  "notes": "Two-level header: 'Sex\u1d43' spans 'Female, n (%)' and 'Male, n (%)' sub-columns. Lowest-level headers used. Footnote a (on Sex): Percent in row might not sum to 100 due to rounding; Chi-square tests compare females vs males. Footnote b (on Total): percent of total patients.",
-  "verified": false
+  "rows": [
+    [
+      "50- < 60",
+      "5828 (42.0)",
+      "2509 (43.1)",
+      "3319 (57.0)",
+      "<.0001"
+    ],
+    [
+      "60- < 70",
+      "4636 (33.4)",
+      "2048 (44.2)",
+      "2588 (55.8)",
+      "<.0001"
+    ],
+    [
+      "70- < 80",
+      "2751 (19.8)",
+      "1251 (45.5)",
+      "1500 (54.5)",
+      "<.0001"
+    ],
+    [
+      "80-95",
+      "666 (4.8)",
+      "368 (55.3)",
+      "298 (44.7)",
+      "0.007"
+    ],
+    [
+      "Overall",
+      "13881 (100.0)",
+      "6176 (44.5)",
+      "7705 (55.5)",
+      "<.0001"
+    ],
+    [
+      "Mean (SD), years",
+      "62.8 (9.2)",
+      "63.3 (9.5)",
+      "62.5 (8.9)",
+      "<.0001"
+    ]
+  ],
+  "notes": "Two-level header: 'Sexᵃ' spans 'Female, n (%)' and 'Male, n (%)' sub-columns. Lowest-level headers used.",
+  "verified": true,
+  "footnotes": "Footnote a (on Sex): Percent in row might not sum to 100 due to rounding. Chi-square tests compare sex distribution by age category, and overall. Mean ages compared by Wilcoxon test. Footnote b (on Total): Percent of all patients (n = 13,881)."
 }

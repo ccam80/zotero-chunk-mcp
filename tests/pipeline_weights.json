@@ -1,0 +1,17 @@
+{
+  "confidence_multipliers": {
+    "camelot_hybrid": 0.15789473684210525,
+    "camelot_lattice": 0.1,
+    "consensus": 0.1,
+    "gap_span_hotspot": 0.1,
+    "global_cliff": 0.14661654135338345,
+    "header_anchor": 0.05547652916073968,
+    "pdfplumber_text": 0.1,
+    "per_row_cliff": 0.1,
+    "pymupdf_lines": 1.0,
+    "pymupdf_lines_strict": 0.1,
+    "pymupdf_text": 0.5263157894736842,
+    "ruled_lines": 0.2831215970961887,
+    "single_point_hotspot": 0.16204986149584485
+  }
+}

@@ -1,0 +1,32 @@
+10. Discussion
+987
+11. Conclusions
+991
+References
+993
+A new method for analysing nonlinear and non-stationary data has been devel-
+oped. The key part of the method is the ‘empirical mode decomposition’ method
+with which any complicated data set can be decomposed into a ﬁnite and often
+small number of ‘intrinsic mode functions’ that admit well-behaved Hilbert trans-
+forms. This decomposition method is adaptive, and, therefore, highly eﬃcient. Since
+the decomposition is based on the local characteristic time scale of the data, it is
+applicable to nonlinear and non-stationary processes. With the Hilbert transform,
+the ‘instrinic mode functions’ yield instantaneous frequencies as functions of time
+that give sharp identiﬁcations of imbedded structures. The ﬁnal presentation of the
+results is an energy–frequency–time distribution, designated as the Hilbert spectrum.
+In this method, the main conceptual innovations are the introduction of ‘intrinsic
+mode functions’ based on local properties of the signal, which makes the instanta-
+neous frequency meaningful; and the introduction of the instantaneous frequencies
+for complicated data sets, which eliminate the need for spurious harmonics to rep-
+resent nonlinear and non-stationary signals. Examples from the numerical results of
+the classical nonlinear equation systems and data representing natural phenomena
+are given to demonstrate the power of this new method. Classical nonlinear system
+data are especially interesting, for they serve to illustrate the roles played by the
+nonlinear and non-stationary eﬀects in the energy–frequency–time distribution.
+Keywords: non-stationary time series; nonlinear diﬀerential equations;
+frequency–time spectrum; Hilbert spectral analysis; intrinsic time scale;
+empirical mode decomposition
+1. Introduction
+Data analysis is a necessary part in pure research and practical applications. Imper-
+fect as some data might be they represent the reality sensed by us; consequently
+om https://royalsocietypublishing.org/ on 13 August 2023 

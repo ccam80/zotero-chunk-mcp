@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -53,14 +53,14 @@ def create_ground_truth_db(db_path: Path) -> None:
     """Create the ground truth database with the required schema if it doesn't exist.
 
     Safe to call on existing databases — uses CREATE TABLE IF NOT EXISTS and
-    migrates missing columns (e.g. ``footnotes``) via ALTER TABLE.
+    adds the ``footnotes`` column via ALTER TABLE if not already present.
     """
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path))
     try:
         conn.executescript(_SCHEMA_SQL)
-        # Migrate: add footnotes column if missing (pre-2.2.2 databases)
+        # Ensure footnotes column exists
         cols = {
             row[1]
             for row in conn.execute("PRAGMA table_info(ground_truth_tables)").fetchall()

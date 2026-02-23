@@ -95,7 +95,7 @@ class TestWrite:
         assert row[1] == "camelot_lattice"
         assert row[2] == '{"rows": [10, 20], "cols": [5, 15]}'
         assert row[3] == '[["A", "B"], ["1", "2"]]'
-        assert row[4] == pytest.approx(0.92)
+        assert row[4] == 0.92
         assert row[5] == 135
         con.close()
 
@@ -144,7 +144,7 @@ class TestWrite:
         # diff_json must be valid JSON containing the table_id
         diff = json.loads(row[2])
         assert diff["table_id"] == "paper2_table_3"
-        assert row[3] == pytest.approx(80.0)
+        assert row[3] == 80.0
         # num_splits = len(row_splits) + len(column_splits) = 1 + 0
         assert row[4] == 1
         # num_merges = len(row_merges) + len(column_merges) = 0 + 0
@@ -179,5 +179,23 @@ class TestWrite:
         assert row[0] == "paper3_table_2"
         assert json.loads(row[1]) == {"methods": ["camelot", "pdfplumber"], "strategy": "best"}
         assert row[2] == "camelot_lattice"
-        assert row[3] == pytest.approx(0.88)
+        assert row[3] == 0.88
+        con.close()
+
+
+# ---------------------------------------------------------------------------
+# TestExtendedSchema
+# ---------------------------------------------------------------------------
+
+
+class TestExtendedSchema:
+    def test_ground_truth_diffs_has_fuzzy_columns(self) -> None:
+        """ground_truth_diffs table has fuzzy_accuracy_pct, fuzzy_precision_pct, fuzzy_recall_pct columns."""
+        con = _in_memory_con()
+        create_extended_tables(con)
+        column_info = con.execute("PRAGMA table_info(ground_truth_diffs)").fetchall()
+        column_names = {row[1] for row in column_info}
+        assert "fuzzy_accuracy_pct" in column_names
+        assert "fuzzy_precision_pct" in column_names
+        assert "fuzzy_recall_pct" in column_names
         con.close()

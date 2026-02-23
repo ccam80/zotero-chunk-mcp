@@ -28,16 +28,19 @@ CREATE TABLE IF NOT EXISTS pipeline_runs (
 );
 
 CREATE TABLE IF NOT EXISTS ground_truth_diffs (
-    id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    table_id          TEXT NOT NULL,
-    run_id            TEXT NOT NULL,
-    diff_json         TEXT NOT NULL,
-    cell_accuracy_pct REAL,
-    num_splits        INTEGER,
-    num_merges        INTEGER,
-    num_cell_diffs    INTEGER,
-    gt_shape          TEXT,
-    ext_shape         TEXT
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    table_id            TEXT NOT NULL,
+    run_id              TEXT NOT NULL,
+    diff_json           TEXT NOT NULL,
+    cell_accuracy_pct   REAL,
+    num_splits          INTEGER,
+    num_merges          INTEGER,
+    num_cell_diffs      INTEGER,
+    gt_shape            TEXT,
+    ext_shape           TEXT,
+    fuzzy_accuracy_pct  REAL,
+    fuzzy_precision_pct REAL,
+    fuzzy_recall_pct    REAL
 );
 """
 
@@ -114,8 +117,9 @@ def write_ground_truth_diff(
     con.execute(
         "INSERT INTO ground_truth_diffs "
         "(table_id, run_id, diff_json, cell_accuracy_pct, num_splits, "
-        "num_merges, num_cell_diffs, gt_shape, ext_shape) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "num_merges, num_cell_diffs, gt_shape, ext_shape, "
+        "fuzzy_accuracy_pct, fuzzy_precision_pct, fuzzy_recall_pct) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             table_id,
             run_id,
@@ -126,5 +130,8 @@ def write_ground_truth_diff(
             num_cell_diffs,
             gt_shape,
             ext_shape,
+            comparison_result.fuzzy_accuracy_pct,
+            comparison_result.fuzzy_precision_pct,
+            comparison_result.fuzzy_recall_pct,
         ),
     )

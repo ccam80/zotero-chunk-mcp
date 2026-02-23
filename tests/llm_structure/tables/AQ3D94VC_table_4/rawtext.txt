@@ -1,0 +1,139 @@
+with the assumption of a sympathetic origin of the LF band.
+No systematic linkage between HRV and PTT—an index of
+b1-adrenergic inﬂuences on myocardial contractibility—was found
+(Table 3). The only signiﬁcant association contradicted the expec-
+tations in the sense that LF power correlated positively with PTT
+assessed during letter cancellation as well as time reaction tasks. In
+the physical exercise study (Martín-Vázquez & Reyes del Paso,
+2010), we used impedance cardiography in order to assess pre-
+ejection period (PEP), one of the most reliable and valid noninva-
+sive indicator of b1-cardiac adrenergic inﬂuences (McCubbin,
+Richardson, Langer, Kizer, & Obrist, 1983; Sherwood et al., 1990).
+No associations were found between HRV and PEP (Table 4). In
+another study we compared patients suffering from ﬁbromyalgia
+with matched healthy controls in parameters of autonomic
+cardiovascular
+control
+(Reyes
+del
+Paso,
+Garrido,
+Pulgar,
+Martín-Vázquez, & Duschek, 2010). Again, the reanalysis of these
+data revealed no associations between PEP and HRV (Table 4).
+It has been argued that left ventricular ejection time (LVET)
+constitutes a speciﬁc indicator of chronotropic sympathetic tone
+(Uijtdehaage & Thayer, 2000). Given its inverse relationship with
+sympathetic tone, one may predict negative correlations between
+LVET
+and
+LF
+power.
+In
+the
+physical
+exercise
+study
+(Martín-Vázquez & Reyes del Paso, 2010) correlations between
+LVET and the three HRV components were .57, .46, and .40 for
+baseline and .50, .46, and .48 for cognitive load, respectively, for
+VLF, LF, and HF (all ps < .05). In the chronic pain study (Reyes del
+Paso, Garrido, et al., 2010), correlations were .15, .48, and .47 for
+baseline and .20, .24, and .51 for cognitive load, respectively, for
+VLF, LF, and HF (ps < .05 for HF during baseline and cognitive
+load and for LF during baseline). In the framework of the Uijtde-
+haage and Thayer hypothesis, the positive associations of LF oscil-
+lations with LVET clearly contradict the assumption of its
+sympathetic origin.
+Some authors have suggested that the LF component constitutes
+a speciﬁc index of baroreceptor gain in mediating oscillations in
+blood pressure and vasomotor activity (Goldstein et al., 2011;
+Moak et al., 2007). We assessed BRS in our studies using sequence
+analysis in the time domain (Reyes del Paso, González, &
+Hernández, 2010). Tables 3 and 4 show associations between BRS
+and the three frequency bands revealed by our reanalyses. Signiﬁ-
+cant correlations between BRS and the three components were
+obtained, which contradicts the assumption of a speciﬁc relation-
+ship between the LF band and baroreﬂex function. In all above
+mentioned studies we found associations in the same direction
+between the three HRV components and other parameters of car-
+di
+l
+l I i
+h
+f
+lik l
+h
+f h
+Autoregression Technique with Interbeat Interval (IBI), Pre-
+Ejection Period (PEP), and Baroreﬂex Sensitivity (BRS) in the
+Physical Exercise Study (cf. Table 2) by Martín-Vázquez and Reyes
+del Paso (2010; Panel A, n = 40) and in the Chronic Pain Study by
+Reyes del Paso, Garrido, et al. (2010; Panel B, n = 64)
+IBI
+VLF
+LF
+HF
+Panel A
+IBI-BL
+.672*
+.563*
+.563*
+IBI-Task
+.729*
+.664*
+.688*
+PEP-BL
+.081
+.133
+-.061
+-.097
+PEP-Task
+.120
+-.076
+-.106
+-.110
+BRS-BL
+.688*
+.484*
+.738*
+.768*
+BRS-Task
+.724*
+.617*
+.461*
+.762*
+Panel B
+IBI-BL
+.252+
+.527*
+.584*
+IBI-Task
+.244
+.282+
+.339*
+PEP-BL
+.198
+.098
+.077
+.049
+PEP-Task
+.180
+.059
+.028
+.065
+BRS-BL
+.688*
+.370*
+.738*
+.768*
+BRS-Task
+.506*
+.311+
+.521*
+.455*
+Note. BL = baseline, Task = mental arithmetic, VLF = very low frequency,
+LF = low frequency, HF = high frequency.
++p < .05.
+*p < .01.
+loaded from https://onlinelibrary.wiley.com/doi/10.1111/psyp.12027 by University of Canterbury Library Access and Collections, Wiley Online Library on [17/05/2023]. See the Terms and Conditions (https

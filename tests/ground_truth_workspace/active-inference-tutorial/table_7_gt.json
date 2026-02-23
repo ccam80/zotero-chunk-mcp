@@ -1,17 +1,43 @@
 {
-  "table_id": "SCPXVBLY_table_3",
+  "table_id": "SCPXVBLY_table_3_p31",
   "paper": "active-inference-tutorial",
   "item_key": "SCPXVBLY",
   "page_num": 31,
   "table_index": 7,
   "caption": "Table 3 (continued).",
-  "headers": ["MDP Field", "Model Element", "Structure", "Description"],
-  "rows": [
-    ["MDP.xn", "Neuronal encoding of hidden states.", "1 cell per state factor.\nRows = iterations of message passing (16 per time point).\nColumns = states.\nThird Dimension: time point the belief is about (\u03c4).\nFourth Dimension: time point the belief is at (t).", "Bayesian model average of normalized firing rates which reflect posteriors over states at each iteration of message passing (weighted by the posterior probability of the associated policies)."],
-    ["MDP.wn", "Neuronal encoding of tonic dopamine, reflecting the current value of \u03b3.", "Rows = number of iterative updates (16 per time point). For example, if there were two time points in a trial this would be 1 column with 32 rows.", "This reflects the value of the expected precision of the expected free energy over policies (\u03b3) at each iteration of updating."],
-    ["MDP.dn", "Neuronal encoding of phasic dopamine responses, reflecting the rate of change in \u03b3.", "Rows = number of iterative updates (16 per time point). For example, if there were two time points in a trial this would be 1 column with 32 rows.", "This variable reflects the expected precision of change in expected free energy over policies (\u03b3) at each iteration of updating."],
-    ["MDP.rt", "Simulated reaction times.", "Columns = time points.", "Computation time (i.e., time to convergence) for each round of message passing and action selection."]
+  "headers": [
+    "MDP Field",
+    "Model Element",
+    "Structure",
+    "Description"
   ],
-  "notes": "Continuation of Table 3 from page 30. Page bottom contains a footnote (partially visible): 'Constant \u03b1 = 512...' with similar direction notation.",
-  "verified": false
+  "rows": [
+    [
+      "MDP.xn",
+      "Neuronal encoding of hidden states.",
+      "1 cell per state factor.\nRows = iterations of message passing (16 per time point).\nColumns = states.\nThird Dimension: time point the belief is about (τ).\nFourth Dimension: time point the belief is at (t).",
+      "Bayesian model average of normalized firing rates, which reflect posteriors over states at each iteration of message passing (weighted by the posterior probability of the associated policies)."
+    ],
+    [
+      "MDP.wn",
+      "Neuronal encoding of tonic dopamine, reflecting the current value of γ.",
+      "Rows = number of iterative updates (16 per time point). For example, if there were two time points in a trial this would be 1 column with 32 rows.",
+      "This reflects the value of the expected precision of the expected free energy over policies (γ) at each iteration of updating."
+    ],
+    [
+      "MDP.dn",
+      "Neuronal encoding of phasic dopamine responses, reflecting the rate of change in γ.",
+      "Rows = number of iterative updates (16 per time point). For example, if there were two time points in a trial this would be 1 column with 32 rows.",
+      "This variable reflects the rate of change in the expected precision of expected free energy over policies (γ) at each iteration of updating."
+    ],
+    [
+      "MDP.rt",
+      "Simulated reaction times.",
+      "Columns = time points.",
+      "Computation time (i.e., time to convergence) for each round of message passing and action selection."
+    ]
+  ],
+  "notes": "Continuation of Table 3 from page 30. Page bottom contains a footnote (partially visible): 'Constant α = 512...' with similar direction notation.",
+  "verified": true,
+  "footnotes": ""
 }

@@ -5,14 +5,57 @@
   "page_num": 18,
   "table_index": 4,
   "caption": "Table 4. Poles of highpass filters with quantized coefficients.",
-  "headers": ["fC", "20 Hz", "30 Hz", "40 Hz", "50 Hz", "60 Hz"],
+  "headers": [
+    "fC",
+    "20 Hz",
+    "30 Hz",
+    "40 Hz",
+    "50 Hz",
+    "60 Hz"
+  ],
   "rows": [
-    ["Che", "0.992 \u00b1 0.013i", "0.988 \u00b1 0.020i", "0.984 \u00b1 0.025i", "0.980 \u00b1 0.032i", "0.976 \u00b1 0.039i"],
-    ["But", "0.991 \u00b1 0.007i", "0.987 \u00b1 0.011i", "0.982 \u00b1 0.015i", "0.978 \u00b1 0.021i", "0.974 \u00b1 0.025i"],
-    ["fC", "70 Hz", "80 Hz", "90 Hz", "100 Hz", ""],
-    ["Che", "0.972 \u00b1 0.045i", "0.968 \u00b1 0.051i", "0.964 \u00b1 0.057i", "0.961 \u00b1 0.057i", ""],
-    ["But", "0.969 \u00b1 0.030i", "0.965 \u00b1 0.033i", "0.960 \u00b1 0.037i", "0.956 \u00b1 0.041i", ""]
+    [
+      "Che",
+      "0.992 ± 0.013i",
+      "0.988 ± 0.020i",
+      "0.984 ± 0.025i",
+      "0.980 ± 0.032i",
+      "0.976 ± 0.039i"
+    ],
+    [
+      "But",
+      "0.991 ± 0.007i",
+      "0.987 ± 0.011i",
+      "0.982 ± 0.015i",
+      "0.978 ± 0.021i",
+      "0.974 ± 0.025i"
+    ],
+    [
+      "fC",
+      "70 Hz",
+      "80 Hz",
+      "90 Hz",
+      "100 Hz",
+      ""
+    ],
+    [
+      "Che",
+      "0.972 ± 0.045i",
+      "0.968 ± 0.051i",
+      "0.964 ± 0.057i",
+      "0.961 ± 0.057i",
+      ""
+    ],
+    [
+      "But",
+      "0.969 ± 0.030i",
+      "0.965 ± 0.033i",
+      "0.960 ± 0.037i",
+      "0.956 ± 0.041i",
+      ""
+    ]
   ],
   "notes": "The table is split into two sub-sections: top rows cover 20-60 Hz (5 frequency columns), bottom rows cover 70-100 Hz (4 frequency columns). The second section repeats the fC / frequency header row (shown here as a data row per rule 6). 'Che' = Chebyshev, 'But' = Butterworth. The 100 Hz Che pole imaginary part reads 0.057i (same as 90 Hz Che).",
-  "verified": false
+  "verified": true,
+  "footnotes": ""
 }

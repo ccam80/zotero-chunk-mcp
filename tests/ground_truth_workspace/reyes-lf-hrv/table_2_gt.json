@@ -1,27 +1,118 @@
 {
-  "table_id": "AQ3D94VC_table_3",
+  "table_id": "AQ3D94VC_table_4",
   "paper": "reyes-lf-hrv",
   "item_key": "AQ3D94VC",
   "page_num": 6,
   "table_index": 2,
-  "caption": "Table 3. Correlations of HRV Parameters Obtained by Fast Fourier Transformations with Interbeat Interval (IBI), Pulse Transit Time (PTT), and Baroreflex Sensitivity (BRS) Recorded during Baseline (BL) and Cognitive Load (Task) in the Duschek, Muckenthaler, et al. (2009; Panel A, n = 60) and Duschek et al. (2013; Panel B, n = 54) Studies",
-  "headers": ["", "IBI", "VLF", "LF", "HF"],
-  "rows": [
-    ["Panel A", "", "", "", ""],
-    ["IBI-BL", "", ".543*", ".268\u207a", ".291\u207a"],
-    ["IBI-Task", "", ".005", ".212", ".541*"],
-    ["PTT-BL", ".149", ".154", ".009", ".051"],
-    ["PTT-Task", ".224", ".161", ".370*", ".173"],
-    ["BRS-BL", ".723*", ".583*", ".234", ".587*"],
-    ["BRS-Task", ".749*", ".141", ".202", ".696*"],
-    ["Panel B", "", "", "", ""],
-    ["IBI-BL", "", ".360*", ".179", ".531*"],
-    ["IBI-Task", "", "-.054", ".368*", ".540*"],
-    ["PTT-BL", ".440*", ".129", ".170", ".020"],
-    ["PTT-Task", ".562*", "-.104", ".310\u207a", ".149"],
-    ["BRS-BL", ".738*", ".438*", ".223", ".814*"],
-    ["BRS-Task", ".808*", "-.025", ".425*", ".707*"]
+  "caption": "Table 4. Correlations of HRV Parameters Obtained by the Autoregression Technique with Interbeat Interval (IBI), Pre- Ejection Period (PEP), and Baroreflex Sensitivity (BRS) in the Physical Exercise Study (cf. Table 2) by Martín-Vázquez and Reyes del Paso (2010; Panel A, n = 40) and in the Chronic Pain Study by Reyes del Paso, Garrido, et al. (2010; Panel B, n = 64)",
+  "headers": [
+    "",
+    "IBI",
+    "VLF",
+    "LF",
+    "HF"
   ],
-  "notes": "Panel A and Panel B are sub-group header rows; other columns in those rows are empty. IBI-BL rows have empty IBI column because correlation of IBI with itself is not reported. * denotes statistical significance; + (superscript) denotes marginal significance. Note at bottom: VLF = very low frequency, LF = low frequency, HF = high frequency.",
-  "verified": false
+  "rows": [
+    [
+      "Panel A",
+      "",
+      "",
+      "",
+      ""
+    ],
+    [
+      "IBI-BL",
+      "",
+      ".672*",
+      ".563*",
+      ".563*"
+    ],
+    [
+      "IBI-Task",
+      "",
+      ".729*",
+      ".664*",
+      ".688*"
+    ],
+    [
+      "PEP-BL",
+      ".081",
+      ".133",
+      "-.061",
+      "-.097"
+    ],
+    [
+      "PEP-Task",
+      ".120",
+      "-.076",
+      "-.106",
+      "-.110"
+    ],
+    [
+      "BRS-BL",
+      ".688*",
+      ".484*",
+      ".738*",
+      ".768*"
+    ],
+    [
+      "BRS-Task",
+      ".724*",
+      ".617*",
+      ".461*",
+      ".762*"
+    ],
+    [
+      "Panel B",
+      "",
+      "",
+      "",
+      ""
+    ],
+    [
+      "IBI-BL",
+      "",
+      ".252⁺",
+      ".527*",
+      ".584*"
+    ],
+    [
+      "IBI-Task",
+      "",
+      ".244",
+      ".282⁺",
+      ".339*"
+    ],
+    [
+      "PEP-BL",
+      ".198",
+      ".098",
+      ".077",
+      ".049"
+    ],
+    [
+      "PEP-Task",
+      ".180",
+      ".059",
+      ".028",
+      ".065"
+    ],
+    [
+      "BRS-BL",
+      ".688*",
+      ".370*",
+      ".738*",
+      ".768*"
+    ],
+    [
+      "BRS-Task",
+      ".506*",
+      ".311⁺",
+      ".521*",
+      ".455*"
+    ]
+  ],
+  "notes": "Panel A and Panel B are sub-group header rows; other columns in those rows are empty. IBI-BL and IBI-Task rows have empty IBI column because correlation of IBI with itself is not reported.",
+  "verified": true,
+  "footnotes": "Note. BL = baseline, Task = mental arithmetic, VLF = very low frequency, LF = low frequency, HF = high frequency. +p < .05. *p < .01."
 }

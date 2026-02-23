@@ -5,23 +5,69 @@
   "page_num": 22,
   "table_index": 8,
   "caption": "Abbreviations",
-  "headers": ["Abbreviation", "Meaning"],
-  "rows": [
-    ["ADC", "Analog-to-digital conversion"],
-    ["BLE", "Bluetooth Low Energy"],
-    ["DAC", "Digital-to-analog converter"],
-    ["DSP", "Digital signal processing"],
-    ["DC", "Direct current"],
-    ["EMG", "Electromyography"],
-    ["FDA", "Filter Designer app"],
-    ["FIR", "Finite impulse response"],
-    ["IIR", "Infinite impulse response"],
-    ["\u00b5C", "Microcontroller"],
-    ["OpAmp", "Operational amplifier"],
-    ["PLI", "Power-line interference"],
-    ["SNR", "Signal-to-noise ratio"],
-    ["STFT", "Short-time Fourier transform"]
+  "headers": [
+    "Abbreviation",
+    "Meaning"
   ],
-  "notes": "The table has no visible header row in the original; column headers 'Abbreviation' and 'Meaning' are inferred from context. The section heading 'The following abbreviations are used in this manuscript:' appears above the table (partially visible at top of image). The \u00b5C entry uses the micro sign (\u00b5).",
-  "verified": false
+  "rows": [
+    [
+      "ADC",
+      "Analog-to-digital conversion"
+    ],
+    [
+      "BLE",
+      "Bluetooth Low Energy"
+    ],
+    [
+      "DAC",
+      "Digital-to-analog converter"
+    ],
+    [
+      "DSP",
+      "Digital signal processing"
+    ],
+    [
+      "DC",
+      "Direct current"
+    ],
+    [
+      "EMG",
+      "Electromyography"
+    ],
+    [
+      "FDA",
+      "Filter Designer app"
+    ],
+    [
+      "FIR",
+      "Finite impulse response"
+    ],
+    [
+      "IIR",
+      "Infinite impulse response"
+    ],
+    [
+      "µC",
+      "Microcontroller"
+    ],
+    [
+      "OpAmp",
+      "Operational amplifier"
+    ],
+    [
+      "PLI",
+      "Power-line interference"
+    ],
+    [
+      "SNR",
+      "Signal-to-noise ratio"
+    ],
+    [
+      "STFT",
+      "Short-time Fourier transform"
+    ]
+  ],
+  "notes": "The table has no visible header row in the original; column headers 'Abbreviation' and 'Meaning' are inferred from context. The section heading 'The following abbreviations are used in this manuscript:' appears above the table (partially visible at top of image). The µC entry uses the micro sign (µ).",
+  "verified": true,
+  "footnotes": ""
 }

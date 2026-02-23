@@ -1,0 +1,38 @@
+6
+Mean and standard deviation of the compensation network component values.
+Electrode configuration
+𝑅′
+𝐴(kΩ)
+𝐶′
+𝐴(nF)
+𝑅′
+𝐵(kΩ)
+𝐶′
+𝐵(nF)
+Ag/AgClNSP
+1884 ± 3158
+144.8 ± 237.2
+1748 ± 1886
+141.8 ± 207.4
+Ag/AgClSP
+99.6 ± 115.2
+6.6 ± 9.9
+102.9 ± 118.6
+6.8 ± 10.4
+Ag-SP
+2811 ± 3736
+202.2 ± 403.7
+2816 ± 3465
+487.9 ± 1153
+electrode–skin impedance, it does not guarantee a balanced electrode–
+skin interface. This is highlighted when comparing the impedance
+imbalance at 50 Hz and over the bioelectrical signal range.
+Multiple methods were applied to reduce limitations of this study.
+During skin preparation, approximately 20 light uniform sweeps over
+a large area above the biceps brachii were performed. This reduced
+the possibility of skin preparation producing an impedance imbal-
+ance. To ensure the electrode adhesive and gel did not effect the
+impedance measurements between the different electrode configura-
+tions, the Ag/AgClNSP electrode–skin impedance was measured on the
+right arm, and the Ag/AgClSP electrode–skin impedance was measured
+on the left arm. This does have the limitation that the impedance

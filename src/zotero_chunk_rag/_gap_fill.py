@@ -80,28 +80,16 @@ def run_recovery(
     Returns:
         Updated (figures, tables) with recovered captions filled in.
     """
-    from ._figure_extraction import (
-        find_all_captions_on_page,
-        _FIG_CAPTION_RE,
-        _FIG_CAPTION_RE_RELAXED,
-        _FIG_LABEL_ONLY_RE,
-    )
-    from .pdf_processor import (
-        _TABLE_CAPTION_RE,
-        _TABLE_CAPTION_RE_RELAXED,
-        _TABLE_LABEL_ONLY_RE,
-    )
+    from .feature_extraction.captions import find_all_captions
 
     max_y_dist = _adaptive_max_y_distance(doc)
 
     fig_recoveries = _recover_captions(
-        doc, figures, find_all_captions_on_page,
-        _FIG_CAPTION_RE, _FIG_CAPTION_RE_RELAXED, _FIG_LABEL_ONLY_RE,
+        doc, figures, find_all_captions,
         _FIG_REF_RE, kind="figure", max_y_distance=max_y_dist,
     )
     tab_recoveries = _recover_captions(
-        doc, tables, find_all_captions_on_page,
-        _TABLE_CAPTION_RE, _TABLE_CAPTION_RE_RELAXED, _TABLE_LABEL_ONLY_RE,
+        doc, tables, find_all_captions,
         _TABLE_REF_RE, kind="table", max_y_distance=max_y_dist,
     )
 
@@ -118,9 +106,6 @@ def _recover_captions(
     doc: pymupdf.Document,
     items: list[ExtractedFigure] | list[ExtractedTable],
     caption_finder,
-    strict_re: re.Pattern,
-    relaxed_re: re.Pattern,
-    label_only_re: re.Pattern,
     ref_re: re.Pattern,
     kind: str,
     max_y_distance: float,
@@ -131,6 +116,9 @@ def _recover_captions(
     """
     if not items:
         return 0
+
+    include_figures = kind == "figure"
+    include_tables = kind == "table"
 
     # --- Step 1: Audit ---
     # Map caption numbers (as strings) to item indices
@@ -148,36 +136,35 @@ def _recover_captions(
     if not orphan_indices:
         return 0  # nothing to recover
 
-    # Scan all pages for captions → find floating (unassigned) ones
+    # Scan all pages for captions -> find floating (unassigned) ones
     # Also collect distances from assigned captions to their items for calibration
     floating_captions: list[dict] = []  # {num, y_center, text, page_num}
     matched_distances: list[float] = []
     for page_num_0, page in enumerate(doc):
         page_num = page_num_0 + 1
-        hits = caption_finder(
-            page, strict_re,
-            relaxed_re=relaxed_re,
-            label_only_re=label_only_re,
+        detected = caption_finder(
+            page,
+            include_figures=include_figures,
+            include_tables=include_tables,
         )
-        for y_center, text, bbox in hits:
-            m = _CAPTION_NUM_RE.search(text)
-            if not m:
+        for cap in detected:
+            num_str = cap.number
+            if not num_str:
                 continue
-            num_str = m.group(1)
             if num_str in assigned_nums:
                 # Measure distance from this caption to its matched item
                 item_idx = assigned_nums[num_str]
                 item = items[item_idx]
                 if item.page_num == page_num:
-                    dist = abs(y_center - item.bbox[3])
+                    dist = abs(cap.y_center - item.bbox[3])
                     matched_distances.append(dist)
             else:
                 floating_captions.append({
                     "num": num_str,
-                    "y_center": y_center,
-                    "text": text,
+                    "y_center": cap.y_center,
+                    "text": cap.text,
                     "page_num": page_num,
-                    "bbox": bbox,
+                    "bbox": cap.bbox,
                 })
 
     # Calibrate threshold from matched caption-to-item distances

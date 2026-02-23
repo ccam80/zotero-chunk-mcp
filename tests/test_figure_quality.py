@@ -5,8 +5,6 @@ import pymupdf.layout  # noqa: F401
 import pymupdf4llm
 import pymupdf
 
-from zotero_chunk_rag._figure_extraction import extract_figures
-
 FIXTURES = Path(__file__).parent / "fixtures" / "papers"
 
 # EXACT expected figure counts and caption prefixes.
@@ -119,20 +117,18 @@ def test_no_body_text_as_figure_caption(extracted_papers):
 
 def test_image_extraction_writes_files(tmp_path):
     """When write_images=True, figures must have real PNG files on disk."""
-    pdf_path = str(FIXTURES / "noname1.pdf")
-    page_chunks = pymupdf4llm.to_markdown(pdf_path, page_chunks=True,
-                                          write_images=False)
-    doc = pymupdf.open(pdf_path)
-    figures = extract_figures(
-        doc, page_chunks,
+    from zotero_chunk_rag.pdf_processor import extract_document
+
+    pdf_path = FIXTURES / "noname1.pdf"
+    result = extract_document(
+        pdf_path,
         write_images=True,
         images_dir=tmp_path / "images",
     )
-    doc.close()
 
-    figures_with_images = [f for f in figures if f.image_path is not None]
+    figures_with_images = [f for f in result.figures if f.image_path is not None]
     assert len(figures_with_images) >= 1, (
-        f"No figures have image_path set. Total figures: {len(figures)}"
+        f"No figures have image_path set. Total figures: {len(result.figures)}"
     )
     for fig in figures_with_images:
         assert fig.image_path.exists(), (

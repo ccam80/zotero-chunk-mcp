@@ -183,12 +183,15 @@ def _make_passthrough_trace(points: list[BoundaryPoint]) -> AxisTrace:
                 weighted_position=(pt.min_pos + pt.max_pos) / 2,
                 accepted=True,
                 acceptance_threshold=0.0,
+                method_names=[pt.provenance],
+                acceptance_reason="above_threshold",
             )
             for pt in points
         ],
         median_confidence=statistics.median([pt.confidence for pt in points]) if points else 0.0,
         acceptance_threshold=0.0,
         accepted_positions=[(pt.min_pos + pt.max_pos) / 2 for pt in points],
+        median_method_count=1.0 if points else 0.0,
     )
 
 
@@ -317,7 +320,7 @@ def _combine_axis(
     clusters = _merge_overlapping(expanded)
 
     # Step 4: compute cluster properties
-    cluster_props: list[tuple[float, float, int, str, list[BoundaryPoint], bool]] = []
+    cluster_props: list[tuple[float, float, int, str, list[BoundaryPoint], bool, list[str]]] = []
     for cluster in clusters:
         total_confidence = sum(pt.confidence for pt in cluster)
         mean_confidence = total_confidence / len(cluster)
@@ -330,20 +333,19 @@ def _combine_axis(
         else:
             position = sum((pt.min_pos + pt.max_pos) / 2 for pt in cluster) / len(cluster)
 
-        distinct_methods = len(set(pt.provenance for pt in cluster))
-        combined_provenance = ",".join(
-            dict.fromkeys(pt.provenance for pt in cluster)
-        )
+        method_names = list(dict.fromkeys(pt.provenance for pt in cluster))
+        distinct_methods = len(method_names)
+        combined_provenance = ",".join(method_names)
         has_ruled_line = any(pt.provenance == "ruled_lines" for pt in cluster)
 
         cluster_props.append((
             position, mean_confidence, distinct_methods,
-            combined_provenance, list(cluster), has_ruled_line,
+            combined_provenance, list(cluster), has_ruled_line, method_names,
         ))
 
     # Step 5: accept/reject via median method count + ruled line override
     if len(cluster_props) == 1:
-        pos, mean_conf, _support, prov, raw_cluster, _has_ruled = cluster_props[0]
+        pos, mean_conf, _support, prov, raw_cluster, _has_ruled, mnames = cluster_props[0]
         accepted = [BoundaryPoint(
             min_pos=pos,
             max_pos=pos,
@@ -361,10 +363,13 @@ def _combine_axis(
                     weighted_position=pos,
                     accepted=True,
                     acceptance_threshold=0.0,
+                    method_names=mnames,
+                    acceptance_reason="above_threshold",
                 )],
                 median_confidence=mean_conf,
                 acceptance_threshold=0.0,
                 accepted_positions=[pos],
+                median_method_count=float(_support),
             )
             return accepted, trace_obj
         return accepted, None
@@ -375,7 +380,7 @@ def _combine_axis(
     accepted: list[BoundaryPoint] = []
     cluster_records: list[ClusterRecord] = []
 
-    for pos, mean_conf, support, prov, raw_cluster, has_ruled in cluster_props:
+    for pos, mean_conf, support, prov, raw_cluster, has_ruled, mnames in cluster_props:
         is_accepted = support >= median_method_count or has_ruled
         if is_accepted:
             accepted.append(BoundaryPoint(
@@ -385,6 +390,12 @@ def _combine_axis(
                 provenance=prov,
             ))
         if collect_trace:
+            if has_ruled and support < median_method_count:
+                reason = "ruled_line_override"
+            elif is_accepted:
+                reason = "above_threshold"
+            else:
+                reason = "rejected"
             cluster_records.append(ClusterRecord(
                 points=raw_cluster,
                 total_confidence=sum(pt.confidence for pt in raw_cluster),
@@ -392,6 +403,8 @@ def _combine_axis(
                 weighted_position=pos,
                 accepted=is_accepted,
                 acceptance_threshold=median_method_count,
+                method_names=mnames,
+                acceptance_reason=reason,
             ))
 
     all_mean_confs = [cp[1] for cp in cluster_props]
@@ -405,6 +418,7 @@ def _combine_axis(
             median_confidence=median_confidence,
             acceptance_threshold=median_method_count,
             accepted_positions=[bp.min_pos for bp in accepted],
+            median_method_count=median_method_count,
         )
         return accepted, trace_obj
 

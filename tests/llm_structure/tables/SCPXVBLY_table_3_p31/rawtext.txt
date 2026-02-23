@@ -1,0 +1,90 @@
+MDP Field
+Model Element
+Structure
+Description
+MDP.xn
+Neuronal encoding of hidden states.
+1 cell per state factor.
+Rows = iterations of message passing (16 per
+time point).
+Columns = states.
+Third Dimension: time point the belief is about
+(τ).
+Fourth Dimension: time point the belief is at
+(t).
+Bayesian model average of normalized firing
+rates, which reflect posteriors over states at
+each iteration of message passing (weighted
+by the posterior probability of the associated
+policies).
+MDP.wn
+Neuronal encoding of tonic dopamine,
+reflecting the current value of γ .
+Rows = number of iterative updates (16 per
+time point). For example, if there were two
+time points in a trial this would be 1 column
+with 32 rows.
+This reflects the value of the expected
+precision of the expected free energy over
+policies (γ ) at each iteration of updating.
+MDP.dn
+Neuronal encoding of phasic dopamine
+responses, reflecting the rate of change in γ .
+Rows = number of iterative updates (16 per
+time point). For example, if there were two
+time points in a trial this would be 1 column
+with 32 rows.
+This variable reflects the rate of change in the
+expected precision of expected free energy
+over policies (γ ) at each iteration of updating.
+MDP.rt
+Simulated reaction times.
+Columns = time points.
+Computation time (i.e., time to convergence)
+for each round of message passing and action
+selection.
+Gerror ←(π −π0) · (−G) = .3567
+βupdate ←β −β0 + Gerror = .3567
+β ←β −βupdate/ψ = 1 −.3567/2 = .8216
+γ ←1
+β = 1.2171
+Here we have included a step size parameter of ψ = 2,
+which reduces the magnitude of each update and promotes stable
+convergence. Note that, while we have here shown an example
+of a single round of updating, there will be many rounds of
+updating to convergence for each new observation. Notice that
+the increase in the probability of policy 2 and 3 between the
+prior and posterior over policies is driven by F, which scores the
+evidence afforded each policy given current observations. Policy
+2 and 3 better minimize F and are therefore more plausible.
+Taking the dot product between the vector encoding the dif-
+ference between the prior and posterior over policies (π −π0)
+and the −G vector is equivalent to scaling each element of the
+a similar direction (i.e., an angle of less than 90◦apart), the dot
+product of the two will result in an increase in γ . The fact that
+these vectors point in the same direction is a way to visualize
+how new observations (through F) provide evidence supporting
+the reliability of G, and therefore increase its precision weight-
+ing. In contrast, when these vectors point in different directions
+(i.e., the angle separating them is greater than 90◦), this suggests
+that G is less reliable; its precision (γ ) is therefore reduced
+and it contributes less to the posterior distribution over policies
+(π).
+Now that we have gone through an example of these dy-
+namics, an important question concerns the settings in which
+they may be useful. Here, it is important to highlight that E,
+F, and β/γ can be viewed as optional elements (e.g., they are
+not incorporated in the policy selection model within the upper
+right portion of Fig. 5, or in other examples of active infer-
+ence (Da Costa, Parr et al., 2020)). For example, incorporating E
+may not be useful unless modeling a task in which you suspect
+th t
+ti i
+t
+t
+t d
+ith
+ti
+l
+h i
+bi

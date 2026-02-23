@@ -8,5 +8,6 @@
   "headers": [],
   "rows": [],
   "notes": "Artifact: diagram_as_table, not a data table. The image shows a block diagram (Figure 3) of the insulated EMG measurement set-up, followed by photographs (Figure 4). No tabular data present.",
-  "verified": false
+  "verified": true,
+  "footnotes": ""
 }

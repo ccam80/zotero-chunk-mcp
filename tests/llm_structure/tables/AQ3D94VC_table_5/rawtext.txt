@@ -1,0 +1,156 @@
+activation are suppressed when strong vagal activity simultane-
+ously occurs, whereas vagal deceleration effects are augmented
+during high sympathetic background levels.
+In the concept of autonomic space (Berntson et al., 1993;
+Berntson, Cacioppo, Quigley, & Fabro, 1994), functional states of
+the ANS are described in a two-dimensional space bound by sym-
+pathetic and parasympathetic axes. In this space, multiple modes of
+autonomic control can be characterized. These comprise (a) a
+coupled reciprocal mode, in which activities of the two branches
+are inversely related; (2) a coupled nonreciprocal mode, in which
+activities of both branches are positively correlated (coactivation);
+and (3) an uncoupled mode, in which activity changes of the two
+divisions occur independently of one another. The assumptions of
+the Pagani group may only hold under the assumption that the ANS
+is working in a reciprocal mode most of the time, which is unlikely
+to be the case (see Berntson, Cacioppo, & Quigley, 1991, for a
+review).
+Pagani and colleagues chose normalized LF and HF power and
+the LF/HF ratio as mathematical expression of HRV. As summa-
+rized above, in most studies supporting their theory these transfor-
+mations were applied (cf. Montano et al., 2009). Their model is
+supported mainly by the effects of orthostatic tilt (head-up tilt
+increases sympathetic and inhibits vagal activity). In the Montano
+et al. (1994) study, absolute LF power was widely unrelated to the
+magnitude of tilt (r = .17), whereas HF power correlated signiﬁ-
+cantly with tilt incline (r = -.41). In contrast, tilt highly correlated
+with LF and HF power expressed in normalized units (r = .78 and
+-.72, respectively, for LFnu and HFnu) and with the LF/HF ratio
+(r = .68). Normalization procedures thus lead to a nearly linear
+relation between LFnu and tilt angle. However, as can be seen in
+their ﬁgures, the close associations for LFnu and the LF/HF ratio
+resulted from the inclusion of HF in the equation applied to
+compute LFnu and the LF/HF ratio. The effects of tilt on the
+transformed measures are therefore mainly due to the reduction in
+HF as tilt angle increases.
+Regarding the transformation of LF and HF into normalized
+tions produce artiﬁcially high correlations. This may lead to the
+wrong conclusion that a variable is related to sympathetic cardiac
+tone such as in the case of tilt angle in the Montano et al. (1994)
+study. In our pharmacological blockade study, atropine administra-
+tion increased LFnu (from 49  15 to 87  12 for baseline and
+from 44  12 to 75  23 for mental load), decreased HFnu (from
+50  14 to 13  12 for baseline and from 56  12 to 25  23 for
+mental load), and produced a very strong increase in the LF/HF
+ratio (from 1.15  0.71 to 11.89  6.52 for baseline and from
+0.87  0.42 to 7.47  8.35 for mental load). In this context of
+small residual HRV (i.e., nearly constant HR) the suggested trans-
+formations can lead to substantial distortion of the data and thus
+wrong conclusions.
+Conclusions
+Evidence presented in this article challenges the suitability of the
+LF component of HRV as an index of cardiac sympathetic control
+with a Dependent Variable (DV) for 10 Subjects
+Subject
+SPD
+VLF
+LF
+HF
+LF/HF
+LFnu
+HFnu
+DV
+1
+21
+5
+10
+6
+1.67
+63
+38
+1
+2
+20
+4.50
+9
+6.50
+1.38
+58
+42
+2
+3
+25
+6
+12
+7
+1.71
+63
+37
+3
+4
+19.20
+3
+9
+7.20
+1.25
+56
+44
+4
+5
+25.50
+5
+13
+7.50
+1.73
+63
+37
+5
+6
+19
+3
+8
+8
+1
+50
+50
+6
+7
+29.50
+6
+15
+8.50
+1.76
+64
+36
+7
+8
+21
+5
+7
+9
+0.78
+44
+56
+8
+9
+29.50
+6
+14
+9.50
+1.47
+60
+40
+9
+10
+21
+5
+6
+10
+0.60
+38
+63
+10
+Note. SPD = spectral power density in the range 0 to 0.40 Hz, that is, total
+power; VLF = very low frequency; LF = low frequency; HF = high fre-
+quency. Normalized units were multiplied by 100.
+loaded from https://onlinelibrary.wiley.com/doi/10.1111/psyp.12027 by University of Canterbury Library Access and Collections, Wiley Online Library on [17/05/2023]. See the Terms and Conditions (https

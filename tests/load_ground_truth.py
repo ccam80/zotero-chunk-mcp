@@ -21,7 +21,7 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 
-from zotero_chunk_rag.table_extraction.ground_truth import (
+from zotero_chunk_rag.feature_extraction.ground_truth import (
     create_ground_truth_db,
     insert_ground_truth,
 )
@@ -80,6 +80,7 @@ def load_verified_ground_truth(
                     headers=data.get("headers", []),
                     rows=data.get("rows", []),
                     notes=data.get("notes", ""),
+                    footnotes=data.get("footnotes", ""),
                 )
                 loaded += 1
             except Exception as exc:
@@ -104,4 +105,6 @@ if __name__ == "__main__":
         print(f"Errors ({len(result['errors'])}):")
         for err in result["errors"]:
             print(f"  {err}")
+    if result["errors"]:
+        sys.exit(1)
     print("Done.")

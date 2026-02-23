@@ -1,0 +1,60 @@
+Sensors 2019, 19, 959
+19 of 24
+ﬂoating-point moving-average ﬁlter. Even when the ﬁxed-point implementations are compared, our
+lowpass architecture decreases runtime.
+0
+1
+2
+3
+4
+0
+1
+2
+3
+Time (s)
+Amplitude (V)
+Short Strong Contraction
+Weak Contraction
+Relaxed Muscle
+Threshold
+Figure 16. Rectiﬁed and smoothed EMG signal for various movements with the threshold for prosthesis
+drive activation indicated.
+Table 5. Runtime per sample of ﬁlters in C implementation at a 48 MHz clock.
+(µs)
+Comb Filter (2nd order IIR)
+8.17
+Highpass Filter (2nd order IIR)
+5.88
+Lowpass Filter (1st order IIR)
+1.28
+Rectiﬁcation and Smoothing
+2.62
+Total Signal Processing Chain Runtime
+17.95
+Table 6.
+Comparison of runtime per sample of various lowpass-ﬁlter C implementations at
+a 48 MHz clock.
+(µs)
+(i) Selected Lowpass Filter (1st order IIR)
+1.28
+(ii) Fixed-point Lowpass Filter (1st order IIR, direct form II)
+1.67
+(iii) Floating-Point Lowpass Filter (1st order IIR, direct form II)
+20.12
+(iv) Floating-Point Lowpass Filter (5th order FIR)
+49.80
+(v) Floating-Point Lowpass Filter (8th order FIR)
+73.60
+4.7. Power Consumption
+The current consumption of the sensor system, as presented by Roland et al. [11] was measured
+to be 8.5 mA at a supply voltage of 3.7 V (=31.5 mW). This includes the µC, which requires 5.2 mA.
+For this measurement, the controller was set to 48 MHz clock frequency in PL2 mode and the ADC,
+DAC, brown out detector and IO-pins were activated. The current consumption of the controller
+includes also the integrated OpAmps for gain adjustment, the non-volatile memory and the DSP
+software. The BLE module would increase the current consumption at 3.7 V by 0.9 mA in advertising
+mode and by 8.9 mA in send/receive mode [45]. The send/receive mode is only activated in case of
+sensor conﬁguration or data transfer to the PC. In deep sleep mode, the power consumption of the
+BLE module is negligible. However, the high clock frequency was selected to avoid limitations in
+the experiments, which comprise also ﬂoating point implementations. The relation between µC clock
+frequency and power consumption is given in Table 7. Due to the fact that the ADC clock is connected
+to the µC clock, the ADC settings have to be checked and recalculated accordingly.

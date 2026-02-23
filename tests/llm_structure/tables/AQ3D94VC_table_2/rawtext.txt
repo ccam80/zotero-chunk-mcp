@@ -1,0 +1,107 @@
+marked increase in HR mediated by sympathetic activation. None-
+theless, LF power decreased. Further studies also showed that
+experimentally induced heart failure is associated with decreased
+LF power (Watson, Hood, Ramchandra, McAllen, & May, 2007).
+Passive orthostatic tilt is a common procedure to increase
+cardiac sympathetic activity. Montano et al. (1994) reported that
+tilt incline was accompanied by an increase in LF and a decrease in
+HF oscillations (although no means or statistical results were pro-
+vided), and they claimed that various studies documented rises in
+normalized LF power and the LF/HF ratio during this procedure.
+Mukai and Hayano (1995) found that LF power increased progres-
+sively with tilt angle, but peaked at 30°. However, during high-level
+tilt (30–90°) both the interbeat interval (IBI) and HF power
+decreased progressively with tilt angle. Furlan et al. (2000) found
+that tilt incline was accompanied by a decrease in absolute and
+normalized HF HRV, whereas LF HRV increased only when
+expressed in normalized units. Critical reviews of the orthostatic
+tilt literature (Eckberg, 1997; Goldstein et al., 2011) led to the
+conclusion that this maneuver is not associated clearly with
+increased LF power, at least when expressed in absolute units (cf.
+also Hopf et al., 1995; Peles et al., 1995; Piccirillo, Fimognari,
+Viola,
+&
+Marigliano,
+1995;
+Vicek,
+Radikova,
+Penesova,
+Kvetnansky, & Imrich, 2008; Wallin et al., 1992).
+Psychophysiological studies commonly use psychological chal-
+lenges such as mental arithmetic, attention and memory tasks,
+shock avoidance, or video games to induce sympathetic activation.
+In the Malliani et al. (1991) review, a study is reported in which
+stress induced by mental arithmetic increased the LF and reduced
+the HF bands. However, like the aforementioned manipulations,
+most available studies on the effects of mental stress showed reduc-
+tions of both HF and LF oscillations (e.g., Bernardi et al., 2000;
+Duschek, Muckenthaler, Werner, & Reyes del Paso, 2009; Mulder,
+1985, 1988; Sloan et al., 1996; van Roon, 1998). Given the con-
+sistency of this effect, some authors proposed that the reduction in
+HR oscillations around 0.1 Hz can be taken as an index of mental
+effort/load (Mulder, 1988; van Roon, Mulder, Althaus, & Mulder,
+situations associated with sympathetic stimulation decrease LF
+HRV instead of increasing it and that this effect is widely inde-
+pendent of the type of manipulation applied.
+Effects of Pharmacological Manipulations of
+Cardiovascular Regulation
+From the hypothesis that LF HRV is a marker of cardiac sympa-
+thetic activity, it can be deduced that pharmacological manipula-
+tions inducing reﬂex increase in sympathetic outﬂow enhance the
+LF component and that manipulations reducing sympathetic
+drive diminish LF power. Pagani et al. (1997) found that during
+nitroprusside-induced hypotension the LF component increased,
+Parameters of Physically Active (A) and Sedentary (S) Participants
+in the Martín-Vázquez and Reyes del Paso (2010) Study during
+Baseline and a Mental Arithmetic Task
+Baseline
+Task
+F(1,39)
+p
+h2
+IBI
+A
+820 (93)
+753 (76)
+5.86
+.020
+.283
+S
+733 (126)
+690 (100)
+VLF
+A
+279 (218)
+172 (114)
+3.75
+.060
+.183
+S
+191 (133)
+93 (58)
+LF
+A
+1035 (774)
+632 (406)
+8.50
+.006
+.238
+S
+580 (388)
+330 (214)
+HF
+A
+1016 (1295)
+598 (740)
+4.61
+.039
+.128
+S
+295 (218)
+193 (149)
+Note. HRV was analyzed by means of adaptive autoregressive models
+following algorithms by Bianchi, Mainardi, Melonni, Chierchiu, and
+Cerutti (1997). IBI = interbeat interval, VLF = very low frequency,
+LF = low frequency, HF = high frequency; F, p, and h2 values of the
+ANOVA for group comparisons.
+loaded from https://onlinelibrary.wiley.com/doi/10.1111/psyp.12027 by University of Canterbury Library Access and Collections, Wiley Online Library on [17/05/2023]. See the Terms and Conditions (https

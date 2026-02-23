@@ -5,13 +5,34 @@
   "page_num": 6,
   "table_index": 0,
   "caption": "Table 1. Summary of Noninvasive Methods for Excitation and Inhibition",
-  "headers": ["Method", "Excitatory Mode", "Inhibitory Mode"],
+  "headers": [
+    "Method",
+    "Excitatory Mode",
+    "Inhibitory Mode"
+  ],
   "rows": [
-    ["rTMS", "high frequency, \u22655 Hz", "low frequency, 0.2\u20131 Hz"],
-    ["TBS", "intermittent", "continuous"],
-    ["tDCS", "anodal", "cathodal"],
-    ["PAS", "synchronous heterosynaptic stimulation", "asynchronous heterosynaptic stimulation"]
+    [
+      "rTMS",
+      "high frequency, ≥5 Hz",
+      "low frequency, 0.2–1 Hz"
+    ],
+    [
+      "TBS",
+      "intermittent",
+      "continuous"
+    ],
+    [
+      "tDCS",
+      "anodal",
+      "cathodal"
+    ],
+    [
+      "PAS",
+      "synchronous heterosynaptic stimulation",
+      "asynchronous heterosynaptic stimulation"
+    ]
   ],
   "notes": "The image shows the table title 'Excitation and Inhibition' as a heading in red/brown above the column headers (this is the tail of the caption 'Table 1. Summary of Noninvasive Methods for Excitation and Inhibition'). The PAS row has multi-line cell content in both Excitatory and Inhibitory columns joined with a space.",
-  "verified": false
+  "verified": true,
+  "footnotes": ""
 }

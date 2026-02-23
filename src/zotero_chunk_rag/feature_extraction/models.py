@@ -84,6 +84,8 @@ class ClusterRecord:
     weighted_position: float
     accepted: bool
     acceptance_threshold: float
+    method_names: list[str] = field(default_factory=list)
+    acceptance_reason: str = "above_threshold"
 
 
 @dataclass
@@ -96,6 +98,7 @@ class AxisTrace:
     median_confidence: float
     acceptance_threshold: float
     accepted_positions: list[float]
+    median_method_count: float = 0.0
 
 
 @dataclass

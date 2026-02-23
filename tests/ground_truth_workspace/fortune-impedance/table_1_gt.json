@@ -5,12 +5,45 @@
   "page_num": 3,
   "table_index": 1,
   "caption": "Table 1 Component values used for the three control DUT data sets.",
-  "headers": ["Data set", "R_1 (\u03a9)", "R_2 (k\u03a9)", "C_1 (nF)", "R_4 (\u03a9)", "R_3 (k\u03a9)", "C_2 (nF)"],
-  "rows": [
-    ["1", "998.2", "333.5", "3.4", "998.8", "219.5", "0.96"],
-    ["2", "998.2", "46.9", "1029.0", "998.8", "47.2", "1000"],
-    ["3", "998.2", "333.5", "1.2", "998.8", "219.5", "1.1"]
+  "headers": [
+    "Data set",
+    "R_1 (Ω)",
+    "R_2 (kΩ)",
+    "C_1 (nF)",
+    "R_4 (Ω)",
+    "R_3 (kΩ)",
+    "C_2 (nF)"
   ],
-  "notes": "Two-level column headers: Z_TA spans R_1(\u03a9), R_2(k\u03a9), C_1(nF); Z_TB spans R_4(\u03a9), R_3(k\u03a9), C_2(nF).",
-  "verified": false
+  "rows": [
+    [
+      "1",
+      "998.2",
+      "333.5",
+      "3.4",
+      "998.8",
+      "219.5",
+      "0.96"
+    ],
+    [
+      "2",
+      "998.2",
+      "46.9",
+      "1029.0",
+      "998.8",
+      "47.2",
+      "1000"
+    ],
+    [
+      "3",
+      "998.2",
+      "333.5",
+      "1.2",
+      "998.8",
+      "219.5",
+      "1.1"
+    ]
+  ],
+  "notes": "Two-level column headers: ZTA spans R_1(Ω), R_2(kΩ), C_1(nF); ZTB spans R_4(Ω), R_3(kΩ), C_2(nF).",
+  "verified": true,
+  "footnotes": ""
 }

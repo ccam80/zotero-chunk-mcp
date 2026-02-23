@@ -11,12 +11,8 @@ import re
 from pathlib import Path
 
 import pymupdf.layout  # noqa: F401 — activates layout engine, MUST be before pymupdf4llm
-import pymupdf.table as _table_mod
 import pymupdf4llm
 import pymupdf
-
-assert hasattr(_table_mod, "TEXTPAGE"), "pymupdf.table API changed — missing TEXTPAGE"
-assert hasattr(_table_mod, "extract_cells"), "pymupdf.table API changed — missing extract_cells"
 
 from .models import (
     PageExtraction,
@@ -55,32 +51,15 @@ _TABLE_LABEL_ONLY_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Patterns for caption completeness counting
+# Figure caption pattern (used in prose table content collection)
 _FIG_CAPTION_RE_COMP = re.compile(
     rf"^(?:Figure|Fig\.?)\s+{_NUM_GROUP}\s*[.:()\u2014\u2013-]", re.IGNORECASE,
-)
-_FIG_CAPTION_RE_COMP_RELAXED = re.compile(
-    rf"^(?:Figure|Fig\.?)\s+{_NUM_GROUP}\s+\S", re.IGNORECASE,
-)
-_TABLE_CAPTION_RE_COMP = re.compile(
-    rf"^(?:\*\*)?(?:Table|Tab\.)\s+{_NUM_GROUP}\s*[.:()\u2014\u2013-]", re.IGNORECASE,
-)
-_TABLE_CAPTION_RE_COMP_RELAXED = re.compile(
-    rf"^(?:\*\*)?(?:Table|Tab\.)\s+{_NUM_GROUP}\s+\S", re.IGNORECASE,
 )
 _CAPTION_NUM_RE = re.compile(r"(\d+)")
 
 # Module-level caption patterns tuple (shared by artifact detection, native, word, and prose paths)
 _CAP_PATTERNS = (_TABLE_CAPTION_RE, _TABLE_CAPTION_RE_RELAXED, _TABLE_LABEL_ONLY_RE)
 
-# Ligature codepoints that pymupdf often fails to decompose
-_LIGATURE_MAP = {
-    "\ufb00": "ff",
-    "\ufb01": "fi",
-    "\ufb02": "fl",
-    "\ufb03": "ffi",
-    "\ufb04": "ffl",
-}
 
 # Prefix for synthetic captions assigned to orphan tables/figures
 SYNTHETIC_CAPTION_PREFIX = "Uncaptioned "
@@ -173,190 +152,46 @@ def _classify_artifact(table: "ExtractedTable") -> str | None:
     return None
 
 
-# Backwards-compatible wrapper used by tests
-def _is_layout_artifact(table: "ExtractedTable") -> bool:
-    """Return True if a table is a layout artifact."""
-    return _classify_artifact(table) is not None
-
-
-# --- Table cell text cleaning regexes ---
-# Control characters that pollute cell text (preserves \t 0x09, \n 0x0a, \r 0x0d)
-_CONTROL_CHAR_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f]')
-
-# PyMuPDF table extraction often splits decimals across lines:
-#   "4198\n."  should be  ".4198"
-#   "9931 1789\n. ."  should be  ".9931 .1789"
-_CELL_MULTI_DOT_RE = re.compile(r"^(\d+)\s+(\d+)\n\.\s*\.\s*$")
-_CELL_LEADING_DOT_RE = re.compile(r"^(\d\S*)\n\.\s*$")
-_CELL_INLINE_DOT_RE = re.compile(r"(?:^|(?<=\s))(\d)\s+\.(\d)")
-_CELL_WHITESPACE_RE = re.compile(r"  +")
-
-# Statistical markers that can decorate a numeric cell (stripped for numeric check)
-_STAT_MARKERS = re.compile(r"[*\u2020\u2021\u00a7\u2016]+")  # * † ‡ § ‖
-
-# Leading-dot numeric: ".digits" possibly repeated, e.g. ".9931 .1789"
-_CELL_LEADING_ZERO_RE = re.compile(r"(?:^|(?<=\s))\.(\d)")
-
-# Negative sign reassembly patterns (must run before newline removal)
-# Pattern: "18278 − ." or "18278 − .5" → "-1.8278" (digits, minus, dot)
-_CELL_NEG_DOT_RE = re.compile(
-    r"(\d+)\s*[\u2212\-]\s*\.\s*(\d*)",
-)
-# Pattern: "− 18278" or "−18278" → "-18278" (standalone minus before digits)
-_CELL_NEG_DIGITS_RE = re.compile(
-    r"[\u2212\-]\s*(\d[\d.]*)",
-)
-
-
-def _looks_numeric(text: str) -> bool:
-    """Check if text is purely numeric (with statistical markers stripped).
-
-    Strips markers like * † ‡ § and checks if the remainder is only
-    digits, dots, hyphens/minus signs, and commas. No thresholds —
-    pure character-class check.
-    """
-    stripped = _STAT_MARKERS.sub("", text).strip()
-    if not stripped:
-        return False
-    return all(c in "0123456789.\u2212-+, " for c in stripped)
-
-
-def _clean_cell_text(text: str) -> str:
-    """Fix common PyMuPDF table-cell extraction artifacts.
-
-    Repairs broken decimals (digits separated from their decimal point
-    by a newline) and collapses artifact newlines/whitespace.  Must run
-    AFTER ligature normalization but the decimal fixes must run BEFORE
-    newline removal (they use ``\\n.`` as a signal).
-    """
-    if not text:
-        return text
-    # Step 0: Strip control characters (keeps \t \n \r used as signals)
-    text = _CONTROL_CHAR_RE.sub('', text)
-    # Step 1: Multi-value leading dots  "9931 1789\n. ." → ".9931 .1789"
-    text = _CELL_MULTI_DOT_RE.sub(r".\1 .\2", text)
-    # Step 1b: Negative decimal reassembly  "18278 − ." → "-1.8278"
-    # Must run before newline removal (uses \n as signal boundary)
-    m_neg_dot = _CELL_NEG_DOT_RE.match(text.strip())
-    if m_neg_dot and _looks_numeric(text):
-        digits = m_neg_dot.group(1)
-        frac = m_neg_dot.group(2) or ""
-        if frac:
-            text = f"-{digits}.{frac}"
-        else:
-            text = f"-{digits}."
-    # Step 1c: Standalone negative  "− 18278" → "-18278"
-    elif text.strip().startswith(("\u2212", "-")) and _looks_numeric(text):
-        m_neg = _CELL_NEG_DIGITS_RE.match(text.strip())
-        if m_neg:
-            text = f"-{m_neg.group(1)}"
-    # Step 2: Single leading dot  "4198\n." → ".4198"
-    text = _CELL_LEADING_DOT_RE.sub(r".\1", text)
-    # Step 3: Inline broken decimal  "0 .14" → "0.14"
-    text = _CELL_INLINE_DOT_RE.sub(r"\1.\2", text)
-    # Step 2b: Leading-zero recovery  ".4198" → "0.4198", ".9931 .1789" → "0.9931 0.1789"
-    if _looks_numeric(text):
-        text = _CELL_LEADING_ZERO_RE.sub(r"0.\1", text)
-    # Step 4: Collapse artifact newlines (AFTER decimal fix)
-    text = text.replace("\n", " ")
-    # Step 5: Collapse runs of whitespace
-    text = _CELL_WHITESPACE_RE.sub(" ", text).strip()
-    # Step 6: Normalize Unicode minus (U+2212) to ASCII hyphen-minus
-    text = text.replace("\u2212", "-")
-    return text
 
 
 # Footnote indicator patterns (anchored to start of cell text)
-_FOOTNOTE_NOTE_RE = re.compile(r"^Notes?[\s.:]", re.IGNORECASE)
-_FOOTNOTE_MARKER_RE = re.compile(r"^[*\u2020\u2021\u00a7\u2016a-d]\s")
 
 
-def _strip_footnote_rows(
-    rows: list[list[str]],
-    headers: list[str],
-) -> tuple[list[list[str]], str]:
-    """Strip footnote rows from the bottom of a table.
+def _result_to_extracted_table(
+    result: "ExtractionResult",
+    page_num: int,
+    table_index: int,
+) -> ExtractedTable | None:
+    """Convert a pipeline ExtractionResult to an ExtractedTable.
 
-    Footnote rows are identified by a **two-signal rule** (require 2+ of):
-    1. Text starts with "Note." / "Notes:" or a footnote marker (†‡§*a-d).
-    2. Row has only 1 non-empty cell (spanning all columns).
-    3. Cell text length is an outlier (beyond Q3 + 1.5*IQR of cell lengths).
-
-    Returns (cleaned_rows, footnote_text). Scanning stops at the first
-    non-footnote row from the bottom.
+    Returns None if the result has no post-processed grid (extraction
+    produced no usable cell data).
     """
-    if not rows:
-        return rows, ""
+    grid = result.post_processed
+    if grid is None:
+        return None
 
-    ncols = max(len(r) for r in rows) if rows else 0
-    if ncols == 0:
-        return rows, ""
+    headers = list(grid.headers)
+    rows = [list(row) for row in grid.rows]
 
-    # Compute IQR-based outlier threshold from the table's own cell lengths
-    all_lengths = []
-    for r in rows:
-        for c in r:
-            stripped = c.strip()
-            if stripped:
-                all_lengths.append(len(stripped))
-    for h in headers:
-        if h.strip():
-            all_lengths.append(len(h.strip()))
-    if not all_lengths:
-        return rows, ""
+    if not rows and not headers:
+        return None
 
-    all_lengths.sort()
-    n = len(all_lengths)
-    median_len = all_lengths[n // 2]
-    q1 = all_lengths[n // 4]
-    q3 = all_lengths[3 * n // 4]
-    iqr = q3 - q1
-    # IQR outlier fence, but never less than 3× median — prevents
-    # over-sensitivity when cell lengths are uniform (small IQR).
-    long_cell_threshold = max(q3 + 1.5 * iqr, median_len * 3)
+    artifact_type = None
+    if "_artifact" in result.table_id:
+        artifact_type = "figure_data_table"
 
-    # Scan from bottom
-    footnote_parts: list[str] = []
-    cut_idx = len(rows)
-
-    for i in range(len(rows) - 1, -1, -1):
-        row = rows[i]
-        non_empty = [(j, c.strip()) for j, c in enumerate(row) if c.strip()]
-
-        if not non_empty:
-            continue  # empty row, skip
-
-        # Build the full row text for checking
-        full_text = " ".join(c for _, c in non_empty)
-
-        # Count signals
-        signals = 0
-
-        # Signal 1: starts with footnote pattern
-        first_cell_text = non_empty[0][1]
-        if _FOOTNOTE_NOTE_RE.match(first_cell_text) or _FOOTNOTE_MARKER_RE.match(first_cell_text):
-            signals += 1
-
-        # Signal 2: single non-empty cell (spanning all columns)
-        if len(non_empty) == 1:
-            signals += 1
-
-        # Signal 3: cell text is an outlier (beyond IQR fence)
-        max_cell_len = max(len(c) for _, c in non_empty)
-        if max_cell_len > long_cell_threshold:
-            signals += 1
-
-        if signals >= 2:
-            footnote_parts.append(full_text)
-            cut_idx = i
-        else:
-            break  # stop at first non-footnote row from bottom
-
-    if cut_idx < len(rows):
-        footnote_parts.reverse()  # restore top-to-bottom order
-        return rows[:cut_idx], " ".join(footnote_parts)
-
-    return rows, ""
+    return ExtractedTable(
+        page_num=page_num,
+        table_index=table_index,
+        bbox=result.bbox,
+        headers=headers,
+        rows=rows,
+        caption=result.caption,
+        footnotes=result.footnotes,
+        artifact_type=artifact_type,
+        extraction_strategy=grid.method,
+    )
 
 
 def extract_document(
@@ -422,17 +257,57 @@ def extract_document(
         if abstract_span:
             sections = _insert_abstract(sections, abstract_span)
 
-    tables = _extract_tables_native(doc, sections=sections, pages=pages)
+    from .feature_extraction.pipeline import Pipeline, DEFAULT_CONFIG
 
-    from ._figure_extraction import extract_figures
-    figures = extract_figures(
-        doc,
-        page_chunks,
-        write_images=write_images,
-        images_dir=Path(images_dir) if images_dir else None,
-        sections=sections,
-        pages=pages,
-    )
+    pipeline = Pipeline(DEFAULT_CONFIG)
+
+    tables: list[ExtractedTable] = []
+    figures: list[ExtractedFigure] = []
+    table_idx = 0
+    fig_idx = 0
+
+    for chunk in page_chunks:
+        pnum = chunk.get("metadata", {}).get("page_number", 1)
+        page = doc[pnum - 1]
+
+        page_label = None
+        if sections and pages:
+            from .section_classifier import assign_section
+            for p in pages:
+                if p.page_num == pnum:
+                    page_label = assign_section(p.char_start, sections)
+                    break
+            if page_label in ("references", "appendix"):
+                continue
+
+        page_features = pipeline.extract_page(
+            page,
+            pnum,
+            pdf_path=str(pdf_path),
+            page_chunk=chunk,
+            write_images=write_images,
+            images_dir=str(images_dir) if images_dir else None,
+            doc=doc,
+        )
+
+        for result in page_features.tables:
+            et = _result_to_extracted_table(result, pnum, table_idx)
+            if et is not None:
+                tables.append(et)
+                table_idx += 1
+
+        for fig_dict in page_features.figures:
+            figures.append(ExtractedFigure(
+                page_num=pnum,
+                figure_index=fig_idx,
+                bbox=tuple(fig_dict["bbox"]),
+                caption=fig_dict.get("caption"),
+                image_path=Path(fig_dict["image_path"]) if fig_dict.get("image_path") else None,
+            ))
+            fig_idx += 1
+
+    # Prose table extraction: find captions without matched tables
+    tables = _extract_prose_tables(doc, tables, table_idx, sections, pages)
 
     # Recovery pass: fill orphan captions via proximity matching and gap search
     from ._gap_fill import run_recovery
@@ -448,14 +323,11 @@ def extract_document(
     # as a captioned table on a nearby page get "Caption (continued)".
     _assign_continuation_captions(tables)
 
-    # --- Normalize ligatures and clean cell text in tables/figures ---
+    # --- Normalize ligatures in captions ---
+    # Cell text is already cleaned by the pipeline's CellCleaning post-processor.
+    # Only captions need ligature normalization here.
     for t in tables:
         t.caption = _normalize_ligatures(t.caption)
-        t.headers = [_clean_cell_text(_normalize_ligatures(h) or "") for h in t.headers]
-        t.rows = [
-            [_clean_cell_text(_normalize_ligatures(c) or "") for c in row]
-            for row in t.rows
-        ]
     for f in figures:
         f.caption = _normalize_ligatures(f.caption)
 
@@ -493,6 +365,15 @@ def extract_document(
                         t.page_num, overlap_ratio * 100,
                     )
                     break
+
+    # Remove false-positive figures: after all recovery passes (gap-fill,
+    # heading fallback, continuation), figures still without captions are
+    # layout engine misclassifications (logos, decorative elements, headers).
+    figures = [f for f in figures if f.caption is not None]
+
+    # Remove artifact tables (TOC, article-info boxes, diagram-as-table,
+    # figure-data overlaps) from the returned list.
+    tables = [t for t in tables if not t.artifact_type]
 
     # Compute extraction stats (needs open doc for OCR detection)
     stats = _compute_stats(pages, page_chunks, doc)
@@ -947,11 +828,6 @@ def _insert_abstract(
     return result
 
 
-# ---------------------------------------------------------------------------
-# Table extraction
-# ---------------------------------------------------------------------------
-
-
 def _find_column_gap_threshold(all_gaps: list[float]) -> float:
     """Find the natural break between intra-word and inter-column gaps.
 
@@ -966,10 +842,10 @@ def _find_column_gap_threshold(all_gaps: list[float]) -> float:
        either of the above.
     """
     if not all_gaps:
-        return 15.0
+        return float("inf")
     positive_gaps = sorted(g for g in all_gaps if g > 0)
     if not positive_gaps:
-        return 15.0
+        return float("inf")
 
     n = len(positive_gaps)
 
@@ -1002,428 +878,6 @@ def _find_column_gap_threshold(all_gaps: list[float]) -> float:
     variance = sum((g - mean) ** 2 for g in positive_gaps) / n
     std_dev = math.sqrt(variance)
     return median_gap + 1.5 * std_dev
-
-def _merge_over_divided_rows(
-    rows: list[list[str]],
-    *,
-    pattern_a_rate: float = 0.40,
-    pattern_b_rate: float = 0.50,
-    min_row_floor: int = 3,
-    min_row_intercept: int = 8,
-    filled_limit: int = 1,
-) -> list[list[str]]:
-    """Merge continuation rows produced by pymupdf's find_tables().
-
-    pymupdf often treats each wrapped text line as a separate table row,
-    producing e.g. 59 rows where ~10 logical rows exist.  Two patterns:
-
-    Pattern A (empty-col0): rows with empty first cell exceed *pattern_a_rate*.
-    Pattern B (sparse continuation): rows with <= *filled_limit* non-empty
-      cells exceed *pattern_b_rate* (3+ column tables only).
-
-    Minimum rows: ``max(min_row_floor, min_row_intercept - ncols)``.
-    """
-    if not rows:
-        return rows
-
-    ncols = max(len(r) for r in rows)
-
-    min_rows = max(min_row_floor, min_row_intercept - ncols)
-    if len(rows) < min_rows:
-        return rows
-
-    # Pattern A: count rows with empty first cell
-    empty_col0 = sum(
-        1 for r in rows
-        if len(r) == 0 or not r[0].strip()
-    )
-    use_pattern_a = empty_col0 / len(rows) >= pattern_a_rate
-
-    # Pattern B: count rows with few non-empty cells (only for wide tables)
-    use_pattern_b = False
-    if not use_pattern_a and ncols >= 3:
-        sparse_rows = sum(
-            1 for r in rows
-            if sum(1 for c in r if c.strip()) <= filled_limit
-        )
-        use_pattern_b = sparse_rows / len(rows) >= pattern_b_rate
-
-    if not use_pattern_a and not use_pattern_b:
-        return rows
-
-    merged: list[list[str]] = []
-    for row in rows:
-        # Pad row to ncols
-        padded = list(row) + [""] * (ncols - len(row))
-
-        is_continuation = False
-        if merged:
-            if use_pattern_a:
-                is_continuation = not padded[0].strip()
-            else:  # pattern B
-                filled = sum(1 for c in padded if c.strip())
-                is_continuation = filled <= filled_limit
-
-        if is_continuation:
-            # Continuation: append into previous anchor row
-            anchor = merged[-1]
-            for j in range(ncols):
-                cell = padded[j].strip()
-                if cell:
-                    if anchor[j].strip():
-                        anchor[j] = anchor[j].rstrip() + " " + cell
-                    else:
-                        anchor[j] = cell
-        else:
-            merged.append(padded)
-
-    # Strip trailing all-empty rows
-    while merged and all(not c.strip() for c in merged[-1]):
-        merged.pop()
-
-    return merged
-
-
-def _remove_empty_columns(
-    rows: list[list[str]], headers: list[str],
-) -> tuple[list[list[str]], list[str]]:
-    """Drop columns that are empty in every row AND have no header text."""
-    if not rows:
-        return rows, headers
-    ncols = max((len(r) for r in rows), default=0)
-    ncols = max(ncols, len(headers))
-    if ncols == 0:
-        return rows, headers
-    keep = []
-    for j in range(ncols):
-        h = headers[j].strip() if j < len(headers) else ""
-        if h:
-            keep.append(j)
-            continue
-        if any(r[j].strip() for r in rows if j < len(r)):
-            keep.append(j)
-    if len(keep) == ncols:
-        return rows, headers  # nothing to remove
-    new_rows = [[r[j] if j < len(r) else "" for j in keep] for r in rows]
-    new_headers = [headers[j] if j < len(headers) else "" for j in keep]
-    return new_rows, new_headers
-
-
-def _should_replace_with_word_api(
-    cell_text: str,
-    word_tokens: list[str],
-    *,
-    min_ratio: float = 1.5,
-    min_diff: int = 2,
-) -> bool:
-    """Decide whether a cell should be replaced with word-API text.
-
-    Compares the token count from ``find_tables().extract()`` against the
-    tokens returned by ``page.get_text("words")``.  When the word API
-    produces significantly more tokens, the extracted text likely has
-    merged words (e.g. "Michardandcolleagues[23]").
-
-    *min_ratio* and *min_diff* are noise filters — they prevent
-    replacement when the difference is trivially small (one extra token
-    from a hyphen split, etc.).
-
-    Guards
-    ------
-    - Math/Greek cells: skipped (word API can reorder symbols).
-    - Numeric cells: skipped (no prose to merge).
-    - Short single-token cells (< 15 chars): skipped (too little signal).
-    """
-    if not cell_text or not cell_text.strip():
-        return False
-    if not word_tokens:
-        return False
-    if _MATH_GREEK_RE.search(cell_text):
-        return False
-
-    # Normalise newlines to spaces for token counting
-    flat = " ".join(cell_text.split())
-    if _looks_numeric(flat):
-        return False
-
-    extract_tokens = flat.split()
-    n_extract = len(extract_tokens)
-    n_words = len(word_tokens)
-
-    # Short single-token cells — too little signal to judge
-    if n_extract <= 1 and len(flat) < 15:
-        return False
-
-    # Only replace when the word API found MORE tokens
-    if n_words <= n_extract:
-        return False
-
-    ratio = n_words / max(n_extract, 1)
-    diff = n_words - n_extract
-
-    return ratio >= min_ratio or diff >= min_diff
-
-
-def _repair_garbled_cells(
-    page: pymupdf.Page,
-    tab,
-    data: list[list[str | None]],
-) -> None:
-    """Re-extract garbled cells using PyMuPDF's word-level text API.
-
-    ``find_tables().extract()`` sometimes concatenates words without
-    spaces when the PDF encodes characters as individually-positioned
-    glyphs.  ``page.get_text("words")`` uses a different word-boundary
-    algorithm that handles this correctly.
-
-    Uses ``_should_replace_with_word_api`` to compare token counts
-    between the two extraction methods.  Math/Greek and numeric cells
-    are never re-extracted because the word API can reorder symbols.
-
-    Mutates *data* in-place.
-    """
-    table_rows = tab.rows
-    for ri, table_row in enumerate(table_rows):
-        if ri >= len(data):
-            break
-        for ci, cell_bbox in enumerate(table_row.cells):
-            if ci >= len(data[ri]) or cell_bbox is None:
-                continue
-            cell_text = data[ri][ci]
-            if not cell_text:
-                continue
-            words = page.get_text("words", clip=pymupdf.Rect(cell_bbox))
-            if not words:
-                continue
-            word_tokens = [w[4] for w in words]
-            if not _should_replace_with_word_api(cell_text, word_tokens):
-                continue
-            words.sort(key=lambda w: (w[1], w[0]))
-            new_text = " ".join(w[4] for w in words)
-            if new_text.strip():
-                data[ri][ci] = new_text
-
-
-# ---------------------------------------------------------------------------
-# Multi-strategy cell text extraction
-# ---------------------------------------------------------------------------
-
-# Regex detecting decimal displacement: digits followed by whitespace/newline
-# then an isolated period (the decimal point got separated from its digits).
-_DECIMAL_DISPLACEMENT_RE = re.compile(r"\d\s+\.$|\d\n\.")
-
-# Regex for a valid decimal number (digits.digits)
-_VALID_DECIMAL_RE = re.compile(r"\d+\.\d+")
-
-
-def _extract_via_rawdict(tab) -> list[list[str | None]]:
-    """Strategy A: extract cell text using pymupdf.table.extract_cells.
-
-    Uses the rawdict 50% bbox-overlap algorithm which correctly assigns
-    characters to cells even when the layout engine shifts cell boundaries.
-    Reuses the TEXTPAGE global set by find_tables() for zero extra cost.
-    """
-    textpage = _table_mod.TEXTPAGE
-    if textpage is None or not tab.cells:
-        return []
-
-    result: list[list[str | None]] = []
-    for row in tab.rows:
-        row_data: list[str | None] = []
-        for cell_bbox in row.cells:
-            if cell_bbox is None:
-                row_data.append(None)
-            else:
-                text = _table_mod.extract_cells(textpage, cell_bbox)
-                row_data.append(text if text else "")
-        result.append(row_data)
-    return result
-
-
-def _extract_via_words(page: pymupdf.Page, tab) -> list[list[str | None]]:
-    """Strategy C: extract cell text using page.get_text('words').
-
-    Collects words within the table bbox, then assigns each word to the
-    cell whose bbox contains the word's center point. Words are joined
-    with spaces, sorted top-to-bottom then left-to-right within each cell.
-    """
-    if not tab.cells:
-        return []
-    table_clip = pymupdf.Rect(tab.bbox)
-    words = page.get_text("words", clip=table_clip)
-    if not words:
-        return []
-
-    # Build cell grid: row_index → col_index → cell_bbox
-    rows_meta = tab.rows
-    cell_grid: list[list[tuple | None]] = []
-    for row in rows_meta:
-        cell_grid.append(list(row.cells))
-
-    # For each word, find which cell it belongs to via center-point containment
-    cell_words: dict[tuple[int, int], list] = {}
-    for w in words:
-        # w = (x0, y0, x1, y1, text, block_no, line_no, word_no)
-        cx = (w[0] + w[2]) / 2
-        cy = (w[1] + w[3]) / 2
-        best_ri, best_ci = -1, -1
-        for ri, row_cells in enumerate(cell_grid):
-            for ci, cell_bbox in enumerate(row_cells):
-                if cell_bbox is None:
-                    continue
-                if cell_bbox[0] <= cx <= cell_bbox[2] and cell_bbox[1] <= cy <= cell_bbox[3]:
-                    best_ri, best_ci = ri, ci
-                    break
-            if best_ri >= 0:
-                break
-        if best_ri >= 0:
-            cell_words.setdefault((best_ri, best_ci), []).append(w)
-
-    # Build result grid
-    result: list[list[str | None]] = []
-    for ri, row_cells in enumerate(cell_grid):
-        row_data: list[str | None] = []
-        for ci, cell_bbox in enumerate(row_cells):
-            if cell_bbox is None:
-                row_data.append(None)
-            else:
-                cw = cell_words.get((ri, ci), [])
-                if cw:
-                    # Sort by y then x for reading order
-                    cw.sort(key=lambda w: (w[1], w[0]))
-                    row_data.append(" ".join(w[4] for w in cw))
-                else:
-                    row_data.append("")
-        result.append(row_data)
-    return result
-
-
-def _count_decimal_displacement(data: list[list[str | None]]) -> int:
-    """Count cells showing decimal displacement artifacts."""
-    count = 0
-    for row in data:
-        for cell in row:
-            if cell and _DECIMAL_DISPLACEMENT_RE.search(cell):
-                count += 1
-    return count
-
-
-def _count_numeric_integrity(data: list[list[str | None]]) -> tuple[int, int]:
-    """Count cells with valid decimals vs cells containing a period.
-
-    Returns (valid_decimal_count, cells_with_period_count).
-    """
-    valid = 0
-    with_period = 0
-    for row in data:
-        for cell in row:
-            if not cell or "." not in cell:
-                continue
-            with_period += 1
-            if _VALID_DECIMAL_RE.search(cell):
-                valid += 1
-    return valid, with_period
-
-
-def _compute_fill_rate(data: list[list[str | None]]) -> float:
-    """Fraction of non-empty, non-None cells."""
-    total = 0
-    non_empty = 0
-    for row in data:
-        for cell in row:
-            total += 1
-            if cell and cell.strip():
-                non_empty += 1
-    return non_empty / total if total else 0.0
-
-
-def _score_extraction(data: list[list[str | None]]) -> float:
-    """Quality score for a cell text extraction result.
-
-    Higher is better. Penalises decimal displacement artifacts heavily,
-    rewards fill rate and numeric integrity.
-    """
-    if not data:
-        return -999.0
-
-    displacement = _count_decimal_displacement(data)
-    fill = _compute_fill_rate(data)
-    valid_dec, cells_with_period = _count_numeric_integrity(data)
-    integrity_rate = valid_dec / cells_with_period if cells_with_period else 1.0
-
-    score = (
-        -40 * displacement
-        + 10 * fill
-        + 15 * integrity_rate
-    )
-    return score
-
-
-def _extract_cell_text_multi_strategy(
-    page: pymupdf.Page,
-    tab,
-) -> tuple[list[list[str | None]], str, list[str | None] | None]:
-    """Run multiple extraction strategies and return the best result.
-
-    Tries three approaches:
-      A) rawdict 50% overlap via pymupdf.table.extract_cells
-      B) tab.extract() — the original midpoint containment
-      C) page.get_text('words') with center-point cell assignment
-
-    Scores each with _score_extraction and returns the winner.
-
-    Returns (data_grid, strategy_name, words_row0).
-    words_row0 is the first row from the words strategy (Strategy C) when
-    a non-words strategy wins — used to fix merged-word headers (e.g.
-    "Samplesize" → "Sample size"). None when words won or wasn't available.
-    """
-    strategies: list[tuple[str, list[list[str | None]]]] = []
-
-    # Strategy A: rawdict
-    data_a = _extract_via_rawdict(tab)
-    if data_a:
-        strategies.append(("rawdict", data_a))
-
-    # Strategy B: original tab.extract()
-    data_b = tab.extract()
-    if data_b:
-        strategies.append(("midpoint", data_b))
-
-    # Strategy C: word-level assembly
-    data_c = _extract_via_words(page, tab)
-    if data_c:
-        strategies.append(("words", data_c))
-
-    if not strategies:
-        return [], "none", None
-
-    # Score and select
-    best_name = strategies[0][0]
-    best_data = strategies[0][1]
-    best_score = _score_extraction(best_data)
-
-    for name, data in strategies[1:]:
-        s = _score_extraction(data)
-        if s > best_score:
-            best_score = s
-            best_data = data
-            best_name = name
-
-    logger.debug(
-        "Multi-strategy extraction: winner=%s (score=%.1f) from %d strategies",
-        best_name, best_score, len(strategies),
-    )
-
-    # If Strategy B won, run garbled-cell repair (word API fixup)
-    if best_name == "midpoint":
-        _repair_garbled_cells(page, tab, best_data)
-
-    # Capture words row 0 for header cross-check when a non-words strategy won
-    words_row0: list[str | None] | None = None
-    if best_name != "words" and data_c and data_c[0]:
-        words_row0 = data_c[0]
-
-    return best_data, best_name, words_row0
-
 
 def _assign_heading_captions(
     doc: pymupdf.Document,
@@ -1573,601 +1027,10 @@ def _assign_continuation_captions(tables: list[ExtractedTable]) -> None:
 def _adaptive_row_tolerance(words: list) -> float:
     """Compute row-clustering tolerance from the y-gap distribution.
 
-    Sorts word y-midpoints, computes consecutive gaps, and finds the
-    natural break between intra-row gaps (small) and inter-row gaps
-    (large) using a ratio-break method.  Falls back to median word
-    height * 0.3 when the gap distribution lacks a clear break.
+    Delegates to the canonical implementation in the feature extraction pipeline.
     """
-    _ASSUMED_WORD_HEIGHT = 12.0  # typical body-text height in pts
-    if not words:
-        return _ASSUMED_WORD_HEIGHT * 0.3
-    heights = [w[3] - w[1] for w in words if (w[3] - w[1]) > 0]
-    if not heights:
-        return _ASSUMED_WORD_HEIGHT * 0.3
-    heights.sort()
-    median_h = heights[len(heights) // 2]
-
-    # Compute y-gaps between consecutive unique word midpoints
-    y_mids = sorted(set(round((w[1] + w[3]) / 2, 1) for w in words))
-    if len(y_mids) < 3:
-        return median_h * 0.3
-
-    gaps = sorted(
-        y_mids[i + 1] - y_mids[i]
-        for i in range(len(y_mids) - 1)
-        if y_mids[i + 1] - y_mids[i] > 0
-    )
-    if len(gaps) < 2:
-        return median_h * 0.3
-
-    # Ratio-break: first gap pair where the jump exceeds 2×
-    for i in range(len(gaps) - 1):
-        if gaps[i] > 0 and gaps[i + 1] / gaps[i] > 2.0:
-            return gaps[i]
-
-    # No clear break — fall back to word-height-based
-    return median_h * 0.3
-
-
-
-def _strip_absorbed_caption(
-    headers: list[str],
-    rows: list[list[str]],
-) -> tuple[str | None, list[str], list[list[str]]]:
-    """Check if the first header or first row cell is an absorbed caption.
-
-    If the first cell of headers (or first row) matches a table caption
-    pattern, strip it out and return the caption text. If removing the
-    caption leaves a row with all other cells empty, remove the row.
-
-    Returns (caption_or_None, headers, rows).
-    """
-    # Check headers first
-    if headers and headers[0] and any(p.match(headers[0]) for p in _CAP_PATTERNS):
-        caption = headers[0]
-        headers = list(headers)
-        headers[0] = ""
-        # If all headers are now empty, drop them
-        if all(not h.strip() for h in headers):
-            headers = []
-        return caption, headers, rows
-
-    # Check first row
-    if rows and rows[0] and rows[0][0] and any(p.match(rows[0][0]) for p in _CAP_PATTERNS):
-        caption = rows[0][0]
-        row = list(rows[0])
-        row[0] = ""
-        if all(not c.strip() for c in row):
-            # Entire row was just the caption — remove it
-            rows = rows[1:]
-        else:
-            rows = [row] + rows[1:]
-        return caption, headers, rows
-
-    return None, headers, rows
-
-
-def _strip_known_caption_from_table(
-    caption: str,
-    headers: list[str],
-    rows: list[list[str]],
-) -> tuple[list[str], list[list[str]]]:
-    """Remove a known caption that leaked into the table grid.
-
-    When a caption IS matched externally but find_tables() also absorbed it
-    into the first header or first few rows, this function removes it using
-    substring containment rather than regex patterns.
-
-    Returns (headers, rows) — possibly with caption text removed.
-    """
-    # Normalize caption for comparison
-    cap_norm = " ".join(caption.split()).lower()
-    if not cap_norm:
-        return headers, rows
-
-    # Build a significant prefix: enough words to be unambiguous
-    cap_words = cap_norm.split()
-    prefix_len = min(len(cap_words), max(3, len(cap_words) // 2))
-    cap_prefix = " ".join(cap_words[:prefix_len])
-
-    def _row_matches_caption(row: list[str]) -> bool:
-        """Check if a row's concatenated text is a substring of the caption."""
-        row_text = " ".join(c.strip() for c in row if c.strip())
-        row_norm = " ".join(row_text.split()).lower()
-        if not row_norm:
-            return False
-        # Row text is substring of caption, or caption prefix is in row
-        return row_norm in cap_norm or cap_prefix in row_norm
-
-    def _cell_contains_caption(cell: str) -> bool:
-        """Check if a single cell contains the caption prefix."""
-        cell_norm = " ".join(cell.split()).lower()
-        return bool(cell_norm) and cap_prefix in cell_norm
-
-    # Check headers first
-    if headers:
-        header_text = " ".join(h.strip() for h in headers if h.strip())
-        header_norm = " ".join(header_text.split()).lower()
-        if header_norm and (header_norm in cap_norm or cap_prefix in header_norm):
-            # All header cells map into the caption — clear the whole header
-            if all(not h.strip() or h.strip().lower() in cap_norm for h in headers):
-                headers = []
-            elif _cell_contains_caption(headers[0]):
-                # Only first cell has caption text, others have real data
-                headers = list(headers)
-                headers[0] = ""
-
-    # Check first few rows
-    cleaned_rows = list(rows)
-    remove_count = 0
-    for ri, row in enumerate(cleaned_rows):
-        if ri > 2:
-            break  # stop scanning after first few rows
-        if _row_matches_caption(row):
-            # Entire row is caption text — mark for removal
-            remove_count = ri + 1
-        elif row and _cell_contains_caption(row[0]):
-            # Only first cell has caption text but other cells have data — clear it
-            other_filled = sum(1 for c in row[1:] if c.strip())
-            if other_filled > 0:
-                cleaned_rows[ri] = list(row)
-                cleaned_rows[ri][0] = ""
-            else:
-                remove_count = ri + 1
-        else:
-            break  # stop at first non-matching row
-
-    if remove_count > 0:
-        cleaned_rows = cleaned_rows[remove_count:]
-
-    return headers, cleaned_rows
-
-
-# Skip-list for header cells that legitimately end with numbers
-_HEADER_NUM_SKIP_RE = re.compile(
-    r"^(?:Model|Wave|Phase|Group|Arm|Block|Step|Trial|Level|Stage|"
-    r"Study|Experiment|Sample|Condition|Factor|Time|Day|Week|Month|Year|"
-    r"Round|Session|Visit|Dose|Cohort)\s+\d+$",
-    re.IGNORECASE,
-)
-
-
-def _separate_header_data(
-    headers: list[str],
-    rows: list[list[str]],
-    *,
-    min_fused_fraction: float = 0.30,
-) -> tuple[list[str], list[list[str]]]:
-    """Detect and fix header cells that contain fused header+data text.
-
-    When find_tables() absorbs the first data row into header cells,
-    each header looks like "ZTA R1(Ohm) 9982." — a label followed by
-    a numeric value.  This function detects the pattern and splits the
-    numeric suffixes into a new first data row.
-
-    Only triggers when >= *min_fused_fraction* of headers show the
-    pattern.  Headers matching the skip-list (e.g. "Model 1", "Wave 2")
-    are not counted as fused.
-    """
-    if not headers or len(headers) < 2:
-        return headers, rows
-
-    # Detect: for each header, check if the last whitespace-separated
-    # token is numeric
-    fused_indices: list[int] = []
-    for i, h in enumerate(headers):
-        h = h.strip()
-        if not h:
-            continue
-        # Skip legitimate "Label N" headers
-        if _HEADER_NUM_SKIP_RE.match(h):
-            continue
-        parts = h.split()
-        if len(parts) >= 2 and _looks_numeric(parts[-1]):
-            fused_indices.append(i)
-
-    # Only trigger when a meaningful fraction of headers are fused
-    fused_fraction = len(fused_indices) / len(headers)
-    if fused_fraction < min_fused_fraction:
-        return headers, rows
-
-    # Split: extract numeric suffixes into a new data row.
-    # Use re.finditer to locate token positions in the original string so
-    # that characters between tokens (including \n) are preserved in the
-    # data portion — _clean_cell_text relies on \n. patterns.
-    new_headers = list(headers)
-    data_row = [""] * len(headers)
-
-    for i in fused_indices:
-        h = headers[i].strip()
-        tokens = list(re.finditer(r"\S+", h))
-        if len(tokens) < 2:
-            continue
-        # Find where the numeric suffix starts (scan from right)
-        split_at = len(tokens)
-        for j in range(len(tokens) - 1, 0, -1):
-            if _looks_numeric(tokens[j].group()):
-                split_at = j
-            else:
-                break
-        if split_at < len(tokens):
-            # Split at the whitespace boundary before the first numeric token
-            boundary = tokens[split_at].start()
-            new_headers[i] = h[:boundary].rstrip()
-            data_row[i] = h[boundary:]
-
-    return new_headers, [data_row] + list(rows)
-
-
-def _split_at_internal_captions(
-    headers: list[str],
-    rows: list[list[str]],
-    bbox: tuple,
-    caption: str | None,
-    *,
-    min_rows: int = 4,
-    min_rows_before_split: int = 2,
-) -> list[dict]:
-    """Split a table at internal caption rows.
-
-    When find_tables() merges adjacent tables into one grid, the caption
-    of the second table appears as a data row.  This function scans rows
-    for caption-pattern matches in sparse rows and splits the table at
-    each match.
-
-    A "see Table N" reference embedded in a dense data row does NOT
-    trigger a split — only sparse rows that look like standalone captions.
-
-    Returns a list of segment dicts: [{headers, rows, caption, bbox}, ...].
-    If no splits are found, returns a single-element list with the
-    original data.
-    """
-    if len(rows) < min_rows:
-        return [{"headers": headers, "rows": rows, "caption": caption, "bbox": bbox}]
-
-    ncols = max((len(r) for r in rows), default=0)
-
-    # Extract the caption number from the table's own caption (if any)
-    own_cap_num = None
-    if caption:
-        m = _CAPTION_NUM_RE.search(caption)
-        if m:
-            own_cap_num = m.group(1)
-
-    # Find split points: row indices where a sparse row matches a caption pattern
-    split_indices: list[tuple[int, str]] = []  # (row_index, caption_text)
-    for ri, row in enumerate(rows):
-        if ri == 0:
-            continue  # first row is likely header, not a split point
-        non_empty = [c.strip() for c in row if c.strip()]
-        if len(non_empty) > max(2, ncols // 2):
-            continue  # dense row — not a standalone caption
-        if not non_empty:
-            continue
-        # Check first non-empty cell for caption pattern
-        candidate = non_empty[0]
-        if any(p.match(candidate) for p in _CAP_PATTERNS):
-            # Skip if this caption matches the table's own caption number
-            # (it's an absorbed copy, not a separate table)
-            m_cand = _CAPTION_NUM_RE.search(candidate)
-            if m_cand and own_cap_num and m_cand.group(1) == own_cap_num:
-                continue
-            if ri >= min_rows_before_split:
-                split_indices.append((ri, candidate))
-
-    if not split_indices:
-        return [{"headers": headers, "rows": rows, "caption": caption, "bbox": bbox}]
-
-    # Build segments
-    segments: list[dict] = []
-    prev_start = 0
-    prev_caption = caption
-
-    for split_ri, split_caption in split_indices:
-        seg_rows = rows[prev_start:split_ri]
-        if len(seg_rows) >= 2:
-            segments.append({
-                "headers": headers if prev_start == 0 else [],
-                "rows": seg_rows,
-                "caption": prev_caption,
-                "bbox": bbox,
-            })
-        prev_start = split_ri + 1  # skip the caption row itself
-        prev_caption = split_caption
-
-    # Final segment (after last split)
-    final_rows = rows[prev_start:]
-    if len(final_rows) >= 2:
-        segments.append({
-            "headers": [],
-            "rows": final_rows,
-            "caption": prev_caption,
-            "bbox": bbox,
-        })
-
-    # If splitting produced nothing valid, return original
-    if not segments:
-        return [{"headers": headers, "rows": rows, "caption": caption, "bbox": bbox}]
-
-    return segments
-
-
-def _word_based_column_detection(
-    page: pymupdf.Page,
-    bbox: tuple,
-) -> list[list[str]] | None:
-    """Build a table grid from word positions clipped to *bbox*.
-
-    Uses the same adaptive row clustering and column gap detection as
-    ``_repair_low_fill_table`` but returns the raw grid (headers + rows)
-    so the caller can compare column counts against find_tables() output.
-
-    Returns a list of rows (each a list of cell strings), or None if no
-    columnar structure is found.
-    """
-    clip = pymupdf.Rect(bbox)
-    words = page.get_text("words", clip=clip)
-    if len(words) < 3:
-        return None
-
-    words.sort(key=lambda w: (w[1], w[0]))
-
-    # Cluster words into rows
-    row_tol = _adaptive_row_tolerance(words)
-    rows_of_words: list[list] = []
-    current_row = [words[0]]
-    for w in words[1:]:
-        if w[1] - current_row[-1][1] > row_tol:
-            rows_of_words.append(current_row)
-            current_row = [w]
-        else:
-            current_row.append(w)
-    rows_of_words.append(current_row)
-
-    if len(rows_of_words) < 2:
-        return None
-
-    # Detect column boundaries from x-gaps
-    all_gaps: list[float] = []
-    for row_words in rows_of_words:
-        row_words.sort(key=lambda w: w[0])
-        for i in range(1, len(row_words)):
-            all_gaps.append(row_words[i][0] - row_words[i - 1][2])
-    if not all_gaps:
-        return None
-
-    col_threshold = _find_column_gap_threshold(all_gaps)
-
-    # Split each row into cells at column gaps
-    result_rows: list[list[str]] = []
-    for row_words in rows_of_words:
-        row_words.sort(key=lambda w: w[0])
-        cells: list[str] = []
-        cell_words = [row_words[0][4]]
-        for i in range(1, len(row_words)):
-            gap = row_words[i][0] - row_words[i - 1][2]
-            if gap > col_threshold:
-                cells.append(" ".join(cell_words))
-                cell_words = [row_words[i][4]]
-            else:
-                cell_words.append(row_words[i][4])
-        cells.append(" ".join(cell_words))
-        result_rows.append(cells)
-
-    # Pad rows to uniform width
-    max_cols = max(len(r) for r in result_rows)
-    if max_cols < 2:
-        return None
-    for r in result_rows:
-        while len(r) < max_cols:
-            r.append("")
-
-    return result_rows
-
-
-def _extract_tables_native(
-    doc: pymupdf.Document,
-    sections: list[SectionSpan] | None = None,
-    pages: list[PageExtraction] | None = None,
-) -> list[ExtractedTable]:
-    """Extract tables using PyMuPDF's native find_tables() API.
-
-    Captions are found by scanning ALL text blocks on each page for
-    "Table N" patterns, then matching to tables by vertical order.
-    """
-    from ._figure_extraction import find_all_captions_on_page
-
-    tables: list[ExtractedTable] = []
-    table_idx = 0
-
-    for page_num_0, page in enumerate(doc):
-        page_num = page_num_0 + 1
-
-        # Determine section label for this page (used for ref/appendix skip and phantom scoring)
-        page_label = None
-        if sections and pages:
-            for p in pages:
-                if p.page_num == page_num:
-                    from .section_classifier import assign_section
-                    page_label = assign_section(p.char_start, sections)
-                    break
-            if page_label in ("references", "appendix"):
-                continue
-
-        tab_finder = page.find_tables()
-        if not tab_finder.tables:
-            continue
-
-        # Find all "Table N" caption blocks on this page
-        caption_hits = find_all_captions_on_page(
-            page, _TABLE_CAPTION_RE,
-            relaxed_re=_TABLE_CAPTION_RE_RELAXED,
-            label_only_re=_TABLE_LABEL_ONLY_RE,
-        )
-        # caption_hits is list of (y_center, text, bbox) sorted by y
-
-        # Sort tables by vertical position
-        page_tables = []
-        for tab in tab_finder.tables:
-            data, strategy_name, words_row0 = _extract_cell_text_multi_strategy(page, tab)
-
-            cleaned_rows = [
-                [cell if cell is not None else "" for cell in row]
-                for row in data
-            ]
-            if not cleaned_rows:
-                continue
-
-            if tab.header and not tab.header.external:
-                # Internal header: row 0 of cleaned_rows IS the header,
-                # already extracted via the winning strategy (rawdict etc.)
-                headers = [cell if cell is not None else "" for cell in cleaned_rows[0]]
-                rows = cleaned_rows[1:]
-            elif tab.header and tab.header.external:
-                # External header: re-extract via rawdict path for consistency
-                textpage = _table_mod.TEXTPAGE
-                if textpage is not None and tab.header.cells:
-                    headers = []
-                    for cell_bbox in tab.header.cells:
-                        if cell_bbox is None:
-                            headers.append("")
-                        else:
-                            text = _table_mod.extract_cells(textpage, cell_bbox)
-                            headers.append(text if text else "")
-                else:
-                    header_names = tab.header.names
-                    headers = [h if h is not None else "" for h in header_names]
-                rows = cleaned_rows
-            else:
-                headers = []
-                rows = cleaned_rows
-
-            # Fix 5: Cross-check rawdict headers against words strategy
-            # for merged-word artifacts (e.g. "Samplesize" → "Sample size")
-            if strategy_name != "words" and words_row0 and headers:
-                for hi in range(min(len(headers), len(words_row0))):
-                    rh = (headers[hi] or "").strip()
-                    wh = (words_row0[hi] if words_row0[hi] else "").strip()
-                    if rh and wh and ' ' not in rh and ' ' in wh:
-                        headers[hi] = wh
-
-            if not rows:
-                continue
-
-            max_cols = max(len(r) for r in rows) if rows else 0
-            if max_cols < 2 and len(headers) < 2:
-                continue
-
-            # Fix 6: Compare native column count with word-based detection.
-            # find_tables() sometimes creates one column per word, producing
-            # many empty cells. Word-based detection can recover fewer, more
-            # correct columns. Only replace when BOTH conditions hold:
-            #   1) word-based finds fewer columns
-            #   2) word-based has better fill rate (proves fewer cols = denser)
-            word_grid = _word_based_column_detection(page, tab.bbox)
-            if word_grid is not None:
-                n_cols_word = max(len(r) for r in word_grid)
-                n_cols_native = max(len(r) for r in rows) if rows else 0
-                if n_cols_word < n_cols_native:
-                    native_fill = (
-                        sum(1 for r in rows for c in r if c.strip())
-                        / max(1, sum(len(r) for r in rows))
-                    )
-                    word_fill = (
-                        sum(1 for r in word_grid for c in r if c.strip())
-                        / max(1, sum(len(r) for r in word_grid))
-                    )
-                    if word_fill > native_fill:
-                        headers = word_grid[0]
-                        rows = word_grid[1:]
-                        strategy_name = "words-column"
-                        if not rows:
-                            continue
-
-            y_center = (tab.bbox[1] + tab.bbox[3]) / 2
-            page_tables.append((y_center, tab.bbox, headers, rows, strategy_name))
-
-        page_tables.sort(key=lambda x: x[0])
-
-        # Match tables to captions by proximity (not positional index)
-        from ._figure_extraction import _match_by_proximity
-        table_bboxes = [bbox for _, bbox, _, _, _ in page_tables]
-        matched_captions = _match_by_proximity(table_bboxes, caption_hits)
-
-        # Build caption text → bbox lookup for bbox clipping
-        caption_bbox_lookup: dict[str, tuple] = {}
-        for _yc, _ctxt, _cbbox in caption_hits:
-            caption_bbox_lookup[_ctxt] = _cbbox
-
-        for i, (_, bbox, headers, rows, strat_name) in enumerate(page_tables):
-            caption = matched_captions[i]
-
-            # Clip table bbox to exclude caption that falls inside it.
-            # When find_tables() captures a caption (and any artifacts above
-            # it, like equations) inside the table bbox, those extra rows
-            # poison downstream column detection and repair.  Trim the bbox
-            # top to the caption's bottom edge so word-based re-extraction
-            # sees only actual table content.
-            if caption and caption in caption_bbox_lookup:
-                cap_bbox = caption_bbox_lookup[caption]
-                cap_bottom = cap_bbox[3]
-                # Caption must be inside the table bbox (not just above it)
-                if cap_bottom > bbox[1] and cap_bottom < bbox[3]:
-                    bbox = (bbox[0], cap_bottom, bbox[2], bbox[3])
-
-            # Absorbed caption handling:
-            # - No external match: use regex fallback to find "Table N" in grid
-            # - External match exists: use substring match to strip leaked caption
-            if not caption:
-                absorbed, headers, rows = _strip_absorbed_caption(headers, rows)
-                if absorbed:
-                    caption = absorbed
-            else:
-                headers, rows = _strip_known_caption_from_table(caption, headers, rows)
-
-            # Detect header/data fusion (T4): first data row absorbed
-            # into header cells, e.g. "ZTA R1(Ohm) 9982."
-            headers, rows = _separate_header_data(headers, rows)
-
-            # Re-extract low-fill tables using word positions (before merge,
-            # so the merge can consolidate the repaired output).
-            headers, rows = _repair_low_fill_table(page, bbox, headers, rows)
-
-            # Merge over-divided rows (pymupdf wraps multi-line cells into
-            # separate rows, producing very sparse tables).
-            rows = _merge_over_divided_rows(rows)
-            rows, headers = _remove_empty_columns(rows, headers)
-
-            # Split at internal captions (T2/T3: merged tables)
-            segments = _split_at_internal_captions(headers, rows, bbox, caption)
-
-            for seg in segments:
-                seg_rows = seg["rows"]
-                seg_headers = seg["headers"]
-                seg_caption = seg["caption"]
-
-                # Strip footnote rows from each segment
-                seg_rows, footnote_text = _strip_footnote_rows(seg_rows, seg_headers)
-
-                tables.append(ExtractedTable(
-                    page_num=page_num,
-                    table_index=table_idx,
-                    bbox=tuple(seg["bbox"]),
-                    headers=seg_headers,
-                    rows=seg_rows,
-                    caption=seg_caption,
-                    footnotes=footnote_text,
-                    extraction_strategy=strat_name,
-                ))
-                table_idx += 1
-
-    # --- Pass 2: Prose/lineless table extraction ---
-    # find_tables() can't detect tables formatted as prose definition lists.
-    # Scan for "Table N" captions that have no corresponding extracted table,
-    # then capture the text blocks below the caption as table content.
-    tables = _extract_prose_tables(doc, tables, table_idx, sections, pages)
-
-    return tables
+    from .feature_extraction.methods._row_clustering import adaptive_row_tolerance
+    return adaptive_row_tolerance(words)
 
 
 def _parse_prose_rows(content: str) -> list[list[str]]:
@@ -2191,112 +1054,6 @@ def _parse_prose_rows(content: str) -> list[list[str]]:
         else:
             rows.append([line])
     return rows if rows else [[content]]
-
-
-def _repair_low_fill_table(
-    page: pymupdf.Page,
-    bbox: tuple,
-    headers: list[str],
-    rows: list[list[str]],
-    *,
-    skip_above_fill: float = 0.90,
-) -> tuple[list[str], list[list[str]]]:
-    """Re-extract a table via word positions if fill rate is low.
-
-    pymupdf's find_tables() sometimes misdetects column boundaries, producing
-    many empty cells.  Re-extracting from raw word positions with gap-based
-    column detection often recovers a much denser table.
-
-    Skips tables with fill >= *skip_above_fill*. Accepts any improvement
-    in fill rate.
-
-    Returns (headers, rows) — either repaired or original if no improvement.
-    """
-    # Compute current fill rate
-    total = sum(len(r) for r in rows) + len(headers)
-    non_empty = sum(1 for r in rows for c in r if c.strip()) + sum(1 for h in headers if h.strip())
-    if total == 0:
-        return headers, rows
-    old_fill = non_empty / total
-    # Skip re-extraction for already-dense tables
-    if old_fill >= skip_above_fill:
-        return headers, rows
-
-    # Get words within the table bbox
-    clip = pymupdf.Rect(bbox)
-    words = page.get_text("words", clip=clip)
-    if len(words) < 3:
-        return headers, rows
-
-    words.sort(key=lambda w: (w[1], w[0]))
-
-    # Cluster words into rows by y-position (adaptive tolerance)
-    row_tol = _adaptive_row_tolerance(words)
-    rows_of_words: list[list] = []
-    current_row = [words[0]]
-    for w in words[1:]:
-        if w[1] - current_row[-1][1] > row_tol:
-            rows_of_words.append(current_row)
-            current_row = [w]
-        else:
-            current_row.append(w)
-    rows_of_words.append(current_row)
-
-    if len(rows_of_words) < 2:
-        return headers, rows
-
-    # Detect column boundaries from x-gaps
-    all_gaps: list[float] = []
-    for row_words in rows_of_words:
-        row_words.sort(key=lambda w: w[0])
-        for i in range(1, len(row_words)):
-            all_gaps.append(row_words[i][0] - row_words[i - 1][2])
-    if not all_gaps:
-        return headers, rows
-
-    col_threshold = _find_column_gap_threshold(all_gaps)
-
-    # Split each row into cells at column gaps
-    result_rows: list[list[str]] = []
-    for row_words in rows_of_words:
-        row_words.sort(key=lambda w: w[0])
-        cells: list[str] = []
-        cell_words = [row_words[0][4]]
-        for i in range(1, len(row_words)):
-            gap = row_words[i][0] - row_words[i - 1][2]
-            if gap > col_threshold:
-                cells.append(" ".join(cell_words))
-                cell_words = [row_words[i][4]]
-            else:
-                cell_words.append(row_words[i][4])
-        cells.append(" ".join(cell_words))
-        result_rows.append(cells)
-
-    # Pad rows to uniform width
-    max_cols = max(len(r) for r in result_rows)
-    if max_cols < 2:
-        return headers, rows
-    for r in result_rows:
-        while len(r) < max_cols:
-            r.append("")
-
-    new_headers = result_rows[0]
-    new_rows = result_rows[1:]
-    if not new_rows:
-        return headers, rows
-
-    # Accept repair if fill rate improved at all
-    new_total = sum(len(r) for r in new_rows) + len(new_headers)
-    new_non_empty = sum(1 for r in new_rows for c in r if c.strip()) + sum(1 for h in new_headers if h.strip())
-    new_fill = new_non_empty / new_total if new_total else 0.0
-
-    if new_fill > old_fill:
-        logger.debug(
-            "Repaired low-fill table on page %d: %.0f%% → %.0f%%",
-            page.number + 1, old_fill * 100, new_fill * 100,
-        )
-        return new_headers, new_rows
-    return headers, rows
 
 
 def _extract_table_from_words(
@@ -2433,6 +1190,67 @@ def _extract_table_from_words(
     return trimmed
 
 
+def _apply_prose_postprocessors(
+    page: pymupdf.Page,
+    table_bbox: tuple[float, float, float, float],
+    headers: list[str],
+    rows: list[list[str]],
+    pdf_path: Path | None = None,
+) -> tuple[str | None, list[str], list[list[str]]]:
+    """Apply shared post-processors to prose/word-extracted table data.
+
+    Wraps the headers/rows in a CellGrid, runs AbsorbedCaptionStrip and
+    CellCleaning, then unwraps back to lists.
+
+    Returns (absorbed_caption_or_None, cleaned_headers, cleaned_rows).
+    """
+    from .feature_extraction.models import CellGrid, TableContext
+    from .feature_extraction.postprocessors.absorbed_caption import AbsorbedCaptionStrip
+    from .feature_extraction.postprocessors.cell_cleaning import CellCleaning
+
+    grid = CellGrid(
+        headers=tuple(headers),
+        rows=tuple(tuple(r) for r in rows),
+        col_boundaries=(),
+        row_boundaries=(),
+        method="prose",
+    )
+
+    ctx = TableContext(
+        page=page,
+        page_num=page.number + 1,
+        bbox=table_bbox,
+        pdf_path=pdf_path or Path("."),
+    )
+
+    # Step 1: Strip absorbed captions
+    caption_strip = AbsorbedCaptionStrip()
+    pre_strip = grid
+    grid = caption_strip.process(grid, ctx)
+
+    # Determine if a caption was absorbed by comparing row counts
+    absorbed_caption = None
+    if len(grid.rows) < len(pre_strip.rows):
+        removed = pre_strip.rows[:len(pre_strip.rows) - len(grid.rows)]
+        for row in removed:
+            non_empty = [c.strip() for c in row if c.strip()]
+            if non_empty:
+                absorbed_caption = " ".join(non_empty)
+                break
+    elif len(grid.headers) < len(pre_strip.headers) or (
+        pre_strip.headers and grid.headers != pre_strip.headers
+    ):
+        removed_h = [h for h in pre_strip.headers if h.strip() and h not in grid.headers]
+        if removed_h:
+            absorbed_caption = removed_h[0]
+
+    # Step 2: Apply cell cleaning
+    cell_cleaning = CellCleaning()
+    grid = cell_cleaning.process(grid, ctx)
+
+    return absorbed_caption, list(grid.headers), [list(r) for r in grid.rows]
+
+
 def _extract_prose_tables(
     doc: pymupdf.Document,
     tables: list[ExtractedTable],
@@ -2441,7 +1259,7 @@ def _extract_prose_tables(
     pages: list[PageExtraction] | None,
 ) -> list[ExtractedTable]:
     """Find table captions with no extracted table and capture prose content."""
-    from ._figure_extraction import find_all_captions_on_page
+    from .feature_extraction.captions import find_all_captions, is_in_references
 
     # Collect caption numbers already matched to tables
     matched_nums: set[str] = set()
@@ -2456,21 +1274,16 @@ def _extract_prose_tables(
 
         # Skip references/appendix
         if sections and pages:
-            from ._figure_extraction import _is_in_references
-            page_label = None
-            for p in pages:
-                if p.page_num == page_num:
-                    from .section_classifier import assign_section
-                    page_label = assign_section(p.char_start, sections)
-                    break
-            if page_label in ("references", "appendix"):
+            if is_in_references(page_num, sections, pages):
                 continue
 
-        caption_hits = find_all_captions_on_page(
-            page, _TABLE_CAPTION_RE,
-            relaxed_re=_TABLE_CAPTION_RE_RELAXED,
-            label_only_re=_TABLE_LABEL_ONLY_RE,
+        detected_captions = find_all_captions(
+            page, include_figures=False, include_tables=True,
         )
+        caption_hits = [
+            (cap.y_center, cap.text, cap.bbox)
+            for cap in detected_captions
+        ]
 
         for cap_idx, (y_center, caption_text, bbox) in enumerate(caption_hits):
             m = _CAPTION_NUM_RE.search(caption_text)
@@ -2500,11 +1313,6 @@ def _extract_prose_tables(
                     page, cap_bottom, next_y,
                 )
                 if word_rows and len(word_rows) >= 2:
-                    # Strip absorbed caption from word-extracted rows
-                    absorbed_cap, _, word_rows = _strip_absorbed_caption([], word_rows)
-                    if absorbed_cap and not caption_text:
-                        caption_text = absorbed_cap
-
                     # Compute actual table bbox from word positions
                     clip = pymupdf.Rect(0, cap_bottom, page.rect.width, next_y)
                     words = page.get_text("words", clip=clip)
@@ -2516,6 +1324,14 @@ def _extract_prose_tables(
                         table_bbox = (t_x0, t_y0, t_x1, t_y1)
                     else:
                         table_bbox = bbox
+
+                    # Apply shared post-processors (absorbed caption + cell cleaning)
+                    absorbed_cap, _, word_rows = _apply_prose_postprocessors(
+                        page, table_bbox, [], word_rows,
+                    )
+                    if absorbed_cap and not caption_text:
+                        caption_text = absorbed_cap
+
                     tables.append(ExtractedTable(
                         page_num=page_num,
                         table_index=table_idx,
@@ -2538,8 +1354,10 @@ def _extract_prose_tables(
                 continue
 
             parsed_rows = _parse_prose_rows(content)
-            # Strip absorbed caption from prose rows
-            absorbed_cap, _, parsed_rows = _strip_absorbed_caption([], parsed_rows)
+            # Apply shared post-processors (absorbed caption + cell cleaning)
+            absorbed_cap, _, parsed_rows = _apply_prose_postprocessors(
+                page, bbox, [], parsed_rows,
+            )
             if absorbed_cap and not caption_text:
                 caption_text = absorbed_cap
             tables.append(ExtractedTable(
@@ -2678,9 +1496,8 @@ def _normalize_ligatures(text: str | None) -> str | None:
     """Replace common ligature codepoints with their ASCII equivalents."""
     if not text:
         return text
-    for lig, replacement in _LIGATURE_MAP.items():
-        text = text.replace(lig, replacement)
-    return text
+    from .feature_extraction.postprocessors.cell_cleaning import _normalize_ligatures as _impl
+    return _impl(text)
 
 
 def _detect_interleaved_chars(text: str) -> tuple[bool, str]:
@@ -2810,41 +1627,30 @@ def _compute_completeness(
     stats: dict,
 ) -> "ExtractionCompleteness":
     from .models import ExtractionCompleteness
-    from ._figure_extraction import find_all_captions_on_page, _FIG_LABEL_ONLY_RE
+    from .feature_extraction.captions import find_all_captions
 
     fig_nums: set[str] = set()
     tab_nums: set[str] = set()
 
     for page in doc:
-        for _, caption_text, _ in find_all_captions_on_page(
-            page, _FIG_CAPTION_RE_COMP,
-            relaxed_re=_FIG_CAPTION_RE_COMP_RELAXED,
-            label_only_re=_FIG_LABEL_ONLY_RE,
-        ):
-            m = _CAPTION_NUM_RE.search(caption_text)
-            if m:
-                fig_nums.add(m.group(1))
-        for _, caption_text, _ in find_all_captions_on_page(
-            page, _TABLE_CAPTION_RE_COMP,
-            relaxed_re=_TABLE_CAPTION_RE_COMP_RELAXED,
-            label_only_re=_TABLE_LABEL_ONLY_RE,
-        ):
-            m = _CAPTION_NUM_RE.search(caption_text)
-            if m:
-                tab_nums.add(m.group(1))
+        for cap in find_all_captions(page, include_figures=True, include_tables=True):
+            if cap.number:
+                if cap.caption_type == "figure":
+                    fig_nums.add(cap.number)
+                elif cap.caption_type == "table":
+                    tab_nums.add(cap.number)
 
-    # Exclude artifact-tagged tables from all completeness counts
-    real_tables = [t for t in tables if not t.artifact_type]
-
+    # At this point, artifacts and false-positive figures have already been
+    # removed by extract_document(). Work directly with the cleaned lists.
     figures_with_captions = sum(1 for f in figures if f.caption)
-    tables_with_captions = sum(1 for t in real_tables if t.caption)
+    tables_with_captions = sum(1 for t in tables if t.caption)
 
     # --- Content quality signals ---
     garbled_cells = 0
     interleaved_cells = 0
     encoding_artifact_captions = 0
     tables_1x1 = 0
-    for t in real_tables:
+    for t in tables:
         report = _check_content_readability(t)
         garbled_cells += report["garbled_cells"]
         interleaved_cells += report["interleaved_cells"]
@@ -2861,7 +1667,7 @@ def _compute_completeness(
     for f in figures:
         if f.caption and not _CONTINUED_RE.search(f.caption):
             all_captions.append(f.caption.strip())
-    for t in real_tables:
+    for t in tables:
         if t.caption and not _CONTINUED_RE.search(t.caption):
             all_captions.append(t.caption.strip())
     seen_captions: set[str] = set()
@@ -2901,7 +1707,7 @@ def _compute_completeness(
                 matched_fig_nums.add(m.group(1))
 
     matched_tab_nums: set[str] = set()
-    for t in real_tables:
+    for t in tables:
         if t.caption:
             m = _cap_num_re.search(t.caption)
             if m:
@@ -2917,10 +1723,10 @@ def _compute_completeness(
         figures_found=len(figures),
         figure_captions_found=len(fig_nums),
         figures_missing=max(0, len(fig_nums) - len(figures)),
-        tables_found=len(real_tables),
+        tables_found=len(tables),
         table_captions_found=len(tab_nums),
-        tables_missing=max(0, len(tab_nums) - len(real_tables)),
-        figures_with_captions=figures_with_captions,
+        tables_missing=max(0, len(tab_nums) - len(tables)),
+        figures_with_captions=len(figures),
         tables_with_captions=tables_with_captions,
         sections_identified=len([s for s in sections if s.label != "preamble"]),
         unknown_sections=len([s for s in sections if s.label == "unknown"]),

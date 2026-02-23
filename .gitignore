@@ -10,3 +10,7 @@ _stress_test_figures/
 _stress_test_debug.db
 _FULL_EXTRACTION_AUDIT.txt
 STRESS_TEST_REPORT.md
+
+# Agent QA workspace (generated, not checked in)
+tests/agent_qa/workspace/
+NUL

@@ -24,8 +24,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 
 from zotero_chunk_rag.config import Config
-from zotero_chunk_rag.table_extraction.ground_truth import make_table_id
-from zotero_chunk_rag.table_extraction.render import render_table_image
+from zotero_chunk_rag.feature_extraction.ground_truth import make_table_id
+from zotero_chunk_rag.feature_extraction.render import render_table_image
 from zotero_chunk_rag.zotero_client import ZoteroClient
 
 

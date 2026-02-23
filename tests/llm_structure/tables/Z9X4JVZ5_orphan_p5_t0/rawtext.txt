@@ -1,0 +1,57 @@
+Sensors 2019, 19, 959
+5 of 24
+Insulated
+EMG Sensing
+Electrode
+Shielding
+Instrumentation
+Ampliﬁer
+Analog
+Bandpass
+ADC
+Signal Processing
+DAC
+BLE
+Prosthesis
+Drive
+Oscilloscope
+Operational
+Ampliﬁers
+DSP
+Output
+Analog Circuit
+Interface to
+Human Body
+Digital
+Figure 3. Block diagram outlining the insulated EMG measurement set-up. First, the EMG signal
+coupled from the human body is ampliﬁed and ﬁltered by the analog circuit. In the µC, the signal is
+then digitally ﬁltered and provided at the sensor system output.
+(a)
+27 mm
+46 mm
+(b)
+(c)
+Figure 4. (a) Set-up of the capacitive EMG measurement system to control a myoelectric upper-limb
+prosthesis. The EMG sensor is ﬁxed to the human forearm by a cuff; (b) the ﬂexible sensor is attached
+to the circuit board; (c) front side of the circuit board.
+3.1. Interface to Human Body
+Due to the insulating layer, the ﬂexible sensing electrode has no conductive connection to the skin.
+This sensor is a multilayer construct made of textiles, foils or a ﬂex circuit board. In this work, the
+measurements were performed with the foil sensor. The sensor area is shielded with a common-mode
+shield to increase the common-mode rejection ratio and to protect against noise from the environment.
+A small conductive reference made of textile connects the sensor electronics to the electrical potential
+of the body. This reference keeps the common-mode potential of the sensor input ampliﬁer within
+operating range.
+For the measurements presented in this article, the EMG sensor was placed at the musculus
+extensor digitorum, at one third of the distance between the epicondylus lateralis and the ulna. This
+muscle was selected for the experiments as a large proportion of upper-limb amputations are at
+trans-radial level or are farther distal [25–28].
+3.2. Analog Circuit
+The analog signal, which is coupled via the EMG sensing electrode, is ampliﬁed by the
+instrumentation ampliﬁer by a gain of 26. The bandpass is formed by a ﬁrst-order analog highpass
+and lowpass ﬁlter. The highpass has a cutoff frequency of 11 Hz to attenuate the low-frequency noise,
+and the lowpass has a cutoff frequency of 1064 Hz to ﬁlter the high-frequency noise. The signal is
+further ampliﬁed by the µC’s internal operational ampliﬁers (OpAmps) by software-programmable
+gain. This gain factor is varied to exploit the full operating range at the ADC input. For this work,
+the gain of the internal OpAmps was varied in the range of 4 to 128, depending on the experiment
+(noise for comb measurements 128, EMG signal and noise for signal to noise ratio measurements

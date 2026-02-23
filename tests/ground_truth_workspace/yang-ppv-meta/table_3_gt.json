@@ -8,5 +8,6 @@
   "headers": [],
   "rows": [],
   "notes": "Artifact: figure_data_table, not a data table. The image on page 7 is Figure 2 (forest plot showing sensitivity and specificity of pulse pressure variation for prediction of fluid responsiveness), not a data table.",
-  "verified": false
+  "verified": true,
+  "footnotes": ""
 }

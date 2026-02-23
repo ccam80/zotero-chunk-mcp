@@ -74,7 +74,7 @@ class TestSchema:
             conn.close()
 
     def test_migrate_adds_footnotes_column(self, tmp_db: Path) -> None:
-        """Pre-2.2.2 databases missing the footnotes column get it via migration."""
+        """Databases without a footnotes column get it added by create_ground_truth_db."""
         conn = sqlite3.connect(str(tmp_db))
         try:
             conn.executescript("""\
@@ -359,8 +359,8 @@ class TestCompare:
         # No comparable cells (the one GT row is in a split)
         assert result.comparable_cells == 0
         assert result.structural_coverage_pct == 0.0
-        # With zero comparable cells, accuracy defaults to 100%
-        assert result.cell_accuracy_pct == 100.0
+        # With zero comparable cells, accuracy defaults to 0%
+        assert result.cell_accuracy_pct == 0.0
 
     def test_table_not_found(self, tmp_db: Path) -> None:
         create_ground_truth_db(tmp_db)
@@ -456,7 +456,7 @@ class TestCompare:
         self._seed(tmp_db, [], [])
         result = compare_extraction(tmp_db, "T_table_1", ["X"], [["data"]])
         assert result.gt_is_artifact is True
-        assert result.cell_accuracy_pct == 100.0  # nothing to compare
+        assert result.cell_accuracy_pct == 0.0
 
     # --- New: Footnote comparison ---
     def test_footnote_match(self, tmp_db: Path) -> None:
@@ -628,16 +628,18 @@ class TestFuzzyAccuracy:
 
     def test_headers_included(self) -> None:
         gt_headers = ["Col A"]
-        gt_rows = [["val"]]
+        gt_rows = [["wrong"]]
         ext_headers = ["Col A"]
-        ext_rows = [["val"]]
+        ext_rows = [["other"]]
         p_with, r_with, f1_with = _compute_fuzzy_accuracy(
             gt_headers, gt_rows, ext_headers, ext_rows
         )
         p_no, r_no, f1_no = _compute_fuzzy_accuracy(
             [], gt_rows, [], ext_rows
         )
-        assert f1_with >= f1_no
+        # With headers, the matching "Col A" cell adds to the score; without it,
+        # only the mismatched data cells remain, producing a strictly lower F1.
+        assert f1_with > f1_no
 
     def test_numeric_mismatch_tanks_score(self) -> None:
         gt_headers: list[str] = []
@@ -693,9 +695,9 @@ class TestComparisonFuzzyFields:
         rows = [["1", "2"], ["3", "4"]]
         self._seed(tmp_db, headers, rows)
         result = compare_extraction(tmp_db, "T_table_1", headers, rows)
-        assert result.fuzzy_accuracy_pct > 0.0
-        assert result.fuzzy_precision_pct > 0.0
-        assert result.fuzzy_recall_pct > 0.0
+        assert result.fuzzy_accuracy_pct == 100.0
+        assert result.fuzzy_precision_pct == 100.0
+        assert result.fuzzy_recall_pct == 100.0
 
     def test_fuzzy_not_vacuous_when_structural_fails(self, tmp_db: Path) -> None:
         gt_headers = ["Alpha", "Beta"]
@@ -705,4 +707,7 @@ class TestComparisonFuzzyFields:
         ext_rows = [["val1", "val2"]]
         result = compare_extraction(tmp_db, "T_table_1", ext_headers, ext_rows)
         assert result.cell_accuracy_pct == 0.0
-        assert result.fuzzy_accuracy_pct > 0.0
+        # 4 GT cells, 4 ext cells. val1 and val2 match exactly (1.0 each).
+        # Delta/Beta share LCS "ta" (2/5=0.4), Gamma/Alpha share LCS "a" (1/5=0.2).
+        # Precision = recall = (1.0+1.0+0.4+0.2)/4 = 0.65, F1 = 65%.
+        assert result.fuzzy_accuracy_pct == 65.0

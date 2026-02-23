@@ -16,9 +16,11 @@ import sys
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QPixmap, QFont, QColor, QIcon
+from PyQt6.QtGui import QPixmap, QFont, QColor, QIcon, QPainter, QPen, QImage
 from PyQt6.QtWidgets import (
     QApplication,
+    QGridLayout,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -37,6 +39,7 @@ from PyQt6.QtWidgets import (
 )
 
 DB_DEFAULT = Path(__file__).resolve().parent.parent / "_stress_test_debug.db"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 GRADE_COLOURS = {
     "A": "#4caf50",
@@ -63,6 +66,42 @@ def _truncate(text: str, length: int = 80) -> str:
     return text[:length] + "..." if len(text) > length else text
 
 
+def _table_has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    """Check whether *column* exists in *table* via PRAGMA."""
+    cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    return column in cols
+
+
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    """Check whether *table* exists in the database."""
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ).fetchone()
+    return row is not None
+
+
+def _populate_table_widget(
+    widget: QTableWidget,
+    headers: list[str],
+    rows: list[list[str]],
+    cell_colors: dict[tuple[int, int], QColor] | None = None,
+) -> None:
+    """Fill a QTableWidget from headers + rows, optionally coloring cells."""
+    widget.clear()
+    n_cols = len(headers) if headers else (len(rows[0]) if rows else 0)
+    widget.setColumnCount(n_cols)
+    widget.setRowCount(len(rows))
+    if headers:
+        widget.setHorizontalHeaderLabels(headers)
+    for r_idx, row in enumerate(rows):
+        for c_idx, cell in enumerate(row):
+            item = QTableWidgetItem(str(cell))
+            if cell_colors and (r_idx, c_idx) in cell_colors:
+                item.setBackground(cell_colors[(r_idx, c_idx)])
+            widget.setItem(r_idx, c_idx, item)
+    widget.resizeColumnsToContents()
+
+
 # ── main window ──────────────────────────────────────────────────────────────
 
 
@@ -73,6 +112,38 @@ class DebugViewer(QMainWindow):
         self.conn = _conn(self.db_path)
         self.setWindowTitle(f"Extraction Debug Viewer — {self.db_path.name}")
         self.resize(1600, 950)
+
+        # ── capability flags (backward compat) ────────────────────────────
+        self._has_method_results = _table_exists(self.conn, "method_results")
+        self._has_pipeline_runs = _table_exists(self.conn, "pipeline_runs")
+        self._has_gt_diffs = _table_exists(self.conn, "ground_truth_diffs")
+        self._has_table_id_col = _table_has_column(
+            self.conn, "extracted_tables", "table_id"
+        ) if _table_exists(self.conn, "extracted_tables") else False
+        self._has_pdf_path_col = _table_has_column(
+            self.conn, "papers", "pdf_path"
+        ) if _table_exists(self.conn, "papers") else False
+
+        # ── load manifest (for PDF paths / bboxes) ────────────────────────
+        self._manifest: dict[str, dict] = {}
+        manifest_path = PROJECT_ROOT / "tests" / "llm_structure" / "manifest.json"
+        if manifest_path.exists():
+            try:
+                with open(manifest_path, "r", encoding="utf-8") as f:
+                    for entry in json.load(f):
+                        self._manifest[entry["table_id"]] = entry
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+        # ── open ground truth DB ──────────────────────────────────────────
+        self.gt_conn: sqlite3.Connection | None = None
+        gt_path = PROJECT_ROOT / "tests" / "ground_truth.db"
+        if gt_path.exists():
+            self.gt_conn = sqlite3.connect(str(gt_path))
+            self.gt_conn.row_factory = sqlite3.Row
+
+        # ── pymupdf lazy import flag ──────────────────────────────────────
+        self._pymupdf = None  # lazy
 
         # ── build layout ─────────────────────────────────────────────────
         central = QWidget()
@@ -151,6 +222,54 @@ class DebugViewer(QMainWindow):
         self.rendered_table.setAlternatingRowColors(True)
         content_layout.addWidget(self.rendered_table)
 
+        # ── 2x2 comparison widget ────────────────────────────────────────
+        self.comparison_widget = QWidget()
+        cmp_layout = QGridLayout(self.comparison_widget)
+        cmp_layout.setContentsMargins(0, 0, 0, 0)
+        cmp_layout.setSpacing(4)
+
+        # (0,0) Extracted table
+        self.cmp_ext_group = QGroupBox("Extracted Table")
+        ext_layout = QVBoxLayout(self.cmp_ext_group)
+        self.cmp_ext_table = QTableWidget()
+        self.cmp_ext_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.cmp_ext_table.setAlternatingRowColors(True)
+        ext_layout.addWidget(self.cmp_ext_table)
+        cmp_layout.addWidget(self.cmp_ext_group, 0, 0)
+
+        # (0,1) PDF region
+        self.cmp_pdf_group = QGroupBox("PDF Region")
+        pdf_layout = QVBoxLayout(self.cmp_pdf_group)
+        self.cmp_pdf_scroll = QScrollArea()
+        self.cmp_pdf_scroll.setWidgetResizable(True)
+        self.cmp_pdf_label = QLabel("(no PDF available)")
+        self.cmp_pdf_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.cmp_pdf_scroll.setWidget(self.cmp_pdf_label)
+        pdf_layout.addWidget(self.cmp_pdf_scroll)
+        cmp_layout.addWidget(self.cmp_pdf_group, 0, 1)
+
+        # (1,0) Ground truth
+        self.cmp_gt_group = QGroupBox("Ground Truth")
+        gt_layout = QVBoxLayout(self.cmp_gt_group)
+        self.cmp_gt_table = QTableWidget()
+        self.cmp_gt_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.cmp_gt_table.setAlternatingRowColors(True)
+        gt_layout.addWidget(self.cmp_gt_table)
+        cmp_layout.addWidget(self.cmp_gt_group, 1, 0)
+
+        # (1,1) Grid overlay
+        self.cmp_overlay_group = QGroupBox("Grid Overlay")
+        overlay_layout = QVBoxLayout(self.cmp_overlay_group)
+        self.cmp_overlay_scroll = QScrollArea()
+        self.cmp_overlay_scroll.setWidgetResizable(True)
+        self.cmp_overlay_label = QLabel("(no overlay available)")
+        self.cmp_overlay_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.cmp_overlay_scroll.setWidget(self.cmp_overlay_label)
+        overlay_layout.addWidget(self.cmp_overlay_scroll)
+        cmp_layout.addWidget(self.cmp_overlay_group, 1, 1)
+
+        content_layout.addWidget(self.comparison_widget)
+
         vsplitter.addWidget(self.content_stack)
 
         # initial visibility
@@ -167,6 +286,14 @@ class DebugViewer(QMainWindow):
         # ── populate tree ────────────────────────────────────────────────
         self._populate_tree()
         self._show_run_metadata()
+
+    # ── pymupdf lazy loader ───────────────────────────────────────────────
+
+    def _get_pymupdf(self):
+        if self._pymupdf is None:
+            import pymupdf
+            self._pymupdf = pymupdf
+        return self._pymupdf
 
     # ── tree population ──────────────────────────────────────────────────
 
@@ -256,6 +383,9 @@ class DebugViewer(QMainWindow):
                     )
                     table_parent.addChild(ti)
 
+                    # ── Method children ───────────────────────────────
+                    self._add_method_children(ti, key, tbl)
+
             # ── Figures ──────────────────────────────────────────────
             figures = self.conn.execute(
                 "SELECT * FROM extracted_figures WHERE item_key=? ORDER BY figure_index",
@@ -335,6 +465,72 @@ class DebugViewer(QMainWindow):
             f"Loaded {len(papers)} papers from {self.db_path.name}"
         )
 
+    # ── method child nodes ────────────────────────────────────────────────
+
+    def _add_method_children(
+        self, table_item: QTreeWidgetItem, item_key: str, tbl: sqlite3.Row
+    ) -> None:
+        """Add per-method child nodes under a table tree item."""
+        if not self._has_method_results:
+            return
+
+        # Resolve table_id: prefer DB column, else compute from caption
+        table_id = None
+        if self._has_table_id_col:
+            table_id = tbl["table_id"]
+        if not table_id:
+            # Compute from caption (backward compat with old DB)
+            from zotero_chunk_rag.feature_extraction.ground_truth import make_table_id
+            table_id = make_table_id(
+                item_key, tbl["caption"], tbl["page_num"], tbl["table_index"]
+            )
+
+        methods = self.conn.execute(
+            "SELECT id, method_name, quality_score FROM method_results "
+            "WHERE table_id=? ORDER BY quality_score DESC",
+            (table_id,),
+        ).fetchall()
+        if not methods:
+            return
+
+        # Find winning method
+        winning_method = None
+        if self._has_pipeline_runs:
+            pr = self.conn.execute(
+                "SELECT winning_method FROM pipeline_runs WHERE table_id=?",
+                (table_id,),
+            ).fetchone()
+            if pr:
+                winning_method = pr["winning_method"]
+
+        for m in methods:
+            score = m["quality_score"]
+            score_str = f"{score:.1f}%" if score is not None else "?"
+            name = m["method_name"]
+
+            # Check if this is the winner
+            # winning_method uses "structure:cell" format, method_name uses "structure+cell"
+            is_winner = False
+            if winning_method:
+                # Normalize: winning_method may be "struct:cell", method_name "struct+cell"
+                norm_winner = winning_method.replace(":", "+")
+                is_winner = (name == norm_winner)
+
+            prefix = "\u2605 " if is_winner else ""  # star
+            mi = QTreeWidgetItem(
+                [f"{prefix}{name}", f"[{score_str}]"]
+            )
+            mi.setData(
+                0, Qt.ItemDataRole.UserRole,
+                ("method", item_key, tbl["id"], table_id, m["id"]),
+            )
+            if is_winner:
+                bold_font = mi.font(0)
+                bold_font.setBold(True)
+                mi.setFont(0, bold_font)
+                mi.setForeground(1, QColor("#4caf50"))
+            table_item.addChild(mi)
+
     # ── grade filter ─────────────────────────────────────────────────────
 
     def _apply_grade_filter(self):
@@ -351,10 +547,11 @@ class DebugViewer(QMainWindow):
     # ── content display helpers ──────────────────────────────────────────
 
     def _show_content(self, mode: str):
-        """Show one of: 'text', 'image', 'table'."""
+        """Show one of: 'text', 'image', 'table', 'comparison'."""
         self.text_display.setVisible(mode == "text")
         self.image_scroll.setVisible(mode == "image")
         self.rendered_table.setVisible(mode == "table")
+        self.comparison_widget.setVisible(mode == "comparison")
 
     def _set_meta(self, rows: list[tuple[str, str]]):
         self.meta_table.setRowCount(len(rows))
@@ -399,6 +596,8 @@ class DebugViewer(QMainWindow):
             self._show_figure(data[1], data[2])
         elif kind == "test":
             self._show_test(data[2])
+        elif kind == "method":
+            self._show_method_comparison(data[1], data[2], data[3], data[4])
         elif kind == "chunks_parent":
             self._show_chunks_summary(data[1])
         elif kind == "tables_parent":
@@ -628,6 +827,396 @@ class DebugViewer(QMainWindow):
         self.text_display.setPlainText(row["detail"] or "(no detail)")
         status = "PASS" if row["passed"] else "FAIL"
         self.status.showMessage(f"Test: {row['test_name']} — {status}")
+
+    # ── display: method comparison (2x2 view) ────────────────────────────
+
+    def _resolve_pdf_info(self, table_id: str, item_key: str) -> dict | None:
+        """Resolve PDF path, page number, and bbox for a table.
+
+        Checks manifest first, then papers.pdf_path column.
+        Returns {pdf_path, page_num, bbox} or None.
+        """
+        # 1. Check manifest
+        if table_id in self._manifest:
+            entry = self._manifest[table_id]
+            pdf_path = entry.get("pdf_path")
+            if pdf_path and os.path.isfile(pdf_path):
+                return {
+                    "pdf_path": pdf_path,
+                    "page_num": entry.get("page_num"),
+                    "bbox": entry.get("bbox"),
+                }
+
+        # 2. Fallback: papers.pdf_path + extracted_tables.bbox
+        if self._has_pdf_path_col:
+            paper = self.conn.execute(
+                "SELECT pdf_path FROM papers WHERE item_key=?", (item_key,)
+            ).fetchone()
+            if paper and paper["pdf_path"] and os.path.isfile(paper["pdf_path"]):
+                # Get bbox and page_num from extracted_tables via table_id
+                if self._has_table_id_col:
+                    tbl = self.conn.execute(
+                        "SELECT page_num, bbox FROM extracted_tables "
+                        "WHERE table_id=? AND item_key=?",
+                        (table_id, item_key),
+                    ).fetchone()
+                else:
+                    tbl = None
+                if tbl and tbl["bbox"]:
+                    return {
+                        "pdf_path": paper["pdf_path"],
+                        "page_num": tbl["page_num"],
+                        "bbox": json.loads(tbl["bbox"]),
+                    }
+
+        return None
+
+    def _load_ground_truth(self, table_id: str) -> tuple[list[str], list[list[str]]] | None:
+        """Load ground truth headers and rows for a table_id."""
+        if not self.gt_conn:
+            return None
+        row = self.gt_conn.execute(
+            "SELECT headers_json, rows_json FROM ground_truth_tables WHERE table_id=?",
+            (table_id,),
+        ).fetchone()
+        if not row:
+            return None
+        return json.loads(row["headers_json"]), json.loads(row["rows_json"])
+
+    def _render_table_pixmap(
+        self,
+        pdf_path: str,
+        page_num: int,
+        bbox: list[float],
+        padding: int = 20,
+        dpi: int = 300,
+    ) -> tuple[QPixmap, tuple[float, float]] | None:
+        """Render a table region from a PDF as a QPixmap.
+
+        Returns (pixmap, (clip_x0, clip_y0)) or None on failure.
+        """
+        try:
+            fitz = self._get_pymupdf()
+            doc = fitz.open(str(pdf_path))
+            try:
+                page = doc[page_num - 1]  # 1-indexed -> 0-indexed
+                page_rect = page.rect
+                x0, y0, x1, y1 = bbox
+                clip = fitz.Rect(
+                    max(x0 - padding, page_rect.x0),
+                    max(y0 - padding, page_rect.y0),
+                    min(x1 + padding, page_rect.x1),
+                    min(y1 + padding, page_rect.y1),
+                )
+                pix = page.get_pixmap(clip=clip, dpi=dpi)
+                # Convert to QImage -> QPixmap
+                img = QImage(
+                    pix.samples,
+                    pix.width,
+                    pix.height,
+                    pix.stride,
+                    QImage.Format.Format_RGB888,
+                )
+                qpixmap = QPixmap.fromImage(img.copy())  # .copy() to detach from samples buffer
+                return qpixmap, (clip.x0, clip.y0)
+            finally:
+                doc.close()
+        except Exception:
+            return None
+
+    def _draw_grid_overlay(
+        self,
+        base_pixmap: QPixmap,
+        clip_origin: tuple[float, float],
+        col_boundaries: list[float],
+        row_boundaries: list[float],
+        bbox: list[float],
+        dpi: int = 300,
+    ) -> QPixmap:
+        """Draw column/row boundary lines and bbox outline on a pixmap copy."""
+        result = base_pixmap.copy()
+        painter = QPainter(result)
+        scale = dpi / 72.0
+        clip_x0, clip_y0 = clip_origin
+
+        # Red pen for column boundaries (vertical lines)
+        col_pen = QPen(QColor("#e53935"), 2)
+        painter.setPen(col_pen)
+        for x in col_boundaries:
+            px = (x - clip_x0) * scale
+            painter.drawLine(int(px), 0, int(px), result.height())
+
+        # Blue pen for row boundaries (horizontal lines)
+        row_pen = QPen(QColor("#1e88e5"), 2)
+        painter.setPen(row_pen)
+        for y in row_boundaries:
+            py = (y - clip_y0) * scale
+            painter.drawLine(0, int(py), result.width(), int(py))
+
+        # Green dashed pen for bbox outline
+        bbox_pen = QPen(QColor("#43a047"), 1, Qt.PenStyle.DashLine)
+        painter.setPen(bbox_pen)
+        bx0 = int((bbox[0] - clip_x0) * scale)
+        by0 = int((bbox[1] - clip_y0) * scale)
+        bx1 = int((bbox[2] - clip_x0) * scale)
+        by1 = int((bbox[3] - clip_y0) * scale)
+        painter.drawRect(bx0, by0, bx1 - bx0, by1 - by0)
+
+        painter.end()
+        return result
+
+    def _show_method_comparison(
+        self,
+        item_key: str,
+        table_db_id: int,
+        table_id: str,
+        method_row_id: int,
+    ) -> None:
+        """Show 2x2 comparison view for a specific method result."""
+        # Load method result
+        mr = self.conn.execute(
+            "SELECT * FROM method_results WHERE id=?", (method_row_id,)
+        ).fetchone()
+        if not mr:
+            return
+
+        method_name = mr["method_name"]
+        quality_score = mr["quality_score"]
+
+        # Parse cell grid
+        ext_headers: list[str] = []
+        ext_rows: list[list[str]] = []
+        col_boundaries: list[float] = []
+        row_boundaries: list[float] = []
+        structure_method = ""
+        cell_method = ""
+
+        if mr["cell_grid_json"]:
+            try:
+                grid = json.loads(mr["cell_grid_json"])
+                ext_headers = grid.get("headers", [])
+                ext_rows = grid.get("rows", [])
+                col_boundaries = grid.get("col_boundaries", [])
+                row_boundaries = grid.get("row_boundaries", [])
+                structure_method = grid.get("structure_method", "")
+                cell_method = grid.get("method", "")
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Parse boundary hypotheses for additional info
+        boundary_info = {}
+        if mr["boundary_hypotheses_json"]:
+            try:
+                boundary_info = json.loads(mr["boundary_hypotheses_json"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Load ground truth
+        gt_data = self._load_ground_truth(table_id)
+        gt_headers: list[str] = gt_data[0] if gt_data else []
+        gt_rows: list[list[str]] = gt_data[1] if gt_data else []
+
+        # Compute cell diff colors if GT available
+        cell_colors: dict[tuple[int, int], QColor] = {}
+        gt_diff_info = {}
+        if gt_data and ext_headers and ext_rows:
+            try:
+                from zotero_chunk_rag.feature_extraction.ground_truth import (
+                    compare_extraction,
+                    GROUND_TRUTH_DB_PATH,
+                )
+                cmp = compare_extraction(
+                    GROUND_TRUTH_DB_PATH, table_id, ext_headers, ext_rows,
+                )
+                gt_diff_info = {
+                    "cell_accuracy": cmp.cell_accuracy_pct,
+                    "fuzzy_accuracy": cmp.fuzzy_accuracy_pct,
+                    "fuzzy_precision": cmp.fuzzy_precision_pct,
+                    "fuzzy_recall": cmp.fuzzy_recall_pct,
+                    "splits": len(cmp.column_splits) + len(cmp.row_splits),
+                    "merges": len(cmp.column_merges) + len(cmp.row_merges),
+                    "cell_diffs": len(cmp.cell_diffs),
+                    "coverage": cmp.structural_coverage_pct,
+                }
+                # Build set of mismatched cells for coloring
+                mismatched = set()
+                for d in cmp.cell_diffs:
+                    # d.row and d.col are in GT coordinates; need to map to ext
+                    # Find the ext row/col via matched_rows/matched_columns
+                    ext_ri = None
+                    for g, e in cmp.matched_rows:
+                        if g == d.row:
+                            ext_ri = e
+                            break
+                    ext_ci = None
+                    for g, e in cmp.matched_columns:
+                        if g == d.col:
+                            ext_ci = e
+                            break
+                    if ext_ri is not None and ext_ci is not None:
+                        mismatched.add((ext_ri, ext_ci))
+
+                # Color all comparable cells
+                green = QColor("#c8e6c9")  # light green
+                red = QColor("#ffcdd2")    # light red
+                for g_ri, e_ri in cmp.matched_rows:
+                    for g_ci, e_ci in cmp.matched_columns:
+                        if (e_ri, e_ci) in mismatched:
+                            cell_colors[(e_ri, e_ci)] = red
+                        else:
+                            cell_colors[(e_ri, e_ci)] = green
+            except (KeyError, ImportError):
+                pass
+
+        # ── Populate extracted table (0,0) ────────────────────────────
+        _populate_table_widget(self.cmp_ext_table, ext_headers, ext_rows, cell_colors)
+
+        # ── Populate ground truth table (1,0) ─────────────────────────
+        if gt_data:
+            _populate_table_widget(self.cmp_gt_table, gt_headers, gt_rows)
+            self.cmp_gt_group.setTitle(
+                f"Ground Truth ({len(gt_rows)}x{len(gt_headers)})"
+            )
+        else:
+            self.cmp_gt_table.clear()
+            self.cmp_gt_table.setRowCount(0)
+            self.cmp_gt_table.setColumnCount(0)
+            self.cmp_gt_group.setTitle("Ground Truth (not available)")
+
+        # ── Render PDF images (0,1) and (1,1) ────────────────────────
+        # Always use extracted_tables bbox (precise) — manifest bbox is
+        # full-page-width and would show the entire page.
+        tbl_row = self.conn.execute(
+            "SELECT bbox, page_num FROM extracted_tables WHERE id=?", (table_db_id,)
+        ).fetchone()
+        bbox = json.loads(tbl_row["bbox"]) if tbl_row and tbl_row["bbox"] else None
+
+        pdf_info = self._resolve_pdf_info(table_id, item_key)
+
+        if pdf_info and bbox:
+            render_result = self._render_table_pixmap(
+                pdf_info["pdf_path"],
+                pdf_info["page_num"] or tbl_row["page_num"],
+                bbox,
+            )
+            if render_result:
+                clean_pixmap, clip_origin = render_result
+                # Scale for display
+                display_pixmap = clean_pixmap
+                if display_pixmap.width() > 600:
+                    display_pixmap = display_pixmap.scaledToWidth(
+                        600, Qt.TransformationMode.SmoothTransformation
+                    )
+                self.cmp_pdf_label.setPixmap(display_pixmap)
+                self.cmp_pdf_group.setTitle("PDF Region")
+
+                # Grid overlay
+                overlay_pixmap = self._draw_grid_overlay(
+                    clean_pixmap, clip_origin,
+                    col_boundaries, row_boundaries, bbox,
+                )
+                if overlay_pixmap.width() > 600:
+                    overlay_pixmap = overlay_pixmap.scaledToWidth(
+                        600, Qt.TransformationMode.SmoothTransformation
+                    )
+                self.cmp_overlay_label.setPixmap(overlay_pixmap)
+                self.cmp_overlay_group.setTitle(
+                    f"Grid Overlay ({len(col_boundaries)} cols, "
+                    f"{len(row_boundaries)} rows)"
+                )
+            else:
+                self.cmp_pdf_label.setText("(PDF render failed)")
+                self.cmp_pdf_label.setPixmap(QPixmap())
+                self.cmp_overlay_label.setText("(no overlay)")
+                self.cmp_overlay_label.setPixmap(QPixmap())
+        else:
+            self.cmp_pdf_label.setText("(no PDF available)")
+            self.cmp_pdf_label.setPixmap(QPixmap())
+            self.cmp_overlay_label.setText("(no overlay available)")
+            self.cmp_overlay_label.setPixmap(QPixmap())
+
+        # ── Build metadata ────────────────────────────────────────────
+        # Check if this is the pipeline winner
+        is_winner = False
+        if self._has_pipeline_runs:
+            pr = self.conn.execute(
+                "SELECT winning_method FROM pipeline_runs WHERE table_id=?",
+                (table_id,),
+            ).fetchone()
+            if pr and pr["winning_method"]:
+                norm_winner = pr["winning_method"].replace(":", "+")
+                is_winner = (method_name == norm_winner)
+
+        n_ext_rows = len(ext_rows)
+        n_ext_cols = len(ext_headers) if ext_headers else (
+            len(ext_rows[0]) if ext_rows else 0
+        )
+        # Compute fill rate
+        non_empty = sum(
+            1 for row in ext_rows for cell in row if str(cell).strip()
+        )
+        total = sum(len(row) for row in ext_rows)
+        fill_rate = non_empty / total if total else 0.0
+
+        meta: list[tuple[str, str]] = [
+            ("Method", method_name),
+            ("Structure Method", structure_method or boundary_info.get("structure_method", "")),
+            ("Cell Method", cell_method or boundary_info.get("cell_method", "")),
+            ("Pipeline Winner", "Yes" if is_winner else "No"),
+            ("Quality Score", f"{quality_score:.1f}%" if quality_score is not None else "N/A"),
+            ("Grid Shape", f"{n_ext_rows} x {n_ext_cols}"),
+            ("Fill Rate", f"{fill_rate:.1%}"),
+            ("Col Boundaries", f"{len(col_boundaries)}  {col_boundaries}"),
+            ("Row Boundaries", f"{len(row_boundaries)}  {row_boundaries}"),
+        ]
+
+        # GT comparison metrics
+        if gt_diff_info:
+            meta.extend([
+                ("", ""),
+                ("GT Cell Accuracy", f"{gt_diff_info['cell_accuracy']:.1f}%"),
+                ("GT Fuzzy Accuracy", f"{gt_diff_info['fuzzy_accuracy']:.1f}%"),
+                ("GT Fuzzy Precision", f"{gt_diff_info['fuzzy_precision']:.1f}%"),
+                ("GT Fuzzy Recall", f"{gt_diff_info['fuzzy_recall']:.1f}%"),
+                ("Splits", str(gt_diff_info["splits"])),
+                ("Merges", str(gt_diff_info["merges"])),
+                ("Cell Diffs", str(gt_diff_info["cell_diffs"])),
+                ("Coverage", f"{gt_diff_info['coverage']:.1f}%"),
+            ])
+        elif gt_data:
+            meta.append(("GT Comparison", "comparison failed"))
+        else:
+            meta.append(("GT Comparison", "no ground truth"))
+
+        # Also show GT diffs from the debug DB if available
+        if self._has_gt_diffs:
+            gtd = self.conn.execute(
+                "SELECT cell_accuracy_pct, fuzzy_accuracy_pct, num_splits, "
+                "num_merges, num_cell_diffs FROM ground_truth_diffs "
+                "WHERE table_id=? LIMIT 1",
+                (table_id,),
+            ).fetchone()
+            if gtd:
+                meta.extend([
+                    ("", ""),
+                    ("DB GT Accuracy", f"{gtd['cell_accuracy_pct']:.1f}%"
+                     if gtd["cell_accuracy_pct"] is not None else "N/A"),
+                    ("DB Fuzzy Accuracy", f"{gtd['fuzzy_accuracy_pct']:.1f}%"
+                     if gtd["fuzzy_accuracy_pct"] is not None else "N/A"),
+                ])
+
+        self._set_meta(meta)
+
+        # Switch to comparison mode
+        self._show_content("comparison")
+        self.status.showMessage(
+            f"Method: {method_name}  "
+            f"score={quality_score:.1f}%  "
+            f"{n_ext_rows}x{n_ext_cols}  "
+            f"{'WINNER' if is_winner else ''}"
+            if quality_score is not None
+            else f"Method: {method_name}  {n_ext_rows}x{n_ext_cols}"
+        )
 
     # ── summary views for category nodes ─────────────────────────────────
 

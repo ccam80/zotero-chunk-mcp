@@ -30,15 +30,25 @@ import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from zotero_chunk_rag.table_extraction.debug_db import (
+from zotero_chunk_rag.feature_extraction.debug_db import (
     create_extended_tables,
     write_ground_truth_diff,
+    write_method_result,
+    write_pipeline_run,
 )
-from zotero_chunk_rag.table_extraction.ground_truth import (
+from zotero_chunk_rag.feature_extraction.ground_truth import (
     GROUND_TRUTH_DB_PATH,
     compare_extraction,
     make_table_id,
 )
+from zotero_chunk_rag.feature_extraction.pipeline import (
+    DEFAULT_CONFIG,
+    FAST_CONFIG,
+    MINIMAL_CONFIG,
+    RULED_CONFIG,
+    Pipeline,
+)
+from zotero_chunk_rag.feature_extraction.scoring import rank_and_select
 
 # ---------------------------------------------------------------------------
 # Corpus selection: 10 papers chosen for maximum diversity
@@ -1171,7 +1181,7 @@ def run_stress_test():
         report.add(
             "nonsense-query-no-crash",
             "all",
-            True,  # If we got here, it didn't crash
+            nonsense_results[0].score < 0.5 if nonsense_results else False,
             f"Nonsense query returned {len(nonsense_results)} results "
             f"(top score: {top_score})",
             severity="MINOR",
@@ -1241,7 +1251,7 @@ def run_stress_test():
             report.add(
                 "section-weight-effect",
                 "all",
-                True,  # Just check it doesn't crash — effect may be subtle
+                order_changed,
                 f"Default top-3 sections: {default_top3_sections}, "
                 f"methods-boosted top-3: {methods_top3_sections}, "
                 f"order changed: {order_changed}",
@@ -1344,7 +1354,8 @@ CREATE TABLE IF NOT EXISTS papers (
     unmatched_figure_captions TEXT, -- JSON array
     unmatched_table_captions  TEXT, -- JSON array
     completeness_grade    TEXT,
-    full_markdown         TEXT    -- full extracted document text
+    full_markdown         TEXT,   -- full extracted document text
+    pdf_path              TEXT    -- path to source PDF (for debug viewer)
 );
 
 CREATE TABLE IF NOT EXISTS sections (
@@ -1386,6 +1397,7 @@ CREATE TABLE IF NOT EXISTS extracted_tables (
     bbox              TEXT,   -- JSON [x0, y0, x1, y1]
     artifact_type     TEXT,   -- NULL=real data, else layout artifact tag
     extraction_strategy TEXT, -- which multi-strategy winner produced cell text
+    table_id            TEXT,   -- stable table ID for linking to method_results/GT
     FOREIGN KEY (item_key) REFERENCES papers(item_key)
 );
 
@@ -1467,7 +1479,7 @@ def write_debug_database(
         # --- paper row ---
         con.execute(
             """INSERT INTO papers VALUES (
-                ?,?,?,?,?,?,  ?,?,?,?,  ?,?,?,?,  ?,?,?,  ?,?,?,?,  ?,?
+                ?,?,?,?,?,?,  ?,?,?,?,  ?,?,?,?,  ?,?,?,  ?,?,?,?,  ?,?,?
             )""",
             (
                 item_key,
@@ -1494,6 +1506,7 @@ def write_debug_database(
                 json.dumps(comp.unmatched_table_captions) if comp else None,
                 comp.grade if comp else None,
                 extraction.full_markdown,
+                str(item.pdf_path) if item.pdf_path else None,
             ),
         )
 
@@ -1518,12 +1531,16 @@ def write_debug_database(
             non_empty = sum(1 for row in tab.rows for cell in row if cell.strip())
             total_cells = sum(len(row) for row in tab.rows)
             fill_rate = non_empty / total_cells if total_cells else 0.0
+            table_id = make_table_id(
+                item_key, tab.caption, tab.page_num, tab.table_index
+            )
             con.execute(
                 "INSERT INTO extracted_tables (item_key, table_index, page_num, "
                 "caption, caption_position, num_rows, num_cols, non_empty_cells, "
                 "total_cells, fill_rate, headers_json, rows_json, markdown, "
-                "reference_context, bbox, artifact_type, extraction_strategy) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "reference_context, bbox, artifact_type, extraction_strategy, "
+                "table_id) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     item_key,
                     tab.table_index,
@@ -1542,6 +1559,7 @@ def write_debug_database(
                     json.dumps(list(tab.bbox)),
                     tab.artifact_type,
                     tab.extraction_strategy,
+                    table_id,
                 ),
             )
 
@@ -1599,8 +1617,24 @@ def write_debug_database(
                 ),
             )
 
-    # --- test results ---
+    # --- test results (pre-pipeline-analysis) ---
     for r in report.results:
+        con.execute(
+            "INSERT INTO test_results (test_name, paper, passed, detail, severity) "
+            "VALUES (?,?,?,?,?)",
+            (r.test_name, r.paper, 1 if r.passed else 0, r.detail, r.severity),
+        )
+    con.commit()
+
+    # --- per-method pipeline analysis ---
+    print("\n  Running per-method pipeline analysis...")
+    _test_pipeline_methods(report, extractions, con)
+
+    # --- write any new test results from pipeline analysis ---
+    # (The _test_pipeline_methods function adds MINOR assertions to the report.)
+    # Re-insert only the new results that were added during pipeline analysis.
+    existing_count = con.execute("SELECT COUNT(*) FROM test_results").fetchone()[0]
+    for r in report.results[existing_count:]:
         con.execute(
             "INSERT INTO test_results (test_name, paper, passed, detail, severity) "
             "VALUES (?,?,?,?,?)",
@@ -1625,7 +1659,8 @@ def _build_gt_summary_markdown(db_path: Path) -> list[str]:
     con = sqlite3.connect(str(db_path))
     try:
         rows = con.execute(
-            "SELECT gtd.table_id, p.short_name, gtd.cell_accuracy_pct, "
+            "SELECT gtd.table_id, p.short_name, gtd.fuzzy_accuracy_pct, "
+            "gtd.fuzzy_precision_pct, gtd.fuzzy_recall_pct, "
             "gtd.num_splits, gtd.num_merges, gtd.num_cell_diffs "
             "FROM ground_truth_diffs gtd "
             "LEFT JOIN papers p ON p.item_key = substr(gtd.table_id, 1, "
@@ -1643,24 +1678,534 @@ def _build_gt_summary_markdown(db_path: Path) -> list[str]:
     lines: list[str] = []
     lines.append("## Ground Truth Comparison")
     lines.append("")
-    lines.append("| Paper | Table ID | Cell Accuracy | Splits | Merges | Cell Diffs |")
-    lines.append("|-------|----------|---------------|--------|--------|------------|")
+    lines.append("| Paper | Table ID | Fuzzy Accuracy | Precision | Recall | Splits | Merges | Cell Diffs |")
+    lines.append("|-------|----------|----------------|-----------|--------|--------|--------|------------|")
     accuracy_values: list[float] = []
-    for table_id, short_name, cell_accuracy_pct, num_splits, num_merges, num_cell_diffs in rows:
+    for table_id, short_name, fuzzy_acc, fuzzy_prec, fuzzy_rec, num_splits, num_merges, num_cell_diffs in rows:
         paper_label = short_name if short_name else table_id.split("_")[0]
         lines.append(
-            f"| {paper_label} | {table_id} | {cell_accuracy_pct:.1f}% "
+            f"| {paper_label} | {table_id} | {fuzzy_acc:.1f}% "
+            f"| {fuzzy_prec:.1f}% | {fuzzy_rec:.1f}% "
             f"| {num_splits} | {num_merges} | {num_cell_diffs} |"
         )
-        accuracy_values.append(cell_accuracy_pct)
+        accuracy_values.append(fuzzy_acc)
 
     if accuracy_values:
         overall = sum(accuracy_values) / len(accuracy_values)
         lines.append("")
         lines.append(
-            f"**Overall corpus cell accuracy**: {overall:.1f}% "
+            f"**Overall corpus fuzzy accuracy**: {overall:.1f}% "
             f"({len(accuracy_values)} tables compared)"
         )
+    lines.append("")
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# Per-method pipeline analysis
+# ---------------------------------------------------------------------------
+
+
+def _test_pipeline_methods(
+    report: StressTestReport,
+    extractions: dict[str, tuple],
+    con: sqlite3.Connection,
+) -> None:
+    """Run per-method analysis for all extracted papers.
+
+    For each paper's non-artifact tables:
+    1. Creates a Pipeline from DEFAULT_CONFIG
+    2. Calls extract() — grids from all structure methods are in result.cell_grids
+    3. Writes method_results rows for each structure+cell method combination
+    4. Writes pipeline_runs rows with winning method and score
+    5. Adds MINOR assertions for method coverage
+
+    Parameters
+    ----------
+    report:
+        Test report to append assertions to.
+    extractions:
+        The main extractions dict {item_key: (extraction, chunks, item, gt, short_name)}.
+    con:
+        Open SQLite connection to the debug DB.
+    """
+    from zotero_chunk_rag.feature_extraction.models import TableContext
+    from zotero_chunk_rag.feature_extraction.scoring import fill_rate as _fill_rate
+
+    pipeline = Pipeline(DEFAULT_CONFIG)
+    gt_db_exists = Path(GROUND_TRUTH_DB_PATH).exists()
+
+    # Track which structure and cell methods produced results
+    structure_method_table_counts: dict[str, int] = {}
+    cell_method_table_counts: dict[str, int] = {}
+    structure_method_names = {m.name for m in DEFAULT_CONFIG.structure_methods}
+    cell_method_names = {m.name for m in DEFAULT_CONFIG.cell_methods}
+
+    total_tables_analysed = 0
+
+    for item_key, (extraction, chunks, item, gt, short_name) in extractions.items():
+        import pymupdf
+
+        try:
+            doc = pymupdf.open(str(item.pdf_path))
+        except Exception:
+            continue
+
+        try:
+            for tab in extraction.tables:
+                if tab.artifact_type is not None:
+                    continue
+
+                total_tables_analysed += 1
+                table_id = make_table_id(
+                    item_key, tab.caption, tab.page_num, tab.table_index,
+                )
+
+                # Build a TableContext for this table
+                page_idx = tab.page_num - 1
+                if page_idx < 0 or page_idx >= len(doc):
+                    continue
+                page = doc[page_idx]
+                ctx = TableContext(
+                    page=page,
+                    page_num=tab.page_num,
+                    bbox=tab.bbox,
+                    pdf_path=item.pdf_path,
+                )
+
+                # Run full pipeline (scores all structure methods' grids)
+                pipeline_result = pipeline.extract(ctx)
+
+                # Group grids by structure_method for per-method analysis
+                seen_struct_methods: set[str] = set()
+                seen_cell_methods: set[str] = set()
+                for grid in pipeline_result.cell_grids:
+                    struct_name = grid.structure_method
+                    if struct_name != "consensus" and struct_name not in seen_struct_methods:
+                        seen_struct_methods.add(struct_name)
+                        structure_method_table_counts[struct_name] = (
+                            structure_method_table_counts.get(struct_name, 0) + 1
+                        )
+                    if grid.method not in seen_cell_methods:
+                        seen_cell_methods.add(grid.method)
+                        cell_method_table_counts[grid.method] = (
+                            cell_method_table_counts.get(grid.method, 0) + 1
+                        )
+
+                    quality = _fill_rate(grid) * 100.0
+
+                    gt_accuracy: float | None = None
+                    if gt_db_exists:
+                        try:
+                            cmp = compare_extraction(
+                                GROUND_TRUTH_DB_PATH,
+                                table_id,
+                                list(grid.headers),
+                                [list(row) for row in grid.rows],
+                            )
+                            gt_accuracy = cmp.fuzzy_accuracy_pct
+                        except KeyError:
+                            gt_accuracy = None
+
+                    write_method_result(
+                        con,
+                        table_id=table_id,
+                        method_name=f"{struct_name}+{grid.method}",
+                        boundaries_json=json.dumps({
+                            "structure_method": struct_name,
+                            "cell_method": grid.method,
+                            "col_boundaries": list(grid.col_boundaries),
+                            "row_boundaries": list(grid.row_boundaries),
+                        }),
+                        cell_grid_json=json.dumps(grid.to_dict()),
+                        quality_score=gt_accuracy if gt_accuracy is not None else quality,
+                        execution_time_ms=None,
+                    )
+
+                # Write pipeline_runs row with the winning structure method
+                winning_grid = pipeline_result.winning_grid
+                winning_method = (
+                    f"{winning_grid.structure_method}:{winning_grid.method}"
+                    if winning_grid else "unknown"
+                )
+                # Find this table's GT accuracy from ground_truth_diffs (already written)
+                final_score_row = con.execute(
+                    "SELECT fuzzy_accuracy_pct FROM ground_truth_diffs WHERE table_id = ? "
+                    "ORDER BY rowid DESC LIMIT 1",
+                    (table_id,),
+                ).fetchone()
+                final_score = final_score_row[0] if final_score_row else None
+
+                write_pipeline_run(
+                    con,
+                    table_id=table_id,
+                    pipeline_config_json=json.dumps(DEFAULT_CONFIG.to_dict()),
+                    winning_method=winning_method,
+                    final_score=final_score,
+                )
+
+        finally:
+            doc.close()
+
+    con.commit()
+
+    # MINOR assertions: method coverage
+    if total_tables_analysed > 0:
+        for struct_name in structure_method_names:
+            count = structure_method_table_counts.get(struct_name, 0)
+            coverage = count / total_tables_analysed
+            report.add(
+                "structure-method-coverage",
+                struct_name,
+                coverage > 0.8,
+                f"Structure method '{struct_name}' ran on {count}/{total_tables_analysed} "
+                f"tables ({coverage:.0%})",
+                severity="MINOR",
+            )
+
+        for cell_name in cell_method_names:
+            count = cell_method_table_counts.get(cell_name, 0)
+            produced = count > 0
+            report.add(
+                "cell-method-produced-grid",
+                cell_name,
+                produced,
+                f"Cell method '{cell_name}' produced {count} grid(s) across "
+                f"{total_tables_analysed} tables",
+                severity="MINOR",
+            )
+
+
+# ---------------------------------------------------------------------------
+# Pipeline depth report builder
+# ---------------------------------------------------------------------------
+
+
+def _build_pipeline_depth_report(db_path: Path) -> list[str]:
+    """Query the debug DB for all method results, GT diffs, and pipeline runs.
+
+    Builds a markdown report showing:
+    - Per-method win rates (how often each cell/structure method is best)
+    - Combination value (best-single-method vs consensus accuracy)
+    - Post-processing improvement (winning grid vs post-processed GT accuracy)
+    - Per-table accuracy chain (raw method accuracies -> winning -> post-processed -> GT)
+
+    Returns an empty list when no method_results data exists.
+    """
+    con = sqlite3.connect(str(db_path))
+    try:
+        # Check if method_results has data
+        count_row = con.execute("SELECT COUNT(*) FROM method_results").fetchone()
+        if count_row[0] == 0:
+            return []
+
+        lines: list[str] = []
+        lines.append("## Pipeline Depth Report")
+        lines.append("")
+
+        # --- 1. Per-method win rates ---
+        lines.append("### Per-Method Win Rates")
+        lines.append("")
+
+        # For each table_id, find which structure+cell combo had the best quality_score
+        table_ids = [
+            r[0] for r in con.execute(
+                "SELECT DISTINCT table_id FROM method_results"
+            ).fetchall()
+        ]
+
+        structure_wins: dict[str, int] = {}
+        cell_wins: dict[str, int] = {}
+        structure_totals: dict[str, int] = {}
+        cell_totals: dict[str, int] = {}
+
+        for tid in table_ids:
+            rows = con.execute(
+                "SELECT method_name, quality_score FROM method_results "
+                "WHERE table_id = ? AND quality_score IS NOT NULL "
+                "ORDER BY quality_score DESC LIMIT 1",
+                (tid,),
+            ).fetchone()
+            if rows:
+                best_method = rows[0]
+                parts = best_method.split("+", 1)
+                if len(parts) == 2:
+                    struct_name, cell_name = parts
+                    structure_wins[struct_name] = structure_wins.get(struct_name, 0) + 1
+                    cell_wins[cell_name] = cell_wins.get(cell_name, 0) + 1
+
+            # Count participation
+            all_methods = con.execute(
+                "SELECT DISTINCT method_name FROM method_results WHERE table_id = ?",
+                (tid,),
+            ).fetchall()
+            for (method_name,) in all_methods:
+                parts = method_name.split("+", 1)
+                if len(parts) == 2:
+                    structure_totals[parts[0]] = structure_totals.get(parts[0], 0) + 1
+                    cell_totals[parts[1]] = cell_totals.get(parts[1], 0) + 1
+
+        if structure_wins:
+            lines.append("**Structure method wins** (how often each method's boundaries produce the best cell accuracy):")
+            lines.append("")
+            lines.append("| Structure Method | Wins | Participated | Win Rate |")
+            lines.append("|-----------------|------|-------------|----------|")
+            for name in sorted(structure_wins.keys(), key=lambda n: structure_wins[n], reverse=True):
+                total = structure_totals.get(name, 0)
+                wr = structure_wins[name] / total if total > 0 else 0
+                lines.append(f"| {name} | {structure_wins[name]} | {total} | {wr:.0%} |")
+            lines.append("")
+
+        if cell_wins:
+            lines.append("**Cell method wins** (how often each method is selected as best):")
+            lines.append("")
+            lines.append("| Cell Method | Wins | Participated | Win Rate |")
+            lines.append("|------------|------|-------------|----------|")
+            for name in sorted(cell_wins.keys(), key=lambda n: cell_wins[n], reverse=True):
+                total = cell_totals.get(name, 0)
+                wr = cell_wins[name] / total if total > 0 else 0
+                lines.append(f"| {name} | {cell_wins[name]} | {total} | {wr:.0%} |")
+            lines.append("")
+
+        # --- 2. Combination value ---
+        lines.append("### Combination Value")
+        lines.append("")
+        lines.append("Comparison of best-single-method accuracy vs pipeline (consensus boundaries) accuracy:")
+        lines.append("")
+
+        # For each table, find best single-method accuracy and pipeline accuracy
+        best_single_accs: list[float] = []
+        pipeline_accs: list[float] = []
+        combo_table_ids: list[str] = []
+
+        for tid in table_ids:
+            # Best single method accuracy
+            best_row = con.execute(
+                "SELECT MAX(quality_score) FROM method_results "
+                "WHERE table_id = ? AND quality_score IS NOT NULL",
+                (tid,),
+            ).fetchone()
+            # Pipeline accuracy (from ground_truth_diffs)
+            pipeline_row = con.execute(
+                "SELECT fuzzy_accuracy_pct FROM ground_truth_diffs "
+                "WHERE table_id = ? ORDER BY rowid DESC LIMIT 1",
+                (tid,),
+            ).fetchone()
+
+            if best_row and best_row[0] is not None and pipeline_row:
+                best_single_accs.append(best_row[0])
+                pipeline_accs.append(pipeline_row[0])
+                combo_table_ids.append(tid)
+
+        if best_single_accs:
+            avg_best = sum(best_single_accs) / len(best_single_accs)
+            avg_pipeline = sum(pipeline_accs) / len(pipeline_accs)
+            delta = avg_pipeline - avg_best
+            lines.append(f"- **Avg best-single-method accuracy**: {avg_best:.1f}%")
+            lines.append(f"- **Avg pipeline (consensus) accuracy**: {avg_pipeline:.1f}%")
+            lines.append(f"- **Delta (positive = combination helps)**: {delta:+.1f}%")
+            lines.append(f"- **Tables compared**: {len(best_single_accs)}")
+        else:
+            lines.append("_(No tables with both per-method and GT data available)_")
+        lines.append("")
+
+        # --- 3. Per-table accuracy chain ---
+        lines.append("### Per-Table Accuracy Chain")
+        lines.append("")
+        lines.append("| Table ID | Best Single Method | Best Accuracy | Pipeline Accuracy | Delta |")
+        lines.append("|----------|-------------------|---------------|-------------------|-------|")
+
+        for i, tid in enumerate(combo_table_ids):
+            # Find best single method name and accuracy
+            best_row = con.execute(
+                "SELECT method_name, quality_score FROM method_results "
+                "WHERE table_id = ? AND quality_score IS NOT NULL "
+                "ORDER BY quality_score DESC LIMIT 1",
+                (tid,),
+            ).fetchone()
+            if best_row:
+                best_name = best_row[0]
+                best_acc = best_single_accs[i]
+                pipe_acc = pipeline_accs[i]
+                delta = pipe_acc - best_acc
+                lines.append(
+                    f"| {tid[:40]} | {best_name} | {best_acc:.1f}% "
+                    f"| {pipe_acc:.1f}% | {delta:+.1f}% |"
+                )
+
+        lines.append("")
+        return lines
+    finally:
+        con.close()
+
+
+# ---------------------------------------------------------------------------
+# Variant comparison
+# ---------------------------------------------------------------------------
+
+
+def _build_variant_comparison(
+    extractions: dict[str, tuple],
+) -> list[str]:
+    """Run named pipeline configs on a subset of corpus tables and compare accuracy.
+
+    For each non-artifact table in the corpus (limited to first 3 tables per paper
+    to keep runtime reasonable), instantiates a Pipeline with each named config
+    (DEFAULT, FAST, RULED, MINIMAL), runs extraction, and compares against GT.
+
+    Returns markdown lines for the comparison report section. Empty list if
+    no ground truth data is available.
+    """
+    from zotero_chunk_rag.feature_extraction.models import TableContext
+
+    gt_db_path = Path(GROUND_TRUTH_DB_PATH)
+    if not gt_db_path.exists():
+        return []
+
+    named_configs = {
+        "DEFAULT": DEFAULT_CONFIG,
+        "FAST": FAST_CONFIG,
+        "RULED": RULED_CONFIG,
+        "MINIMAL": MINIMAL_CONFIG,
+    }
+
+    # Per-variant aggregated results
+    variant_results: dict[str, list[float]] = {name: [] for name in named_configs}
+    variant_times: dict[str, list[float]] = {name: [] for name in named_configs}
+    table_details: list[dict[str, str | float]] = []
+
+    for item_key, (extraction, chunks, item, gt, short_name) in extractions.items():
+        import pymupdf
+
+        try:
+            doc = pymupdf.open(str(item.pdf_path))
+        except Exception:
+            continue
+
+        try:
+            tables_processed = 0
+            for tab in extraction.tables:
+                if tab.artifact_type is not None:
+                    continue
+                if tables_processed >= 3:
+                    break
+
+                table_id = make_table_id(
+                    item_key, tab.caption, tab.page_num, tab.table_index,
+                )
+
+                page_idx = tab.page_num - 1
+                if page_idx < 0 or page_idx >= len(doc):
+                    continue
+                page = doc[page_idx]
+
+                detail: dict[str, str | float] = {
+                    "table_id": table_id,
+                    "paper": short_name,
+                }
+
+                for config_name, config in named_configs.items():
+                    # Suppress weights loading for variant comparison by using a
+                    # non-existent path so each config runs with its own defaults
+                    pipeline = Pipeline(
+                        config,
+                        weights_path=Path("__nonexistent_weights__.json"),
+                    )
+                    ctx = TableContext(
+                        page=page,
+                        page_num=tab.page_num,
+                        bbox=tab.bbox,
+                        pdf_path=item.pdf_path,
+                    )
+
+                    t0 = time.perf_counter()
+                    try:
+                        result = pipeline.extract(ctx)
+                    except Exception:
+                        variant_results[config_name].append(0.0)
+                        variant_times[config_name].append(0.0)
+                        detail[config_name] = 0.0
+                        continue
+                    elapsed = time.perf_counter() - t0
+                    variant_times[config_name].append(elapsed)
+
+                    # Compare against GT
+                    grid = result.post_processed or result.winning_grid
+                    if grid is not None:
+                        try:
+                            cmp = compare_extraction(
+                                str(gt_db_path),
+                                table_id,
+                                list(grid.headers),
+                                [list(row) for row in grid.rows],
+                            )
+                            accuracy = cmp.fuzzy_accuracy_pct
+                        except KeyError:
+                            accuracy = -1.0
+                    else:
+                        accuracy = 0.0
+
+                    variant_results[config_name].append(accuracy)
+                    detail[config_name] = accuracy
+
+                table_details.append(detail)
+                tables_processed += 1
+        finally:
+            doc.close()
+
+    # Build markdown report
+    lines: list[str] = []
+
+    # Check if we have any data
+    has_data = any(len(v) > 0 for v in variant_results.values())
+    if not has_data:
+        return []
+
+    lines.append("## Variant Comparison")
+    lines.append("")
+    lines.append("Accuracy and speed across named pipeline configs on corpus tables.")
+    lines.append("")
+
+    # Summary table
+    lines.append("### Summary")
+    lines.append("")
+    lines.append("| Config | Tables | Avg Accuracy | Avg Time (s) |")
+    lines.append("|--------|--------|-------------|-------------|")
+    for name in named_configs:
+        accs = [a for a in variant_results[name] if a >= 0]
+        times = variant_times[name]
+        n = len(accs)
+        avg_acc = sum(accs) / n if n > 0 else 0.0
+        avg_time = sum(times) / len(times) if times else 0.0
+        lines.append(f"| {name} | {n} | {avg_acc:.1f}% | {avg_time:.3f} |")
+    lines.append("")
+
+    # Per-table detail (first 20 to keep report manageable)
+    lines.append("### Per-Table Detail")
+    lines.append("")
+    header_parts = ["| Table ID | Paper"]
+    for name in named_configs:
+        header_parts.append(f" {name}")
+    header_parts.append(" |")
+    lines.append(" |".join(header_parts))
+
+    sep_parts = ["|----------|------"]
+    for _ in named_configs:
+        sep_parts.append("-----")
+    sep_parts.append("|")
+    lines.append("|".join(sep_parts))
+
+    for detail in table_details[:20]:
+        row_parts = [f"| {str(detail.get('table_id', ''))[:30]} | {detail.get('paper', '')}"]
+        for name in named_configs:
+            acc = detail.get(name, -1)
+            if isinstance(acc, (int, float)) and acc >= 0:
+                row_parts.append(f" {acc:.1f}%")
+            else:
+                row_parts.append(" n/a")
+        row_parts.append(" |")
+        lines.append(" |".join(row_parts))
+
     lines.append("")
     return lines
 
@@ -1708,6 +2253,23 @@ if __name__ == "__main__":
             with open(report_path, "a", encoding="utf-8") as fh:
                 fh.write("\n" + gt_section + "\n")
             print(gt_section)
+
+        # Append pipeline depth report to the report file if method data exists
+        depth_md_lines = _build_pipeline_depth_report(db_path)
+        if depth_md_lines:
+            depth_section = "\n".join(depth_md_lines)
+            with open(report_path, "a", encoding="utf-8") as fh:
+                fh.write("\n" + depth_section + "\n")
+            print(depth_section)
+
+        # Append variant comparison to the report
+        print("\n  Running variant comparison (DEFAULT, FAST, RULED, MINIMAL)...")
+        variant_md_lines = _build_variant_comparison(extractions)
+        if variant_md_lines:
+            variant_section = "\n".join(variant_md_lines)
+            with open(report_path, "a", encoding="utf-8") as fh:
+                fh.write("\n" + variant_section + "\n")
+            print(variant_section)
 
     # Exit with appropriate code
     if report.major_failures > 0:
