@@ -29,6 +29,14 @@ def _create_test_config(tmp_path: Path) -> Config:
         stats_sample_limit=10000,
         ocr_language="eng",
         openalex_email=None,
+        vision_enabled=False,
+        vision_model="claude-haiku-4-5-20251001",
+        vision_num_agents=3,
+        vision_dpi=300,
+        vision_consensus_threshold=0.6,
+        vision_max_render_attempts=3,
+        vision_padding_px=20,
+        anthropic_api_key=None,
     )
 
 

@@ -507,23 +507,5 @@ class TestOutputWriter:
 
 
 # ===========================================================================
-# Task 4.1.3 Tests — TestDesignDoc
+# Task 4.1.3 Tests — TestDesignDoc (removed: spec/agent_qa_design.md deleted)
 # ===========================================================================
-
-
-class TestDesignDoc:
-    """Tests for the production QA pathway design document."""
-
-    _DOC_PATH = Path(__file__).resolve().parents[2] / "spec" / "agent_qa_design.md"
-
-    def test_design_doc_exists(self) -> None:
-        assert self._DOC_PATH.exists(), f"Design doc not found: {self._DOC_PATH}"
-        content = self._DOC_PATH.read_text(encoding="utf-8")
-        assert len(content) > 500, f"Design doc too short: {len(content)} chars"
-
-    def test_design_doc_sections(self) -> None:
-        content = self._DOC_PATH.read_text(encoding="utf-8").lower()
-        assert "cost" in content, "Design doc missing 'Cost' section"
-        assert "latency" in content, "Design doc missing 'Latency' section"
-        assert "failure" in content, "Design doc missing 'Failure' section"
-        assert "confidence" in content, "Design doc missing 'Confidence' section"

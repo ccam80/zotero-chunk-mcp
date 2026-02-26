@@ -32,6 +32,15 @@ class Config:
     ocr_language: str
     # OpenAlex settings
     openalex_email: str | None  # Optional email for polite pool (10 req/sec vs 1 req/sec)
+    # Vision extraction settings
+    vision_enabled: bool
+    vision_model: str
+    vision_num_agents: int
+    vision_dpi: int
+    vision_consensus_threshold: float
+    vision_max_render_attempts: int
+    vision_padding_px: int
+    anthropic_api_key: str | None
 
     @classmethod
     def load(cls, path: Path | str | None = None) -> "Config":
@@ -71,6 +80,15 @@ class Config:
             ocr_language=data.get("ocr_language", "eng"),
             # OpenAlex settings
             openalex_email=data.get("openalex_email") or os.environ.get("OPENALEX_EMAIL"),
+            # Vision extraction settings
+            vision_enabled=data.get("vision_enabled", True),
+            vision_model=data.get("vision_model", "claude-haiku-4-5-20251001"),
+            vision_num_agents=data.get("vision_num_agents", 3),
+            vision_dpi=data.get("vision_dpi", 300),
+            vision_consensus_threshold=data.get("vision_consensus_threshold", 0.6),
+            vision_max_render_attempts=data.get("vision_max_render_attempts", 3),
+            vision_padding_px=data.get("vision_padding_px", 20),
+            anthropic_api_key=data.get("anthropic_api_key") or os.environ.get("ANTHROPIC_API_KEY"),
         )
 
     def validate(self) -> list[str]:

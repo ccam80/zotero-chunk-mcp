@@ -17,7 +17,7 @@ from run_qa import aggregate_results, parse_agent_response, write_outputs
 
 WORKSPACE = PROJECT_ROOT / "tests" / "agent_qa" / "workspace"
 MANIFEST_PATH = WORKSPACE / "manifest.json"
-MODEL = "claude-haiku-4-20250414"
+MODEL = "claude-haiku-4-5-20251001"
 BATCH_SIZE = 5
 
 
