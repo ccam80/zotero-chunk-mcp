@@ -18,8 +18,10 @@ Every failure is logged. The final report is brutally honest.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import os
 import re
 import shutil
 import sqlite3
@@ -48,7 +50,7 @@ from zotero_chunk_rag.feature_extraction.pipeline import (
     RULED_CONFIG,
     Pipeline,
 )
-from zotero_chunk_rag.feature_extraction.scoring import rank_and_select
+from zotero_chunk_rag.feature_extraction.pipeline import _compute_fill_rate
 
 # ---------------------------------------------------------------------------
 # Corpus selection: 10 papers chosen for maximum diversity
@@ -445,6 +447,13 @@ def run_stress_test():
             stats_sample_limit=10000,
             ocr_language="eng",
             openalex_email=None,
+            vision_enabled=False,
+            vision_model="claude-haiku-4-5-20251001",
+            vision_num_agents=3,
+            vision_dpi=300,
+            vision_consensus_threshold=0.6,
+            vision_padding_px=20,
+            anthropic_api_key=None,
         )
 
         embedder = create_embedder(test_config)
@@ -1730,10 +1739,23 @@ def _test_pipeline_methods(
         Open SQLite connection to the debug DB.
     """
     from zotero_chunk_rag.feature_extraction.models import TableContext
-    from zotero_chunk_rag.feature_extraction.scoring import fill_rate as _fill_rate
+    _fill_rate = _compute_fill_rate
 
     pipeline = Pipeline(DEFAULT_CONFIG)
     gt_db_exists = Path(GROUND_TRUTH_DB_PATH).exists()
+
+    # --- Vision client setup (optional) ---
+    _vision_client = None
+    try:
+        import anthropic as _anthropic_mod
+        _api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if _api_key:
+            _vision_client = _anthropic_mod.AsyncAnthropic(api_key=_api_key)
+    except ImportError:
+        pass
+
+    # Specs collected during serial loop for parallel vision phase
+    vision_specs: list[tuple[str, Path, int, tuple, str, str]] = []
 
     # Track which structure and cell methods produced results
     structure_method_table_counts: dict[str, int] = {}
@@ -1844,8 +1866,125 @@ def _test_pipeline_methods(
                     final_score=final_score,
                 )
 
+                # Collect spec for parallel vision phase
+                if _vision_client is not None:
+                    raw_text = page.get_text("text", clip=pymupdf.Rect(*tab.bbox))
+                    vision_specs.append((
+                        table_id,
+                        Path(item.pdf_path),
+                        tab.page_num,
+                        tab.bbox,
+                        raw_text,
+                        tab.caption or "",
+                    ))
+
         finally:
             doc.close()
+
+    # --- Phase 2: Parallel vision extraction ---
+    if _vision_client is not None and vision_specs:
+        from zotero_chunk_rag.feature_extraction.vision_extract import (
+            extract_table_vision,
+            vision_result_to_cell_grid,
+        )
+
+        n_specs = len(vision_specs)
+        print(
+            f"\n  [Vision] Running {n_specs} tables in parallel "
+            f"(max 50 concurrent)...",
+            end="",
+            flush=True,
+        )
+
+        async def _run_all_vision(
+            specs: list[tuple[str, Path, int, tuple, str, str]],
+            client,
+            semaphore: asyncio.Semaphore,
+        ):
+            async def _run_one(spec):
+                _, pdf_path, page_num, bbox, raw_text, caption = spec
+                async with semaphore:
+                    return await extract_table_vision(
+                        pdf_path=pdf_path,
+                        page_num=page_num,
+                        bbox=bbox,
+                        raw_text=raw_text,
+                        caption=caption,
+                        client=client,
+                        model="claude-haiku-4-5-20251001",
+                        dpi=300,
+                        padding_px=20,
+                    )
+
+            return await asyncio.gather(
+                *(_run_one(s) for s in specs),
+                return_exceptions=True,
+            )
+
+        sem = asyncio.Semaphore(50)
+        t_vis_start = time.perf_counter()
+        vision_results = asyncio.run(
+            _run_all_vision(vision_specs, _vision_client, sem)
+        )
+        vis_elapsed = time.perf_counter() - t_vis_start
+
+        # Phase 3: Write vision results to DB
+        n_ok = 0
+        n_err = 0
+        for spec, result in zip(vision_specs, vision_results):
+            table_id = spec[0]
+            if isinstance(result, Exception):
+                n_err += 1
+                print("v(ERR)", end="", flush=True)
+                continue
+
+            grid = vision_result_to_cell_grid(result)
+            if grid is None:
+                n_err += 1
+                print("v(nil)", end="", flush=True)
+                continue
+
+            n_ok += 1
+            gt_accuracy: float | None = None
+            if gt_db_exists:
+                try:
+                    cmp = compare_extraction(
+                        GROUND_TRUTH_DB_PATH,
+                        table_id,
+                        list(grid.headers),
+                        [list(row) for row in grid.rows],
+                    )
+                    gt_accuracy = cmp.fuzzy_accuracy_pct
+                except KeyError:
+                    gt_accuracy = None
+
+            quality = gt_accuracy if gt_accuracy is not None else (
+                sum(1 for row in grid.rows for c in row if c.strip())
+                / max(len(grid.rows) * len(grid.headers), 1)
+                * 100.0
+            )
+
+            write_method_result(
+                con,
+                table_id=table_id,
+                method_name=f"{grid.structure_method}+{grid.method}",
+                boundaries_json=json.dumps({
+                    "structure_method": grid.structure_method,
+                    "cell_method": grid.method,
+                    "col_boundaries": list(grid.col_boundaries),
+                    "row_boundaries": list(grid.row_boundaries),
+                }),
+                cell_grid_json=json.dumps(grid.to_dict()),
+                quality_score=quality,
+                execution_time_ms=None,
+            )
+            print("v", end="", flush=True)
+
+        print(
+            f"\n  [Vision] Done: {n_ok} succeeded, {n_err} failed, "
+            f"{vis_elapsed:.1f}s",
+            flush=True,
+        )
 
     con.commit()
 

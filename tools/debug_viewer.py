@@ -18,6 +18,7 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QPixmap, QFont, QColor, QIcon, QPainter, QPen, QImage
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QApplication,
     QGridLayout,
     QGroupBox,
@@ -135,6 +136,11 @@ class DebugViewer(QMainWindow):
         self._has_pdf_path_col = _table_has_column(
             self.conn, "papers", "pdf_path"
         ) if _table_exists(self.conn, "papers") else False
+        self._has_vision_results = _table_exists(self.conn, "vision_agent_results")
+        self._has_vision_role_col = (
+            _table_has_column(self.conn, "vision_agent_results", "agent_role")
+            if self._has_vision_results else False
+        )
 
         # ── load manifest (for PDF paths / bboxes) ────────────────────────
         self._manifest: dict[str, dict] = {}
@@ -282,6 +288,64 @@ class DebugViewer(QMainWindow):
 
         content_layout.addWidget(self.comparison_widget)
 
+        # ── vision comparison widget (vertical 3-panel) ────────────────
+        self.vision_widget = QWidget()
+        vision_layout = QVBoxLayout(self.vision_widget)
+        vision_layout.setContentsMargins(0, 0, 0, 0)
+        vision_layout.setSpacing(4)
+
+        vision_splitter = QSplitter(Qt.Orientation.Vertical)
+
+        # Top: PDF region
+        self.vis_pdf_group = QGroupBox("PDF Region")
+        vis_pdf_layout = QVBoxLayout(self.vis_pdf_group)
+        self.vis_pdf_scroll = QScrollArea()
+        self.vis_pdf_scroll.setWidgetResizable(True)
+        self.vis_pdf_label = QLabel("(no PDF available)")
+        self.vis_pdf_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.vis_pdf_label.setWordWrap(True)
+        self.vis_pdf_scroll.setWidget(self.vis_pdf_label)
+        vis_pdf_layout.addWidget(self.vis_pdf_scroll)
+        vision_splitter.addWidget(self.vis_pdf_group)
+
+        # Middle: Extracted table with cell marks
+        self.vis_ext_group = QGroupBox("Extracted Table")
+        vis_ext_layout = QVBoxLayout(self.vis_ext_group)
+        self.vis_ext_table = QTableWidget()
+        self.vis_ext_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.vis_ext_table.setAlternatingRowColors(True)
+        self.vis_ext_table.setWordWrap(True)
+        self.vis_ext_table.setVerticalScrollMode(
+            QAbstractItemView.ScrollMode.ScrollPerPixel
+        )
+        self.vis_ext_table.setHorizontalScrollMode(
+            QAbstractItemView.ScrollMode.ScrollPerPixel
+        )
+        vis_ext_layout.addWidget(self.vis_ext_table)
+        vision_splitter.addWidget(self.vis_ext_group)
+
+        # Bottom: Ground truth table
+        self.vis_gt_group = QGroupBox("Ground Truth")
+        vis_gt_layout = QVBoxLayout(self.vis_gt_group)
+        self.vis_gt_table = QTableWidget()
+        self.vis_gt_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.vis_gt_table.setAlternatingRowColors(True)
+        self.vis_gt_table.setWordWrap(True)
+        self.vis_gt_table.setVerticalScrollMode(
+            QAbstractItemView.ScrollMode.ScrollPerPixel
+        )
+        self.vis_gt_table.setHorizontalScrollMode(
+            QAbstractItemView.ScrollMode.ScrollPerPixel
+        )
+        vis_gt_layout.addWidget(self.vis_gt_table)
+        vision_splitter.addWidget(self.vis_gt_group)
+
+        # Default proportions: PDF 30%, extracted 40%, GT 30%
+        vision_splitter.setSizes([250, 350, 250])
+
+        vision_layout.addWidget(vision_splitter)
+        content_layout.addWidget(self.vision_widget)
+
         vsplitter.addWidget(self.content_stack)
 
         # initial visibility
@@ -397,6 +461,9 @@ class DebugViewer(QMainWindow):
 
                     # ── Method children ───────────────────────────────
                     self._add_method_children(ti, key, tbl)
+
+                    # ── Vision agent children ─────────────────────────
+                    self._add_vision_children(ti, key, tbl)
 
             # ── Figures ──────────────────────────────────────────────
             figures = self.conn.execute(
@@ -543,6 +610,78 @@ class DebugViewer(QMainWindow):
                 mi.setForeground(1, QColor("#4caf50"))
             table_item.addChild(mi)
 
+    # ── vision agent child nodes ──────────────────────────────────────────
+
+    _VISION_ROLE_LABELS = {
+        "transcriber": "Transcriber",
+        "y_verifier": "Y-Verifier",
+        "x_verifier": "X-Verifier",
+        "synthesizer": "Synthesizer",
+    }
+
+    def _add_vision_children(
+        self, table_item: QTreeWidgetItem, item_key: str, tbl: sqlite3.Row
+    ) -> None:
+        """Add per-agent vision child nodes under a table tree item."""
+        if not self._has_vision_results:
+            return
+
+        # Resolve table_id
+        table_id = None
+        if self._has_table_id_col:
+            table_id = tbl["table_id"]
+        if not table_id:
+            from zotero_chunk_rag.feature_extraction.ground_truth import make_table_id
+            table_id = make_table_id(
+                item_key, tbl["caption"], tbl["page_num"], tbl["table_index"]
+            )
+
+        agents = self.conn.execute(
+            "SELECT id, agent_idx, agent_role, cell_accuracy_pct, num_corrections "
+            "FROM vision_agent_results WHERE table_id=? ORDER BY agent_idx",
+            (table_id,),
+        ).fetchall()
+        if not agents:
+            return
+
+        vision_parent = QTreeWidgetItem(["Vision Agents", f"{len(agents)} stages"])
+        vision_parent.setData(
+            0, Qt.ItemDataRole.UserRole, ("vision_parent", item_key, table_id)
+        )
+        vision_parent.setForeground(0, QColor("#7e57c2"))  # purple
+        table_item.addChild(vision_parent)
+
+        for ag in agents:
+            role = ag["agent_role"] or f"agent_{ag['agent_idx']}"
+            label = self._VISION_ROLE_LABELS.get(role, role)
+            acc = ag["cell_accuracy_pct"]
+            n_corr = ag["num_corrections"] or 0
+
+            acc_str = f"{acc:.1f}%" if acc is not None else "no GT"
+            corr_str = f"  {n_corr} corr" if n_corr > 0 else ""
+
+            vi = QTreeWidgetItem([f"{label}", f"[{acc_str}]{corr_str}"])
+            vi.setData(
+                0, Qt.ItemDataRole.UserRole,
+                ("vision_agent", item_key, tbl["id"], table_id, ag["id"]),
+            )
+
+            # Color-code accuracy
+            if acc is not None:
+                if acc >= 95:
+                    vi.setForeground(1, QColor("#4caf50"))  # green
+                elif acc >= 80:
+                    vi.setForeground(1, QColor("#ffc107"))  # amber
+                else:
+                    vi.setForeground(1, QColor("#f44336"))  # red
+
+            if n_corr > 0:
+                bold_font = vi.font(0)
+                bold_font.setBold(True)
+                vi.setFont(0, bold_font)
+
+            vision_parent.addChild(vi)
+
     # ── grade filter ─────────────────────────────────────────────────────
 
     def _apply_grade_filter(self):
@@ -559,11 +698,12 @@ class DebugViewer(QMainWindow):
     # ── content display helpers ──────────────────────────────────────────
 
     def _show_content(self, mode: str):
-        """Show one of: 'text', 'image', 'table', 'comparison'."""
+        """Show one of: 'text', 'image', 'table', 'comparison', 'vision'."""
         self.text_display.setVisible(mode == "text")
         self.image_scroll.setVisible(mode == "image")
         self.rendered_table.setVisible(mode == "table")
         self.comparison_widget.setVisible(mode == "comparison")
+        self.vision_widget.setVisible(mode == "vision")
 
     def _set_meta(self, rows: list[tuple[str, str]]):
         self.meta_table.setRowCount(len(rows))
@@ -610,6 +750,10 @@ class DebugViewer(QMainWindow):
             self._show_test(data[2])
         elif kind == "method":
             self._show_method_comparison(data[1], data[2], data[3], data[4])
+        elif kind == "vision_agent":
+            self._show_vision_agent(data[1], data[2], data[3], data[4])
+        elif kind == "vision_parent":
+            self._show_vision_summary(data[1], data[2])
         elif kind == "chunks_parent":
             self._show_chunks_summary(data[1])
         elif kind == "tables_parent":
@@ -1240,6 +1384,255 @@ class DebugViewer(QMainWindow):
             if quality_score is not None
             else f"Method: {method_name}  {n_ext_rows}x{n_ext_cols}"
         )
+
+    # ── display: vision agent (2x2 view) ────────────────────────────────
+
+    def _show_vision_agent(
+        self,
+        item_key: str,
+        table_db_id: int,
+        table_id: str,
+        vision_row_id: int,
+    ) -> None:
+        """Show vertical 3-panel view: PDF, extracted table with marks, GT."""
+        vr = self.conn.execute(
+            "SELECT * FROM vision_agent_results WHERE id=?", (vision_row_id,)
+        ).fetchone()
+        if not vr:
+            return
+
+        role = vr["agent_role"] if self._has_vision_role_col else f"agent_{vr['agent_idx']}"
+        label = self._VISION_ROLE_LABELS.get(role, role)
+
+        # Parse headers/rows
+        ext_headers: list[str] = []
+        ext_rows: list[list[str]] = []
+        if vr["headers_json"]:
+            try:
+                ext_headers = json.loads(vr["headers_json"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if vr["rows_json"]:
+            try:
+                ext_rows = json.loads(vr["rows_json"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Load ground truth
+        gt_data = self._load_ground_truth(table_id)
+        gt_headers: list[str] = gt_data[0] if gt_data else []
+        gt_rows: list[list[str]] = gt_data[1] if gt_data else []
+
+        # Per-cell GT match/mismatch marks
+        cell_marks: dict[tuple[int, int], bool] = {}
+        gt_diff_info = {}
+        if gt_data and ext_headers and ext_rows:
+            try:
+                from zotero_chunk_rag.feature_extraction.ground_truth import (
+                    compare_extraction,
+                    GROUND_TRUTH_DB_PATH,
+                    _normalize_cell,
+                )
+                cmp = compare_extraction(
+                    GROUND_TRUTH_DB_PATH, table_id, ext_headers, ext_rows,
+                )
+                gt_diff_info = {
+                    "cell_accuracy": cmp.cell_accuracy_pct,
+                    "fuzzy_accuracy": cmp.fuzzy_accuracy_pct,
+                    "fuzzy_precision": cmp.fuzzy_precision_pct,
+                    "fuzzy_recall": cmp.fuzzy_recall_pct,
+                    "splits": len(cmp.column_splits) + len(cmp.row_splits),
+                    "merges": len(cmp.column_merges) + len(cmp.row_merges),
+                    "cell_diffs": len(cmp.cell_diffs),
+                    "coverage": cmp.structural_coverage_pct,
+                }
+                col_map = {g: e for g, e in cmp.matched_columns}
+                used_gt = {g for g, _ in cmp.matched_columns}
+                used_ext = {e for _, e in cmp.matched_columns}
+                for g_ci in cmp.missing_columns:
+                    if g_ci not in used_gt and g_ci not in used_ext:
+                        if g_ci < len(ext_headers) and g_ci not in used_ext:
+                            col_map[g_ci] = g_ci
+                            used_gt.add(g_ci)
+                            used_ext.add(g_ci)
+
+                row_map: list[tuple[int, int]] = list(cmp.matched_rows)
+                used_gt_r = {g for g, _ in cmp.matched_rows}
+                used_ext_r = {e for _, e in cmp.matched_rows}
+                for g_ri in cmp.missing_rows:
+                    if g_ri not in used_gt_r and g_ri not in used_ext_r:
+                        if g_ri < len(ext_rows) and g_ri not in used_ext_r:
+                            row_map.append((g_ri, g_ri))
+                            used_gt_r.add(g_ri)
+                            used_ext_r.add(g_ri)
+
+                for g_ri, e_ri in row_map:
+                    for g_ci, e_ci in col_map.items():
+                        gt_val = _normalize_cell(
+                            gt_rows[g_ri][g_ci]
+                        ) if g_ci < len(gt_rows[g_ri]) else ""
+                        ext_val = _normalize_cell(
+                            ext_rows[e_ri][e_ci]
+                        ) if e_ci < len(ext_rows[e_ri]) else ""
+                        cell_marks[(e_ri, e_ci)] = (gt_val == ext_val)
+            except (KeyError, ImportError):
+                pass
+
+        # ── Top: PDF region ───────────────────────────────────────────
+        tbl_row = self.conn.execute(
+            "SELECT bbox, page_num FROM extracted_tables WHERE id=?", (table_db_id,)
+        ).fetchone()
+        bbox = json.loads(tbl_row["bbox"]) if tbl_row and tbl_row["bbox"] else None
+        pdf_info = self._resolve_pdf_info(table_id, item_key)
+
+        if pdf_info and bbox:
+            render_result = self._render_table_pixmap(
+                pdf_info["pdf_path"],
+                pdf_info["page_num"] or tbl_row["page_num"],
+                bbox,
+            )
+            if render_result:
+                clean_pixmap, _ = render_result
+                display_pixmap = clean_pixmap
+                if display_pixmap.width() > 900:
+                    display_pixmap = display_pixmap.scaledToWidth(
+                        900, Qt.TransformationMode.SmoothTransformation
+                    )
+                self.vis_pdf_label.setPixmap(display_pixmap)
+                self.vis_pdf_group.setTitle("PDF Region")
+            else:
+                self.vis_pdf_label.setText("(PDF render failed)")
+                self.vis_pdf_label.setPixmap(QPixmap())
+        else:
+            self.vis_pdf_label.setText("(no PDF available)")
+            self.vis_pdf_label.setPixmap(QPixmap())
+
+        # ── Middle: Extracted table with cell marks ───────────────────
+        n_corr = vr["num_corrections"] or 0
+        corr_suffix = f" — {n_corr} corrections" if n_corr else ""
+        self.vis_ext_group.setTitle(f"{label} Output{corr_suffix}")
+        _populate_table_widget(self.vis_ext_table, ext_headers, ext_rows, cell_marks)
+        self.vis_ext_table.verticalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.ResizeToContents
+        )
+
+        # ── Bottom: Ground truth table ────────────────────────────────
+        if gt_data:
+            _populate_table_widget(self.vis_gt_table, gt_headers, gt_rows)
+            self.vis_gt_group.setTitle(
+                f"Ground Truth ({len(gt_rows)}x{len(gt_headers)})"
+            )
+            self.vis_gt_table.verticalHeader().setSectionResizeMode(
+                QHeaderView.ResizeMode.ResizeToContents
+            )
+        else:
+            self.vis_gt_table.clear()
+            self.vis_gt_table.setRowCount(0)
+            self.vis_gt_table.setColumnCount(0)
+            self.vis_gt_group.setTitle("Ground Truth (not available)")
+
+        # ── Build metadata ────────────────────────────────────────────
+        n_ext_rows = len(ext_rows)
+        n_ext_cols = len(ext_headers) if ext_headers else (
+            len(ext_rows[0]) if ext_rows else 0
+        )
+        non_empty = sum(
+            1 for row in ext_rows for cell in row if str(cell).strip()
+        )
+        total = sum(len(row) for row in ext_rows)
+        fill_rate = non_empty / total if total else 0.0
+
+        meta: list[tuple[str, str]] = [
+            ("Agent", label),
+            ("Role", role),
+            ("Grid Shape", f"{n_ext_rows} x {n_ext_cols}"),
+            ("Fill Rate", f"{fill_rate:.1%}"),
+            ("Parse Success", "Yes" if vr["parse_success"] else "No"),
+            ("Corrections", str(n_corr)),
+        ]
+
+        if vr["footnotes"]:
+            meta.append(("Footnotes", vr["footnotes"]))
+
+        # Show corrections text in metadata
+        corrections: list[str] = []
+        if vr["corrections_json"]:
+            try:
+                corrections = json.loads(vr["corrections_json"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if corrections:
+            meta.append(("", ""))
+            for i, c in enumerate(corrections, 1):
+                meta.append((f"Correction {i}", c))
+
+        if gt_diff_info:
+            meta.extend([
+                ("", ""),
+                ("GT Cell Accuracy", f"{gt_diff_info['cell_accuracy']:.1f}%"),
+                ("GT Fuzzy Accuracy", f"{gt_diff_info['fuzzy_accuracy']:.1f}%"),
+                ("GT Fuzzy Precision", f"{gt_diff_info['fuzzy_precision']:.1f}%"),
+                ("GT Fuzzy Recall", f"{gt_diff_info['fuzzy_recall']:.1f}%"),
+                ("Splits", str(gt_diff_info["splits"])),
+                ("Merges", str(gt_diff_info["merges"])),
+                ("Cell Diffs", str(gt_diff_info["cell_diffs"])),
+                ("Coverage", f"{gt_diff_info['coverage']:.1f}%"),
+            ])
+        elif gt_data:
+            meta.append(("GT Comparison", "comparison failed"))
+        else:
+            meta.append(("GT Comparison", "no ground truth"))
+
+        stored_acc = vr["cell_accuracy_pct"]
+        if stored_acc is not None:
+            meta.append(("Stored Accuracy (eval run)", f"{stored_acc:.1f}%"))
+
+        self._set_meta(meta)
+
+        self._show_content("vision")
+        acc_str = f"{stored_acc:.1f}%" if stored_acc is not None else "no GT"
+        self.status.showMessage(
+            f"Vision: {label}  {n_ext_rows}x{n_ext_cols}  "
+            f"acc={acc_str}  corrections={n_corr}"
+        )
+
+    def _show_vision_summary(self, item_key: str, table_id: str) -> None:
+        """Show accuracy summary across all vision agents for a table."""
+        agents = self.conn.execute(
+            "SELECT agent_role, cell_accuracy_pct, num_corrections, parse_success "
+            "FROM vision_agent_results WHERE table_id=? ORDER BY agent_idx",
+            (table_id,),
+        ).fetchall()
+        if not agents:
+            return
+
+        meta = [("Table ID", table_id)]
+        for ag in agents:
+            role = ag["agent_role"] or "?"
+            label = self._VISION_ROLE_LABELS.get(role, role)
+            acc = ag["cell_accuracy_pct"]
+            acc_str = f"{acc:.1f}%" if acc is not None else "no GT"
+            n_corr = ag["num_corrections"] or 0
+            corr_str = f", {n_corr} corrections" if n_corr > 0 else ""
+            meta.append((label, f"acc={acc_str}{corr_str}"))
+
+        # Accuracy progression
+        accs = [
+            ag["cell_accuracy_pct"]
+            for ag in agents
+            if ag["cell_accuracy_pct"] is not None
+        ]
+        if len(accs) >= 2:
+            delta = accs[-1] - accs[0]
+            meta.append(("", ""))
+            meta.append(("Net Accuracy Change", f"{delta:+.1f}% (transcriber -> synthesizer)"))
+
+        self._set_meta(meta)
+        self._show_content("text")
+        self.text_display.setPlainText(
+            "Click an individual agent to see its output vs ground truth."
+        )
+        self.status.showMessage(f"Vision agents for {table_id}")
 
     # ── summary views for category nodes ─────────────────────────────────
 

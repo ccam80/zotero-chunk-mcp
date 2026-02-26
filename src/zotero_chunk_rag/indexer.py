@@ -1,7 +1,14 @@
-"""Indexing pipeline orchestration."""
+"""Indexing pipeline orchestration.
+
+Two-phase extraction:
+  Phase 1 (fast, local): Pipeline extraction -> immediate ChromaDB indexing.
+  Phase 2 (vision, async): Parallel vision API calls -> update ChromaDB with
+    higher-accuracy extractions where available.
+"""
 import hashlib
 import json
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from tqdm import tqdm
@@ -12,7 +19,7 @@ from .chunker import Chunker
 from .embedder import create_embedder
 from .vector_store import VectorStore
 from .journal_ranker import JournalRanker
-from .models import ZoteroItem
+from .models import ZoteroItem, ExtractedTable
 
 logger = logging.getLogger(__name__)
 
@@ -418,3 +425,171 @@ class Indexer:
     def get_library_diagnostics(self) -> dict:
         """Delegate to ZoteroClient for library-wide diagnostics."""
         return self.zotero.get_library_diagnostics()
+
+    # ------------------------------------------------------------------
+    # Phase 2: Vision enhancement
+    # ------------------------------------------------------------------
+
+    def enhance_tables_with_vision(
+        self,
+        items: list[ZoteroItem] | None = None,
+        batch: bool = False,
+    ) -> dict:
+        """Run vision extraction on all indexed tables and update ChromaDB.
+
+        This is Phase 2 of the two-phase extraction pipeline.  Phase 1
+        (``index_all``) does fast local extraction.  Phase 2 sends table
+        images to the vision API for higher-accuracy extraction and
+        replaces the ChromaDB entries with vision results.
+
+        Parameters
+        ----------
+        items:
+            Specific items to enhance.  If None, enhances all indexed docs.
+        batch:
+            If True, use the Anthropic Batch API (cheaper, slower).
+            If False, use asyncio.gather (fast, real-time).
+
+        Returns
+        -------
+        dict with keys: total_tables, enhanced, failed, skipped, cost_usd.
+        """
+        api_key = self.config.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            logger.warning("No Anthropic API key configured; skipping vision enhancement")
+            return {"total_tables": 0, "enhanced": 0, "failed": 0, "skipped": 0, "cost_usd": 0.0}
+
+        from .feature_extraction.vision_api import VisionAPI, TableVisionSpec
+        from .feature_extraction.vision_extract import vision_result_to_cell_grid
+
+        cost_log_path = self.config.chroma_db_path.parent / "vision_api_costs.json"
+        api = VisionAPI(
+            api_key=api_key,
+            model=self.config.vision_model,
+            cost_log_path=cost_log_path,
+            cache=True,
+            dpi=self.config.vision_dpi,
+            padding_px=self.config.vision_padding_px,
+        )
+
+        # Collect table specs from items
+        if items is None:
+            items = self.zotero.get_all_items_with_pdfs()
+            items = [i for i in items if i.pdf_path and i.pdf_path.exists()]
+            indexed_ids = self.store.get_indexed_doc_ids()
+            items = [i for i in items if i.item_key in indexed_ids]
+
+        import pymupdf
+        from .feature_extraction.ground_truth import make_table_id
+
+        specs: list[TableVisionSpec] = []
+        spec_tables: list[tuple[ZoteroItem, ExtractedTable]] = []
+
+        for item in tqdm(items, desc="Collecting table specs"):
+            try:
+                extraction = extract_document(
+                    item.pdf_path, write_images=False,
+                    ocr_language=self.config.ocr_language,
+                )
+            except Exception as e:
+                logger.warning("Extraction failed for %s: %s", item.item_key, e)
+                continue
+
+            real_tables = [t for t in extraction.tables if not t.artifact_type]
+            if not real_tables:
+                continue
+
+            doc = pymupdf.open(str(item.pdf_path))
+            try:
+                for tab in real_tables:
+                    page_idx = tab.page_num - 1
+                    if page_idx < 0 or page_idx >= len(doc):
+                        continue
+                    page = doc[page_idx]
+                    raw_text = page.get_text("text", clip=pymupdf.Rect(*tab.bbox))
+                    table_id = make_table_id(
+                        item.item_key, tab.caption, tab.page_num, tab.table_index,
+                    )
+                    specs.append(TableVisionSpec(
+                        table_id=table_id,
+                        pdf_path=item.pdf_path,
+                        page_num=tab.page_num,
+                        bbox=tab.bbox,
+                        raw_text=raw_text,
+                        caption=tab.caption,
+                    ))
+                    spec_tables.append((item, tab))
+            finally:
+                doc.close()
+
+        if not specs:
+            logger.info("No tables to enhance with vision")
+            return {"total_tables": 0, "enhanced": 0, "failed": 0, "skipped": 0, "cost_usd": 0.0}
+
+        logger.info("Vision enhancement: %d tables across %d documents", len(specs), len(items))
+
+        # Run vision extraction
+        results = api.extract_tables_sync(specs, batch=batch)
+
+        # Update ChromaDB with vision results
+        enhanced = 0
+        failed = 0
+        skipped = 0
+
+        for (spec, vision_result), (item, orig_table) in zip(results, spec_tables):
+            if vision_result.error or vision_result.consensus is None:
+                failed += 1
+                continue
+
+            grid = vision_result_to_cell_grid(vision_result)
+            if grid is None:
+                failed += 1
+                continue
+
+            # Build updated ExtractedTable with vision data
+            vision_table = ExtractedTable(
+                page_num=orig_table.page_num,
+                table_index=orig_table.table_index,
+                bbox=orig_table.bbox,
+                headers=list(grid.headers),
+                rows=[list(row) for row in grid.rows],
+                caption=orig_table.caption,
+                caption_position=orig_table.caption_position,
+                footnotes=vision_result.consensus.footnotes,
+                reference_context=orig_table.reference_context,
+                artifact_type=None,
+                extraction_strategy="vision_consensus",
+            )
+
+            # Update in ChromaDB (same ID format as add_tables)
+            chunk_id = f"{item.item_key}_table_{orig_table.page_num:04d}_{orig_table.table_index:02d}"
+            new_text = vision_table.to_markdown()
+            try:
+                embedding = self.embedder.embed([new_text], task_type="RETRIEVAL_DOCUMENT")
+                self.store.collection.update(
+                    ids=[chunk_id],
+                    documents=[new_text],
+                    embeddings=embedding,
+                    metadatas=[{
+                        "table_num_rows": vision_table.num_rows,
+                        "table_num_cols": vision_table.num_cols,
+                    }],
+                )
+                enhanced += 1
+            except Exception as e:
+                logger.warning("ChromaDB update failed for %s: %s", chunk_id, e)
+                failed += 1
+
+        cost = api.session_cost
+        logger.info(
+            "Vision enhancement complete: %d enhanced, %d failed, %d skipped, $%.4f",
+            enhanced, failed, skipped, cost,
+        )
+
+        return {
+            "total_tables": len(specs),
+            "enhanced": enhanced,
+            "failed": failed,
+            "skipped": skipped,
+            "cost_usd": cost,
+        }

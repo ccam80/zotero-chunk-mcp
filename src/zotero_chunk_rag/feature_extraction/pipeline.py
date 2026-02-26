@@ -1,38 +1,29 @@
-"""Pipeline class — runs structure methods, combines boundaries, extracts cells, post-processes.
+"""Pipeline class -- runs structure methods, extracts cells, selects best grid, post-processes.
 
-Orchestrates the full extraction flow:
+Orchestrates the extraction flow:
 1. Activate methods (check activation rules)
 2. Run structure detection (produce BoundaryHypotheses)
-3. Combine boundaries (consensus voting)
-4. Run cell extraction (produce CellGrids)
-5. Score and select the best grid
-6. Run post-processors in order
+3. Run cell extraction per hypothesis (produce CellGrids)
+4. Select best grid by fill rate (with decimal displacement sanity check)
+5. Run post-processors in order
 
 Also defines named pipeline configurations (DEFAULT_CONFIG, FAST_CONFIG, etc.).
 """
 
 from __future__ import annotations
 
-import json
 import logging
+import re
 import time
 import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .captions import DetectedCaption, find_all_captions
-from .combination import combine_hypotheses
-from .methods.camelot_extraction import CamelotHybrid, CamelotLattice
-from .methods.cell_pdfminer import PdfMinerExtraction
 from .methods.cell_rawdict import RawdictExtraction
 from .methods.cell_words import WordAssignment
-from .methods.cliff import GlobalCliff, PerRowCliff
 from .methods.figure_detection import detect_figures, render_figure
-from .methods.header_anchor import HeaderAnchor
-from .methods.hotspot import GapSpanHotspot, SinglePointHotspot
-from .methods.pdfplumber_structure import PdfplumberLines, PdfplumberText
-from .methods.pymupdf_tables import PyMuPDFLines, PyMuPDFLinesStrict, PyMuPDFText
-from .methods.ruled_lines import RuledLineDetection
+from .methods.pymupdf_tables import PyMuPDFLines, PyMuPDFLinesStrict
 from .models import (
     BoundaryHypothesis,
     CellGrid,
@@ -48,13 +39,13 @@ from .postprocessors.footnote_strip import FootnoteStrip
 from .postprocessors.header_data_split import HeaderDataSplit
 from .postprocessors.header_detection import HeaderDetection
 from .postprocessors.inline_headers import InlineHeaderFill
-from .scoring import rank_and_select
-from .table_features import has_ruled_lines
 
 if TYPE_CHECKING:
     import pymupdf
 
 logger = logging.getLogger(__name__)
+
+_DECIMAL_DISPLACEMENT_RE = re.compile(r"^\.\d+")
 
 # ---------------------------------------------------------------------------
 # All post-processors in canonical order
@@ -75,19 +66,8 @@ _ALL_POSTPROCESSORS = (
 # ---------------------------------------------------------------------------
 
 _ALL_STRUCTURE_METHODS = (
-    SinglePointHotspot(),
-    GapSpanHotspot(),
-    GlobalCliff(),
-    PerRowCliff(),
-    HeaderAnchor(),
-    RuledLineDetection(),
     PyMuPDFLines(),
     PyMuPDFLinesStrict(),
-    PyMuPDFText(),
-    CamelotLattice(),
-    CamelotHybrid(),
-    PdfplumberLines(),
-    PdfplumberText(),
 )
 
 # ---------------------------------------------------------------------------
@@ -97,7 +77,6 @@ _ALL_STRUCTURE_METHODS = (
 _ALL_CELL_METHODS = (
     RawdictExtraction(),
     WordAssignment(),
-    PdfMinerExtraction(),
 )
 
 # ---------------------------------------------------------------------------
@@ -108,20 +87,12 @@ DEFAULT_CONFIG: PipelineConfig = PipelineConfig(
     structure_methods=_ALL_STRUCTURE_METHODS,
     cell_methods=_ALL_CELL_METHODS,
     postprocessors=_ALL_POSTPROCESSORS,
-    activation_rules={
-        "camelot_lattice": has_ruled_lines,
-        "camelot_hybrid": has_ruled_lines,
-        "global_cliff": lambda ctx: not has_ruled_lines(ctx),
-        "per_row_cliff": lambda ctx: not has_ruled_lines(ctx),
-    },
-    combination_strategy="expand_overlap",
-    selection_strategy="rank_based",
+    activation_rules={},
 )
 
 FAST_CONFIG: PipelineConfig = PipelineConfig(
     structure_methods=(
         PyMuPDFLines(),
-        GapSpanHotspot(),
     ),
     cell_methods=(
         RawdictExtraction(),
@@ -129,23 +100,13 @@ FAST_CONFIG: PipelineConfig = PipelineConfig(
     ),
     postprocessors=_ALL_POSTPROCESSORS,
     activation_rules={},
-    combination_strategy="expand_overlap",
-    selection_strategy="rank_based",
 )
 
 RULED_CONFIG: PipelineConfig = PipelineConfig(
     structure_methods=_ALL_STRUCTURE_METHODS,
     cell_methods=_ALL_CELL_METHODS,
     postprocessors=_ALL_POSTPROCESSORS,
-    activation_rules={
-        "camelot_lattice": has_ruled_lines,
-        "camelot_hybrid": has_ruled_lines,
-        "global_cliff": lambda ctx: not has_ruled_lines(ctx),
-        "per_row_cliff": lambda ctx: not has_ruled_lines(ctx),
-    },
-    combination_strategy="expand_overlap",
-    selection_strategy="rank_based",
-    confidence_multipliers={"ruled_lines": 3.0},
+    activation_rules={},
 )
 
 MINIMAL_CONFIG: PipelineConfig = PipelineConfig(
@@ -160,13 +121,70 @@ MINIMAL_CONFIG: PipelineConfig = PipelineConfig(
         CellCleaning(),
     ),
     activation_rules={},
-    combination_strategy="expand_overlap",
-    selection_strategy="rank_based",
 )
 
 
+def _compute_fill_rate(grid: CellGrid) -> float:
+    """Fraction of non-empty cells. Returns 1.0 for grids with no cells."""
+    all_cells: list[str] = list(grid.headers)
+    for row in grid.rows:
+        all_cells.extend(row)
+    if not all_cells:
+        return 1.0
+    non_empty = sum(1 for c in all_cells if c.strip())
+    return non_empty / len(all_cells)
+
+
+def _count_decimal_displacement(grid: CellGrid) -> int:
+    """Count cells matching ``^\\.\\d+`` (leading dot without zero)."""
+    count = 0
+    all_cells: list[str] = list(grid.headers)
+    for row in grid.rows:
+        all_cells.extend(row)
+    for cell in all_cells:
+        if _DECIMAL_DISPLACEMENT_RE.match(cell.strip()):
+            count += 1
+    return count
+
+
+def _select_best_grid(grids: list[CellGrid]) -> tuple[CellGrid | None, dict[str, float]]:
+    """Select the best grid by fill rate with decimal displacement sanity check.
+
+    Returns (winning_grid, scores_dict) where scores_dict maps grid key to fill rate.
+    """
+    if not grids:
+        return None, {}
+
+    if len(grids) == 1:
+        key = f"{grids[0].structure_method}:{grids[0].method}"
+        return grids[0], {key: _compute_fill_rate(grids[0])}
+
+    scores: dict[str, float] = {}
+    best_grid: CellGrid | None = None
+    best_fill: float = -1.0
+
+    for grid in grids:
+        key = f"{grid.structure_method}:{grid.method}"
+        fill = _compute_fill_rate(grid)
+        displacement = _count_decimal_displacement(grid)
+        total_cells = len(grid.headers) + sum(len(row) for row in grid.rows)
+        displacement_ratio = displacement / max(total_cells, 1)
+
+        effective_fill = fill
+        if displacement_ratio > 0.1:
+            effective_fill *= (1.0 - displacement_ratio)
+
+        scores[key] = fill
+
+        if effective_fill > best_fill:
+            best_fill = effective_fill
+            best_grid = grid
+
+    return best_grid, scores
+
+
 class Pipeline:
-    """Orchestrates multi-method table extraction for a single table region.
+    """Orchestrates table extraction for a single table region.
 
     Parameters
     ----------
@@ -175,33 +193,7 @@ class Pipeline:
         activation predicates, and strategy names.
     """
 
-    # Default location for the tuned weights JSON file.
-    # Set by tests or via Pipeline(config, weights_path=...) for custom locations.
-    _DEFAULT_WEIGHTS_PATH: Path = Path(__file__).resolve().parents[3] / "tests" / "pipeline_weights.json"
-
-    def __init__(
-        self,
-        config: PipelineConfig,
-        weights_path: Path | None = None,
-    ) -> None:
-        # Check for pipeline_weights.json and merge confidence multipliers
-        wp = weights_path if weights_path is not None else self._DEFAULT_WEIGHTS_PATH
-        if wp.exists():
-            try:
-                data = json.loads(wp.read_text(encoding="utf-8"))
-                file_multipliers = data.get("confidence_multipliers", {})
-                if file_multipliers:
-                    # Merge: file values override config defaults
-                    merged = dict(config.confidence_multipliers)
-                    merged.update(file_multipliers)
-                    config = config.with_overrides(confidence_multipliers=merged)
-                    logger.info(
-                        "Loaded %d confidence multipliers from %s",
-                        len(file_multipliers), wp,
-                    )
-            except (json.JSONDecodeError, OSError) as exc:
-                logger.warning("Failed to read weights from %s: %s", wp, exc)
-
+    def __init__(self, config: PipelineConfig) -> None:
         self._config = config
 
     def extract(self, ctx: TableContext) -> ExtractionResult:
@@ -227,7 +219,6 @@ class Pipeline:
         # Step 1 + 2: Activation & structure detection
         # ------------------------------------------------------------------
         for method in self._config.structure_methods:
-            # Activation check
             predicate = self._config.activation_rules.get(method.name)
             if predicate is not None and not predicate(ctx):
                 logger.debug("Skipping structure method %s (activation rule)", method.name)
@@ -253,7 +244,7 @@ class Pipeline:
                 result.boundary_hypotheses.append(hypothesis)
 
         # ------------------------------------------------------------------
-        # Step 3: Per-method cell extraction
+        # Step 3: Per-hypothesis cell extraction
         # ------------------------------------------------------------------
         if not result.boundary_hypotheses:
             result.consensus_boundaries = None
@@ -265,25 +256,12 @@ class Pipeline:
             )
 
         # ------------------------------------------------------------------
-        # Step 4: Consensus combination + cell extraction
-        # ------------------------------------------------------------------
-        result.consensus_boundaries = combine_hypotheses(
-            result.boundary_hypotheses, ctx,
-            confidence_multipliers=self._config.confidence_multipliers,
-        )
-
-        if result.consensus_boundaries is not None:
-            self._extract_cells_for_hypothesis(
-                result.consensus_boundaries, "consensus", ctx, result,
-            )
-
-        # ------------------------------------------------------------------
-        # Step 6: Scoring and selection
+        # Step 4: Select best grid
         # ------------------------------------------------------------------
         if not result.cell_grids:
             return result
 
-        winning_grid, scores_dict = rank_and_select(result.cell_grids, ctx)
+        winning_grid, scores_dict = _select_best_grid(result.cell_grids)
         result.grid_scores = scores_dict
         result.winning_grid = winning_grid
 
@@ -291,7 +269,7 @@ class Pipeline:
             return result
 
         # ------------------------------------------------------------------
-        # Step 7: Post-processing
+        # Step 5: Post-processing
         # ------------------------------------------------------------------
         current_grid: CellGrid = result.winning_grid
         for pp in self._config.postprocessors:
@@ -424,7 +402,6 @@ class Pipeline:
                 finder = page.find_tables(strategy=strategy)
                 for tab in finder.tables:
                     bbox = (tab.bbox[0], tab.bbox[1], tab.bbox[2], tab.bbox[3])
-                    # Deduplicate: skip if we already have a table with >50% overlap
                     is_duplicate = False
                     for existing in table_bboxes:
                         overlap = _bbox_overlap_fraction(bbox, existing)
@@ -529,15 +506,7 @@ class Pipeline:
 
 
 def _extract_footnotes_from_snapshots(result: ExtractionResult) -> str:
-    """Extract footnote text by diffing pre- and post-FootnoteStrip snapshots.
-
-    The FootnoteStrip post-processor removes footnote rows from the grid.
-    By comparing the grid before and after FootnoteStrip, we can recover
-    the removed rows and concatenate their text as the footnote string.
-
-    Returns empty string if no FootnoteStrip snapshot exists or no rows
-    were removed.
-    """
+    """Extract footnote text by diffing pre- and post-FootnoteStrip snapshots."""
     pre_grid: CellGrid | None = None
     post_grid: CellGrid | None = None
     for i, (name, grid) in enumerate(result.snapshots):
@@ -571,11 +540,7 @@ def _bbox_overlap_fraction(
     bbox_a: tuple[float, float, float, float],
     bbox_b: tuple[float, float, float, float],
 ) -> float:
-    """Compute the fraction of bbox_a that overlaps with bbox_b.
-
-    Returns a value between 0.0 and 1.0. Uses the area of intersection
-    divided by the area of bbox_a.
-    """
+    """Compute the fraction of bbox_a that overlaps with bbox_b."""
     x0 = max(bbox_a[0], bbox_b[0])
     y0 = max(bbox_a[1], bbox_b[1])
     x1 = min(bbox_a[2], bbox_b[2])

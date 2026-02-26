@@ -38,7 +38,6 @@ class Config:
     vision_num_agents: int
     vision_dpi: int
     vision_consensus_threshold: float
-    vision_max_render_attempts: int
     vision_padding_px: int
     anthropic_api_key: str | None
 
@@ -86,7 +85,6 @@ class Config:
             vision_num_agents=data.get("vision_num_agents", 3),
             vision_dpi=data.get("vision_dpi", 300),
             vision_consensus_threshold=data.get("vision_consensus_threshold", 0.6),
-            vision_max_render_attempts=data.get("vision_max_render_attempts", 3),
             vision_padding_px=data.get("vision_padding_px", 20),
             anthropic_api_key=data.get("anthropic_api_key") or os.environ.get("ANTHROPIC_API_KEY"),
         )

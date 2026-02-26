@@ -45,7 +45,6 @@ def _make_config(tmp_path, **overrides):
         vision_num_agents=3,
         vision_dpi=300,
         vision_consensus_threshold=0.6,
-        vision_max_render_attempts=3,
         vision_padding_px=20,
         anthropic_api_key=None,
     )

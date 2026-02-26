@@ -1,0 +1,315 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1772095754458,
+  "projectRoot": "C:\\local_working_projects\\zotero_citation_mcp",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Python",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "pyproject.toml"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "pytest",
+        "version": null,
+        "category": "testing"
+      }
+    ],
+    "packageManager": null,
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": "pytest",
+    "lintCommand": "ruff check",
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "examples",
+      "spec",
+      "src",
+      "tests"
+    ],
+    "gitBranches": null
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "examples": {
+      "path": "examples",
+      "purpose": "Example code",
+      "fileCount": 0,
+      "lastAccessed": 1772095754432,
+      "keyFiles": []
+    },
+    "spec": {
+      "path": "spec",
+      "purpose": "Test specifications",
+      "fileCount": 12,
+      "lastAccessed": 1772095754433,
+      "keyFiles": [
+        "agent_qa_design.md",
+        "phase-0-dead-code-removal.md",
+        "phase-1-accuracy-metric-rewrite.md",
+        "phase-2-combination-engine-rewrite.md",
+        "phase-3-llm-prompt-method.md"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 0,
+      "lastAccessed": 1772095754434,
+      "keyFiles": []
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 32,
+      "lastAccessed": 1772095754434,
+      "keyFiles": [
+        "conftest.py",
+        "create_ground_truth.py",
+        "extract_table_text.py",
+        "ground_truth.db",
+        "load_ground_truth.py"
+      ]
+    },
+    "tools": {
+      "path": "tools",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1772095754434,
+      "keyFiles": [
+        "debug_viewer.py"
+      ]
+    },
+    "_stress_test_figures": {
+      "path": "_stress_test_figures",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1772095754435,
+      "keyFiles": []
+    },
+    "__pycache__": {
+      "path": "__pycache__",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1772095754435,
+      "keyFiles": [
+        "_audit_matching.cpython-312.pyc"
+      ]
+    },
+    "tests\\fixtures": {
+      "path": "tests\\fixtures",
+      "purpose": "Test fixtures",
+      "fileCount": 0,
+      "lastAccessed": 1772095754436,
+      "keyFiles": []
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\vision_api.py",
+      "accessCount": 80,
+      "lastAccessed": 1772144227639,
+      "type": "file"
+    },
+    {
+      "path": "tools\\debug_viewer.py",
+      "accessCount": 26,
+      "lastAccessed": 1772142073783,
+      "type": "file"
+    },
+    {
+      "path": "tests\\stress_test_real_library.py",
+      "accessCount": 21,
+      "lastAccessed": 1772144245946,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\vision_extract.py",
+      "accessCount": 19,
+      "lastAccessed": 1772144227556,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\indexer.py",
+      "accessCount": 12,
+      "lastAccessed": 1772144227425,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\pipeline.py",
+      "accessCount": 6,
+      "lastAccessed": 1772096615252,
+      "type": "directory"
+    },
+    {
+      "path": "",
+      "accessCount": 4,
+      "lastAccessed": 1772100851025,
+      "type": "directory"
+    },
+    {
+      "path": "tests",
+      "accessCount": 3,
+      "lastAccessed": 1772100850440,
+      "type": "directory"
+    },
+    {
+      "path": "tests\\test_vision_stage_eval.py",
+      "accessCount": 3,
+      "lastAccessed": 1772138814924,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\ground_truth.py",
+      "accessCount": 3,
+      "lastAccessed": 1772141945655,
+      "type": "directory"
+    },
+    {
+      "path": "tests\\diag_pipeline_methods.py",
+      "accessCount": 2,
+      "lastAccessed": 1772095970703,
+      "type": "file"
+    },
+    {
+      "path": "tests\\test_feature_extraction\\test_pipeline_configs.py",
+      "accessCount": 2,
+      "lastAccessed": 1772096648336,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\vector_store.py",
+      "accessCount": 2,
+      "lastAccessed": 1772097709630,
+      "type": "directory"
+    },
+    {
+      "path": "_test_caching.py",
+      "accessCount": 2,
+      "lastAccessed": 1772099336035,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\batch_client.py",
+      "accessCount": 2,
+      "lastAccessed": 1772100850379,
+      "type": "file"
+    },
+    {
+      "path": "tests\\test_feature_extraction\\test_vision_integration.py",
+      "accessCount": 2,
+      "lastAccessed": 1772100879110,
+      "type": "file"
+    },
+    {
+      "path": "tests\\test_vision_indexer_integration.py",
+      "accessCount": 2,
+      "lastAccessed": 1772102497527,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\config.py",
+      "accessCount": 2,
+      "lastAccessed": 1772144204110,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\models.py",
+      "accessCount": 1,
+      "lastAccessed": 1772095836039,
+      "type": "directory"
+    },
+    {
+      "path": "src",
+      "accessCount": 1,
+      "lastAccessed": 1772096625580,
+      "type": "directory"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\models.py",
+      "accessCount": 1,
+      "lastAccessed": 1772097915759,
+      "type": "directory"
+    },
+    {
+      "path": "_test_vision_api_costs_2.json",
+      "accessCount": 1,
+      "lastAccessed": 1772100855955,
+      "type": "file"
+    },
+    {
+      "path": "spec\\phase-7-vision-parallelism-and-batch.md",
+      "accessCount": 1,
+      "lastAccessed": 1772101175725,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag",
+      "accessCount": 1,
+      "lastAccessed": 1772101607622,
+      "type": "directory"
+    },
+    {
+      "path": "_vision_integration_costs.json",
+      "accessCount": 1,
+      "lastAccessed": 1772102413322,
+      "type": "file"
+    },
+    {
+      "path": "tests\\test_vision_batch_integration.py",
+      "accessCount": 1,
+      "lastAccessed": 1772102795296,
+      "type": "file"
+    },
+    {
+      "path": "_baseline_corrections.json",
+      "accessCount": 1,
+      "lastAccessed": 1772138815067,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\vision_pipeline.py",
+      "accessCount": 1,
+      "lastAccessed": 1772144227235,
+      "type": "file"
+    },
+    {
+      "path": "tests\\conftest.py",
+      "accessCount": 1,
+      "lastAccessed": 1772144245462,
+      "type": "file"
+    },
+    {
+      "path": "tests\\test_extraction_integration.py",
+      "accessCount": 1,
+      "lastAccessed": 1772144245940,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}test_local_embeddings.py",
+      "accessCount": 1,
+      "lastAccessed": 1772144245945,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

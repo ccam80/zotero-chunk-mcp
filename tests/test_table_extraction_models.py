@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, PropertyMock
 
 import pytest
@@ -407,38 +408,3 @@ class TestTableContext:
         assert ctx.caption.number == "2"
 
 
-# ---------------------------------------------------------------------------
-# TestPipelineConfig
-# ---------------------------------------------------------------------------
-
-
-class TestPipelineConfig:
-    def test_with_overrides(self) -> None:
-        # Create mock methods with name properties
-        sm = MagicMock()
-        sm.name = "struct1"
-        cm = MagicMock()
-        cm.name = "cell1"
-        pp = MagicMock()
-        pp.name = "post1"
-
-        original = PipelineConfig(
-            structure_methods=(sm,),
-            cell_methods=(cm,),
-            postprocessors=(pp,),
-            activation_rules={},
-            combination_strategy="expand_overlap",
-            selection_strategy="rank_based",
-        )
-
-        overridden = original.with_overrides(selection_strategy="different")
-
-        # New config has the changed field
-        assert overridden.selection_strategy == "different"
-        # New config preserves unchanged fields
-        assert overridden.combination_strategy == "expand_overlap"
-        assert overridden.structure_methods == (sm,)
-        # Original is unchanged (frozen, but verify explicitly)
-        assert original.selection_strategy == "rank_based"
-        # Different instances
-        assert original is not overridden

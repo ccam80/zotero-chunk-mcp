@@ -30,16 +30,17 @@ class TestConfigs:
     """Verify named pipeline configurations have the correct contents."""
 
     def test_default_config_complete(self):
-        assert len(DEFAULT_CONFIG.structure_methods) == 13
-        assert len(DEFAULT_CONFIG.cell_methods) == 3
+        assert len(DEFAULT_CONFIG.structure_methods) == 2
+        assert len(DEFAULT_CONFIG.cell_methods) == 2
         assert len(DEFAULT_CONFIG.postprocessors) == 7
 
     def test_fast_config_subset(self):
-        assert len(FAST_CONFIG.structure_methods) == 2
+        assert len(FAST_CONFIG.structure_methods) == 1
         assert len(FAST_CONFIG.cell_methods) == 2
 
-    def test_ruled_config_weights(self):
-        assert RULED_CONFIG.confidence_multipliers["ruled_lines"] == 3.0
+    def test_ruled_config_methods(self):
+        assert len(RULED_CONFIG.structure_methods) == 2
+        assert len(RULED_CONFIG.cell_methods) == 2
 
     def test_minimal_config_baseline(self):
         assert len(MINIMAL_CONFIG.structure_methods) == 1
@@ -127,7 +128,7 @@ class TestMultiMethodExtraction:
     """Tests for Pipeline.extract() producing grids from multiple structure methods."""
 
     def test_extract_produces_multi_method_grids(self):
-        """Two structure methods x two cell methods + consensus = 6 grids."""
+        """Two structure methods x two cell methods = 4 grids."""
         bp_col = BoundaryPoint(min_pos=100.0, max_pos=100.0, confidence=0.9, provenance="test")
         bp_row = BoundaryPoint(min_pos=200.0, max_pos=200.0, confidence=0.9, provenance="test")
 
@@ -141,24 +142,19 @@ class TestMultiMethodExtraction:
             cell_methods=(cell_x, cell_y),
             postprocessors=(),
             activation_rules={},
-            combination_strategy="expand_overlap",
-            selection_strategy="rank_based",
         )
 
         pipeline = Pipeline(config)
         ctx = _make_mock_ctx()
         result = pipeline.extract(ctx)
 
-        # 2 struct × 2 cell + 1 consensus × 2 cell = 6 grids
-        assert len(result.cell_grids) == 6
+        # 2 struct x 2 cell = 4 grids
+        assert len(result.cell_grids) == 4
 
-        # Verify structure_method provenance
         struct_methods = {g.structure_method for g in result.cell_grids}
         assert "struct_a" in struct_methods
         assert "struct_b" in struct_methods
-        assert "consensus" in struct_methods
 
-        # Verify cell methods per structure method
         struct_a_cells = {g.method for g in result.cell_grids if g.structure_method == "struct_a"}
         assert struct_a_cells == {"cell_x", "cell_y"}
 
@@ -178,8 +174,6 @@ class TestMultiMethodExtraction:
             cell_methods=(_FakeCellMethod("cell_x"),),
             postprocessors=(),
             activation_rules={},
-            combination_strategy="expand_overlap",
-            selection_strategy="rank_based",
         )
 
         pipeline = Pipeline(config)
@@ -209,15 +203,12 @@ class TestMultiMethodExtraction:
             cell_methods=(_FakeCellMethod("cell_x"),),
             postprocessors=(),
             activation_rules={},
-            combination_strategy="expand_overlap",
-            selection_strategy="rank_based",
         )
 
         pipeline = Pipeline(config)
         ctx = _make_mock_ctx()
         result = pipeline.extract(ctx)
 
-        # good_method(1 grid) + consensus(1 grid) = 2
         assert len(result.cell_grids) >= 1
         assert any(g.structure_method == "good_method" for g in result.cell_grids)
         assert len(result.method_errors) == 1

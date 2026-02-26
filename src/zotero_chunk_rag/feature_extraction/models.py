@@ -1,4 +1,4 @@
-"""Core data models: BoundaryPoint, BoundaryHypothesis, CellGrid, TableContext, ExtractionResult, PipelineConfig, PageFeatures, CombinationTrace."""
+"""Core data models: BoundaryPoint, BoundaryHypothesis, CellGrid, TableContext, ExtractionResult, PipelineConfig, PageFeatures."""
 
 from __future__ import annotations
 
@@ -63,52 +63,6 @@ class BoundaryHypothesis:
             "metadata": self.metadata,
         }
 
-
-@dataclass
-class PointExpansion:
-    """Record of a single boundary point's expansion during combination."""
-
-    original: BoundaryPoint
-    expanded_min: float
-    expanded_max: float
-    was_expanded: bool
-
-
-@dataclass
-class ClusterRecord:
-    """Record of a merged cluster of boundary points."""
-
-    points: list[BoundaryPoint]
-    total_confidence: float
-    distinct_methods: int
-    weighted_position: float
-    accepted: bool
-    acceptance_threshold: float
-    method_names: list[str] = field(default_factory=list)
-    acceptance_reason: str = "above_threshold"
-
-
-@dataclass
-class AxisTrace:
-    """Full trace of _combine_axis() for one axis (cols or rows)."""
-
-    input_points: list[BoundaryPoint]
-    expansions: list[PointExpansion]
-    clusters: list[ClusterRecord]
-    median_confidence: float
-    acceptance_threshold: float
-    accepted_positions: list[float]
-    median_method_count: float = 0.0
-
-
-@dataclass
-class CombinationTrace:
-    """Diagnostic trace from combine_hypotheses() when trace=True."""
-
-    col_trace: AxisTrace
-    row_trace: AxisTrace
-    spatial_precision: float
-    source_methods: list[str]
 
 
 @dataclass(frozen=True)
@@ -395,23 +349,6 @@ class PipelineConfig:
     cell_methods: tuple[CellExtractionMethod, ...]
     postprocessors: tuple[PostProcessor, ...]
     activation_rules: dict[str, Callable[[TableContext], bool]]
-    combination_strategy: str
-    selection_strategy: str
-    confidence_multipliers: dict[str, float] = field(default_factory=dict)
-
-    def with_overrides(self, **kwargs: Any) -> PipelineConfig:
-        """Return a new PipelineConfig with specified fields replaced."""
-        current = {
-            "structure_methods": self.structure_methods,
-            "cell_methods": self.cell_methods,
-            "postprocessors": self.postprocessors,
-            "activation_rules": self.activation_rules,
-            "combination_strategy": self.combination_strategy,
-            "selection_strategy": self.selection_strategy,
-            "confidence_multipliers": self.confidence_multipliers,
-        }
-        current.update(kwargs)
-        return PipelineConfig(**current)
 
     def to_dict(self) -> dict[str, Any]:
         """JSON-serializable dict.
@@ -424,7 +361,4 @@ class PipelineConfig:
             "cell_methods": [m.name for m in self.cell_methods],
             "postprocessors": [p.name for p in self.postprocessors],
             "activation_rules": list(self.activation_rules.keys()),
-            "combination_strategy": self.combination_strategy,
-            "selection_strategy": self.selection_strategy,
-            "confidence_multipliers": dict(self.confidence_multipliers),
         }
