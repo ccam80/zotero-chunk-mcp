@@ -169,6 +169,65 @@ _LIGATURE_MAP = {
     "\ufb04": "ffl",
 }
 
+# Unicode superscript/subscript → ASCII equivalents
+_SUPER_SUB_MAP = str.maketrans({
+    # Superscripts
+    "\u00b2": "2",   # ²
+    "\u00b3": "3",   # ³
+    "\u00b9": "1",   # ¹
+    "\u2070": "0",   # ⁰
+    "\u2074": "4",   # ⁴
+    "\u2075": "5",   # ⁵
+    "\u2076": "6",   # ⁶
+    "\u2077": "7",   # ⁷
+    "\u2078": "8",   # ⁸
+    "\u2079": "9",   # ⁹
+    "\u207a": "+",   # ⁺
+    "\u207b": "-",   # ⁻
+    "\u207c": "=",   # ⁼
+    "\u207d": "(",   # ⁽
+    "\u207e": ")",   # ⁾
+    "\u207f": "n",   # ⁿ
+    "\u1d40": "T",   # ᵀ (modifier letter capital T)
+    "\u1d48": "d",   # ᵈ
+    "\u1d49": "e",   # ᵉ
+    "\u2071": "i",   # ⁱ
+    # Subscripts
+    "\u2080": "0",   # ₀
+    "\u2081": "1",   # ₁
+    "\u2082": "2",   # ₂
+    "\u2083": "3",   # ₃
+    "\u2084": "4",   # ₄
+    "\u2085": "5",   # ₅
+    "\u2086": "6",   # ₆
+    "\u2087": "7",   # ₇
+    "\u2088": "8",   # ₈
+    "\u2089": "9",   # ₉
+    "\u208a": "+",   # ₊
+    "\u208b": "-",   # ₋
+    "\u208c": "=",   # ₌
+    "\u208d": "(",   # ₍
+    "\u208e": ")",   # ₎
+    # Subscript letters (Latin)
+    "\u2090": "a",   # ₐ
+    "\u2091": "e",   # ₑ
+    "\u2092": "o",   # ₒ
+    "\u2093": "x",   # ₓ
+    "\u2095": "h",   # ₕ
+    "\u2096": "k",   # ₖ
+    "\u2097": "l",   # ₗ
+    "\u2098": "m",   # ₘ
+    "\u2099": "n",   # ₙ
+    "\u209a": "p",   # ₚ
+    "\u209b": "s",   # ₛ
+    "\u209c": "t",   # ₜ
+    # Small capital K (used as subscript in some papers)
+    "\u1d0b": "K",   # ᴋ
+})
+
+_LATEX_SUPER_RE = re.compile(r"\^{([^}]*)}")
+_LATEX_SUB_RE = re.compile(r"_{([^}]*)}")
+
 
 @dataclass
 class CellDiff:
@@ -240,6 +299,8 @@ def _normalize_cell(text: str) -> str:
     2. Collapse internal whitespace to single space
     3. Dash/hyphen normalization (unicode minus, en-dash, em-dash, etc.)
     4. Ligature normalization
+    5. LaTeX super/subscript stripping (^{...} → ..., _{...} → ...)
+    6. Unicode super/subscript → ASCII
     """
     text = text.strip()
     text = re.sub(r"\s+", " ", text)
@@ -248,6 +309,11 @@ def _normalize_cell(text: str) -> str:
         text = text.replace(ch, "-")
     for lig, replacement in _LIGATURE_MAP.items():
         text = text.replace(lig, replacement)
+    # Strip LaTeX super/subscript notation: x^{2} → x2, x_{i} → xi
+    text = _LATEX_SUPER_RE.sub(r"\1", text)
+    text = _LATEX_SUB_RE.sub(r"\1", text)
+    # Unicode super/subscript characters → ASCII equivalents
+    text = text.translate(_SUPER_SUB_MAP)
     return text
 
 

@@ -9,21 +9,13 @@ Uses a 4-agent pipeline:
 
 from __future__ import annotations
 
-import asyncio
-import base64
 import json
 import logging
 import re
 import statistics
-import time
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-
-try:
-    import anthropic
-except ImportError:
-    anthropic = None  # type: ignore[assignment]
 
 import pymupdf
 
@@ -84,15 +76,6 @@ class VisionExtractionResult:
 # ---------------------------------------------------------------------------
 # Prompt templates
 # ---------------------------------------------------------------------------
-
-# CAPTION_SECTION_TEMPLATE is used by extract_table_vision() callers.
-CAPTION_SECTION_TEMPLATE = """\
-The extraction system detected this caption for the table:
-"{caption}"
-If the table label you see differs from this caption's number, report the label \
-you actually see — do not match it to this caption.
-
-"""
 
 # ---------------------------------------------------------------------------
 # Shared system prompt (single prompt for all roles — enables prompt caching)
@@ -257,10 +240,14 @@ Phase 1 — Transcribe from image
 preserving row and column structure.
 
 Phase 2 — Correct using raw text
-  Compare your transcription against the raw text.  The raw text's Unicode \
-characters, digits, and special symbols are more accurate than image OCR.  Use \
-them to correct individual characters — do NOT use the raw text to restructure \
-or reorder the table.
+  Compare your transcription against the raw text.  For NUMBERS, DIGITS, and \
+LATIN WORDS the raw text is usually more accurate than image OCR — use it to \
+correct individual characters.  However, some PDFs have broken font encoding \
+that maps Greek letters, mathematical symbols, and special characters to wrong \
+codepoints (e.g. Ω displayed but V in the text layer).  If a garble warning \
+is present, or if the raw text contains obviously wrong symbols where the image \
+clearly shows Greek/math characters, TRUST THE IMAGE for those symbols.  Do NOT \
+use the raw text to restructure or reorder the table.
 
 Output the JSON object WITHOUT the "corrections" field.
 
@@ -644,6 +631,146 @@ def _parse_agent_json(raw_text: str) -> dict | None:
             pass
 
     return None
+
+
+def parse_agent_response(raw_text: str, agent_label: str) -> "AgentResponse":
+    """Parse raw API response text into AgentResponse.
+
+    Public wrapper around _parse_agent_json that validates headers/rows are lists,
+    extracts corrections, and builds a fully populated AgentResponse.
+    """
+    _failure = AgentResponse(
+        headers=[], rows=[], footnotes="",
+        table_label=None, is_incomplete=False,
+        incomplete_reason="", raw_shape=(0, 0),
+        parse_success=False, raw_response=raw_text,
+    )
+
+    parsed = _parse_agent_json(raw_text)
+    if parsed is None:
+        logger.warning("%s failed to parse JSON", agent_label)
+        return _failure
+
+    try:
+        headers = parsed["headers"]
+        rows = parsed["rows"]
+        if not isinstance(headers, list):
+            raise ValueError("headers must be a list")
+        if not isinstance(rows, list):
+            raise ValueError("rows must be a list")
+        for r in rows:
+            if not isinstance(r, list):
+                raise ValueError("each row must be a list")
+
+        corrections = parsed.get("corrections", [])
+        if corrections:
+            logger.info(
+                "%s made %d corrections: %s",
+                agent_label, len(corrections), corrections,
+            )
+
+        table_label = parsed.get("table_label")
+        return AgentResponse(
+            headers=[str(h) for h in headers],
+            rows=[[str(c) for c in row] for row in rows],
+            footnotes=str(parsed.get("footnotes", "")),
+            table_label=table_label if isinstance(table_label, str) else None,
+            is_incomplete=bool(parsed.get("is_incomplete", False)),
+            incomplete_reason=str(parsed.get("incomplete_reason", "")),
+            raw_shape=(len(rows), len(headers)),
+            parse_success=True,
+            raw_response=raw_text,
+        )
+
+    except (KeyError, ValueError, TypeError) as exc:
+        logger.warning("%s response validation failed: %s", agent_label, exc)
+        return _failure
+
+
+# ---------------------------------------------------------------------------
+# Garbled encoding detection
+# ---------------------------------------------------------------------------
+
+# Icelandic eth/thorn used as parentheses in broken CM font mappings
+_GARBLE_ETH_THORN_RE = re.compile(r"[ðÞ]")
+# "!" used as "→" in function mapping contexts (e.g. "X × Y × Ω ! R")
+_GARBLE_ARROW_RE = re.compile(r"\w\s*!\s*R\b")
+# "[" used as "∈" in set membership contexts (e.g. "ω [ Ω")
+_GARBLE_MEMBER_RE = re.compile(r"\b\w\s*\[\s*[A-Z]\b")
+# Known-problematic font families (Computer Modern and variants)
+_GARBLE_FONTS = {"CMMI", "CMSY", "CMEX", "CMR", "CMBX", "CMTI", "CMSS"}
+
+
+def detect_garbled_encoding(
+    raw_text: str,
+    page: object | None = None,
+    bbox: tuple[float, float, float, float] | None = None,
+) -> bool:
+    """Detect if raw text has garbled font encoding (e.g. CM math fonts).
+
+    Uses two complementary signals:
+    1. Signature patterns: ð/Þ as delimiters, ! as →, [ as ∈
+    2. Font name inspection (if *page* is provided): checks for Computer Modern
+       font families in the bbox region.
+
+    Returns True if garble is likely.
+    """
+    # Signal 1: character-level garble signatures
+    eth_thorn = len(_GARBLE_ETH_THORN_RE.findall(raw_text))
+    arrow_hits = len(_GARBLE_ARROW_RE.findall(raw_text))
+    member_hits = len(_GARBLE_MEMBER_RE.findall(raw_text))
+
+    sig_score = min(eth_thorn, 5) * 0.2 + arrow_hits * 0.3 + member_hits * 0.2
+
+    # Signal 2: font name inspection (optional, zero-cost when page provided)
+    font_garble = False
+    if page is not None:
+        try:
+            blocks = page.get_text("dict", clip=bbox)["blocks"]  # type: ignore[union-attr]
+            for block in blocks:
+                for line in block.get("lines", []):
+                    for span in line.get("spans", []):
+                        font_name = span.get("font", "").upper()
+                        if any(gf in font_name for gf in _GARBLE_FONTS):
+                            font_garble = True
+                            break
+                    if font_garble:
+                        break
+                if font_garble:
+                    break
+        except Exception:  # noqa: BLE001
+            pass  # font inspection is best-effort
+
+    if font_garble:
+        sig_score += 0.5
+
+    return sig_score >= 0.4
+
+
+_GARBLE_WARNING = (
+    "⚠ WARNING: The raw text below may have GARBLED SYMBOL ENCODING. "
+    "This PDF uses fonts that map display glyphs to wrong Unicode codepoints "
+    "(e.g. Greek letters Ω, Ψ, Λ rendered as V, C, L in the text layer; "
+    "parentheses as ð/Þ; arrows as !; set membership as [). "
+    "For NUMBERS, DIGITS, and LATIN WORDS the raw text is still reliable. "
+    "For GREEK LETTERS, MATHEMATICAL SYMBOLS, and SPECIAL CHARACTERS, "
+    "TRUST THE IMAGE over the raw text."
+)
+
+
+def build_common_ctx(raw_text: str, caption: str | None, garbled: bool = False) -> str:
+    """Build the common context block shared by all agents for a table.
+
+    Prepends a garble warning when *garbled* is True so agents trust the
+    image for symbols while still using raw text for numbers/digits.
+    """
+    parts: list[str] = []
+    if garbled:
+        parts.append(_GARBLE_WARNING)
+    parts.append(f"## Raw extracted text\n\n{raw_text}")
+    if caption:
+        parts.append(f"## Caption\n\n{caption}")
+    return "\n\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -1204,220 +1331,132 @@ def _detect_inline_headers(
 
 
 # ---------------------------------------------------------------------------
-# Agent calling (async)
+# Public builder functions (used by VisionAPI)
 # ---------------------------------------------------------------------------
 
 
-async def _call_single_agent(
-    client: anthropic.AsyncAnthropic,
-    image_b64: str,
-    media_type: str,
-    raw_text: str,
-    caption: str | None,
-    model: str,
-    agent_id: int,
-) -> AgentResponse:
-    """Call a single transcriber agent using the shared system prompt architecture."""
-    common_ctx = f"## Raw extracted text\n\n{raw_text}"
-    if caption:
-        common_ctx += f"\n\n## Caption\n\n{caption}"
+def build_verifier_inputs(
+    pdf_path: Path,
+    page_num: int,
+    bbox: tuple[float, float, float, float],
+    transcriber: "AgentResponse",
+) -> tuple[str, str, str, str]:
+    """Build Y-verifier and X-verifier role texts from PDF word positions.
 
-    image_block: dict = {
-        "type": "image",
-        "source": {
-            "type": "base64",
-            "media_type": media_type,
-            "data": image_b64,
-        },
-    }
-
-    full_role_text = _ROLE_PREAMBLES["transcriber"]
-
-    _failure = AgentResponse(
-        headers=[],
-        rows=[],
-        footnotes="",
-        table_label=None,
-        is_incomplete=False,
-        incomplete_reason="",
-        raw_shape=(0, 0),
-        parse_success=False,
-        raw_response="",
-    )
-
-    try:
-        response = await client.messages.create(
-            model=model,
-            max_tokens=_MAX_TOKENS["transcriber"],
-            system=[{"type": "text", "text": SHARED_SYSTEM}],
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": common_ctx},
-                    image_block,
-                    {"type": "text", "text": full_role_text},
-                ],
-            }],
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Agent %d API error: %s", agent_id, exc)
-        _failure.raw_response = str(exc)
-        return _failure
-
-    raw_response = ""
-    for block in response.content:
-        if hasattr(block, "text"):
-            raw_response += block.text
-
-    parsed = _parse_agent_json(raw_response)
-    if parsed is None:
-        logger.warning("Agent %d failed to parse JSON from response", agent_id)
-        _failure.raw_response = raw_response
-        return _failure
-
-    # Validate required fields
-    try:
-        headers = parsed["headers"]
-        rows = parsed["rows"]
-        if not isinstance(headers, list):
-            raise ValueError("headers must be a list")
-        if not isinstance(rows, list):
-            raise ValueError("rows must be a list")
-        for r in rows:
-            if not isinstance(r, list):
-                raise ValueError("each row must be a list")
-
-        table_label = parsed.get("table_label")
-        is_incomplete = bool(parsed.get("is_incomplete", False))
-        incomplete_reason = str(parsed.get("incomplete_reason", ""))
-        footnotes = str(parsed.get("footnotes", ""))
-
-        num_cols = len(headers)
-        num_rows = len(rows)
-
-        return AgentResponse(
-            headers=[str(h) for h in headers],
-            rows=[[str(c) for c in row] for row in rows],
-            footnotes=footnotes,
-            table_label=table_label if isinstance(table_label, str) else None,
-            is_incomplete=is_incomplete,
-            incomplete_reason=incomplete_reason,
-            raw_shape=(num_rows, num_cols),
-            parse_success=True,
-            raw_response=raw_response,
-        )
-
-    except (KeyError, ValueError, TypeError) as exc:
-        logger.warning("Agent %d response validation failed: %s", agent_id, exc)
-        _failure.raw_response = raw_response
-        return _failure
-
-
-async def _call_agent_with_role(
-    client: "anthropic.AsyncAnthropic",
-    image_b64: str,
-    media_type: str,
-    role: str,
-    role_text: str,
-    raw_text: str,
-    caption: str | None,
-    model: str,
-    agent_label: str,
-) -> AgentResponse:
-    """Generic agent caller using the shared system prompt architecture.
-
-    Sends: system=SHARED_SYSTEM, user=[common_ctx, image, role_preamble+role_text].
-    The role_text contains the evidence / inputs specific to the verifier or
-    synthesizer.  raw_text and caption go into the common context block (shared
-    across all four agents on the same table).
+    Returns (y_role_text, x_role_text, inline_header_section, inline_header_instruction).
     """
-    common_ctx = f"## Raw extracted text\n\n{raw_text}"
-    if caption:
-        common_ctx += f"\n\n## Caption\n\n{caption}"
+    word_positions = _extract_word_positions(pdf_path, page_num, bbox)
+    y_evidence = _format_y_evidence(word_positions, headers=transcriber.headers)
+    x_evidence = _format_x_evidence(word_positions)
 
-    image_block: dict = {
-        "type": "image",
-        "source": {
-            "type": "base64",
-            "media_type": media_type,
-            "data": image_b64,
-        },
-    }
-
-    full_role_text = _ROLE_PREAMBLES[role] + "\n" + role_text
-
-    _failure = AgentResponse(
-        headers=[], rows=[], footnotes="",
-        table_label=None, is_incomplete=False,
-        incomplete_reason="", raw_shape=(0, 0),
-        parse_success=False, raw_response="",
+    col_boundaries = _compute_x_boundaries(word_positions)
+    inline_headers = _detect_inline_headers(
+        word_positions, col_boundaries, transcriber.rows,
     )
 
-    try:
-        response = await client.messages.create(
-            model=model,
-            max_tokens=_MAX_TOKENS[role],
-            system=[{"type": "text", "text": SHARED_SYSTEM}],
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": common_ctx},
-                    image_block,
-                    {"type": "text", "text": full_role_text},
-                ],
-            }],
+    if inline_headers:
+        inline_header_section = inline_headers
+        inline_header_instruction = (
+            "INLINE SECTION HEADERS: The programmatic detection above found "
+            "rows that have words ONLY in the leftmost column with NO data at "
+            "column boundary positions. These are VERIFIED inline headers \u2014 "
+            "each MUST be split into its own row with empty strings (\"\") in "
+            "all data columns. Also check the IMAGE for any additional inline "
+            "headers the detection may have missed."
         )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("%s API error: %s", agent_label, exc)
-        _failure.raw_response = str(exc)
-        return _failure
-
-    raw_response = ""
-    for block in response.content:
-        if hasattr(block, "text"):
-            raw_response += block.text
-
-    parsed = _parse_agent_json(raw_response)
-    if parsed is None:
-        logger.warning("%s failed to parse JSON", agent_label)
-        _failure.raw_response = raw_response
-        return _failure
-
-    try:
-        headers = parsed["headers"]
-        rows = parsed["rows"]
-        if not isinstance(headers, list):
-            raise ValueError("headers must be a list")
-        if not isinstance(rows, list):
-            raise ValueError("rows must be a list")
-        for r in rows:
-            if not isinstance(r, list):
-                raise ValueError("each row must be a list")
-
-        corrections = parsed.get("corrections", [])
-        if corrections:
-            logger.info(
-                "%s made %d corrections: %s",
-                agent_label, len(corrections), corrections,
-            )
-
-        table_label = parsed.get("table_label")
-        return AgentResponse(
-            headers=[str(h) for h in headers],
-            rows=[[str(c) for c in row] for row in rows],
-            footnotes=str(parsed.get("footnotes", "")),
-            table_label=table_label if isinstance(table_label, str) else None,
-            is_incomplete=bool(parsed.get("is_incomplete", False)),
-            incomplete_reason=str(parsed.get("incomplete_reason", "")),
-            raw_shape=(len(rows), len(headers)),
-            parse_success=True,
-            raw_response=raw_response,
+    else:
+        inline_header_section = ""
+        inline_header_instruction = (
+            "CRITICAL \u2014 INLINE SECTION HEADERS: Look at the table IMAGE "
+            "carefully. Many tables have inline section headers \u2014 bold or "
+            "italic labels like \"Baseline\", \"Conversation\", \"Panel A\", "
+            "\"Males\", \"Females\" that span the full table width with NO "
+            "data values. These MUST be their own row with empty strings "
+            "(\"\") in all data columns. The transcriber almost always merges "
+            "these into the data row below. If you see ANY such labels in the "
+            "image, add them as separate rows. USE THE IMAGE for this check."
         )
 
-    except (KeyError, ValueError, TypeError) as exc:
-        logger.warning("%s response validation failed: %s", agent_label, exc)
-        _failure.raw_response = raw_response
-        return _failure
+    transcriber_json = json.dumps(
+        {
+            "table_label": transcriber.table_label,
+            "headers": transcriber.headers,
+            "rows": transcriber.rows,
+            "footnotes": transcriber.footnotes,
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    y_role_text = (
+        f"## Transcriber's extraction\n\n{transcriber_json}\n\n"
+        f"## Row gap analysis\n\n{y_evidence}\n\n"
+        f"{inline_header_section + chr(10) + chr(10) if inline_header_section else ''}"
+        f"## Verification\n\n{inline_header_instruction}\n\n"
+        f"Additional checks:\n"
+        f"1. COMPARE the transcriber's row count ({transcriber.raw_shape[0]} "
+        f"data rows + 1 header row = {transcriber.raw_shape[0] + 1} total rows) "
+        f"against what you see in the image.\n"
+        f"2. SUBSCRIPTS: Very small gaps between adjacent rows indicate "
+        f"sub/superscripts \u2014 these belong to the row above, NOT separate rows.\n"
+        f"3. MERGED ROWS: Two visually distinct rows the transcriber combined.\n"
+        f"4. MISSING ROWS: Rows visible in the image with no match.\n"
+    )
+
+    x_role_text = (
+        f"## Transcriber's extraction\n\n{transcriber_json}\n\n"
+        f"## Column gap analysis (cliff method)\n\n"
+        f"Inter-word gaps from all rows are pooled and sorted. The \"cliff\" "
+        f"is the largest ratio jump, separating small within-cell word spacing "
+        f"from larger column-boundary gaps.\n\n{x_evidence}\n\n"
+        f"## Verification\n\n"
+        f"Compare the suggested column count against the transcriber "
+        f"({transcriber.raw_shape[1]} columns).\n"
+    )
+
+    return y_role_text, x_role_text, inline_header_section, inline_header_instruction
+
+
+def build_synthesizer_user_text(
+    transcriber: "AgentResponse",
+    y_verifier: "AgentResponse",
+    x_verifier: "AgentResponse",
+    inline_header_section: str,
+) -> str:
+    """Build synthesizer role text from the three agents' outputs."""
+
+    def _agent_json(resp: "AgentResponse") -> str:
+        if not resp.parse_success:
+            return "(agent failed to produce valid output)"
+        return json.dumps(
+            {"table_label": resp.table_label, "headers": resp.headers,
+             "rows": resp.rows, "footnotes": resp.footnotes},
+            indent=2, ensure_ascii=False,
+        )
+
+    def _agent_corrections(resp: "AgentResponse") -> str:
+        if not resp.parse_success:
+            return "N/A (agent failed)"
+        parsed = _parse_agent_json(resp.raw_response)
+        if parsed and parsed.get("corrections"):
+            return json.dumps(parsed["corrections"], ensure_ascii=False)
+        return "None"
+
+    def _shape_str(resp: "AgentResponse") -> str:
+        if not resp.parse_success:
+            return "failed"
+        return f"{resp.raw_shape[0]} rows x {resp.raw_shape[1]} cols"
+
+    text = (
+        f"## Transcriber ({_shape_str(transcriber)})\n\n{_agent_json(transcriber)}\n\n"
+        f"## Row verifier ({_shape_str(y_verifier)})\n\n{_agent_json(y_verifier)}\n\n"
+        f"Row corrections: {_agent_corrections(y_verifier)}\n\n"
+        f"## Column verifier ({_shape_str(x_verifier)})\n\n{_agent_json(x_verifier)}\n\n"
+        f"Column corrections: {_agent_corrections(x_verifier)}\n"
+    )
+    if inline_header_section:
+        text += f"\n{inline_header_section}\n"
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -1425,7 +1464,7 @@ async def _call_agent_with_role(
 # ---------------------------------------------------------------------------
 
 
-def _render_table_png(
+def render_table_png(
     pdf_path: Path,
     page_num: int,
     bbox: tuple[float, float, float, float],
@@ -1771,7 +1810,7 @@ def build_consensus(responses: list[AgentResponse]) -> ConsensusResult | None:
 # ---------------------------------------------------------------------------
 
 
-def _compute_agreement_rate(
+def compute_agreement_rate(
     authority: AgentResponse,
     all_responses: list[AgentResponse],
 ) -> float:
@@ -1819,297 +1858,6 @@ def _compute_agreement_rate(
     return confirmed / total_cells if total_cells > 0 else 1.0
 
 
-# ---------------------------------------------------------------------------
-# Main entry point (async)
-# ---------------------------------------------------------------------------
-
-
-async def extract_table_vision(
-    pdf_path: Path,
-    page_num: int,
-    bbox: tuple[float, float, float, float],
-    raw_text: str,
-    caption: str | None = None,
-    *,
-    client: anthropic.AsyncAnthropic | None = None,
-    model: str = "claude-haiku-4-5-20251001",
-    num_agents: int = 3,
-    dpi: int = 300,
-    padding_px: int = 20,
-    verify: bool = True,
-) -> VisionExtractionResult:
-    """Extract a table using the adversarial 4-agent pipeline.
-
-    Pipeline (when verify=True):
-    1. Transcriber: initial extraction from PNG + raw text.
-    2. Y-Verifier + X-Verifier (parallel): structural verification using
-       actual PDF word positions as evidence.
-    3. Synthesizer: reviews all outputs, produces authoritative table.
-
-    When verify=False, runs only the transcriber (single-agent mode).
-    num_agents is accepted for backward compatibility but ignored.
-    """
-    t0 = time.monotonic()
-
-    if client is None:
-        return VisionExtractionResult(
-            consensus=None,
-            agent_responses=[],
-            error="No Anthropic client",
-            timing_ms=0.0,
-        )
-
-    # --- Render PNG ---
-    render_attempts = 1
-    current_bbox = bbox
-    try:
-        png_bytes, media_type = _render_table_png(
-            pdf_path, page_num, current_bbox, dpi=dpi, padding_px=padding_px,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return VisionExtractionResult(
-            consensus=None, agent_responses=[],
-            error=f"Render failed: {exc}",
-            timing_ms=(time.monotonic() - t0) * 1000.0,
-        )
-    image_b64 = base64.b64encode(png_bytes).decode("ascii")
-
-    # --- Phase 1: Transcriber ---
-    logger.info("Phase 1: Transcriber")
-    transcriber = await _call_single_agent(
-        client=client, image_b64=image_b64, media_type=media_type,
-        raw_text=raw_text, caption=caption, model=model, agent_id=0,
-    )
-
-    if not transcriber.parse_success:
-        elapsed = (time.monotonic() - t0) * 1000.0
-        return VisionExtractionResult(
-            consensus=None, agent_responses=[transcriber],
-            render_attempts=1, error="Transcriber failed to parse",
-            timing_ms=elapsed,
-        )
-
-    # Handle incomplete or empty: retry with full page render
-    _needs_retry = (
-        transcriber.is_incomplete
-        or (not transcriber.headers and not transcriber.rows)
-    )
-    if _needs_retry:
-        try:
-            doc = pymupdf.open(str(pdf_path))
-            page_rect = doc[page_num - 1].rect
-            page_w, page_h = page_rect.width, page_rect.height
-            doc.close()
-        except Exception:  # noqa: BLE001
-            page_w = page_h = 0.0
-
-        if page_w > 0:
-            full = (0.0, 0.0, page_w, page_h)
-            try:
-                png2, mt2 = _render_table_png(
-                    pdf_path, page_num, full, dpi=dpi, padding_px=padding_px,
-                )
-                b64_2 = base64.b64encode(png2).decode("ascii")
-                t2 = await _call_single_agent(
-                    client, b64_2, mt2, raw_text, caption, model, 0,
-                )
-                if t2.parse_success:
-                    transcriber, image_b64, media_type = t2, b64_2, mt2
-                    current_bbox, render_attempts = full, 2
-            except Exception:  # noqa: BLE001
-                pass
-
-    # --- Single-agent mode (verify=False) ---
-    if not verify:
-        consensus = ConsensusResult(
-            headers=tuple(transcriber.headers),
-            rows=tuple(tuple(r) for r in transcriber.rows),
-            footnotes=transcriber.footnotes,
-            table_label=transcriber.table_label,
-            is_incomplete=transcriber.is_incomplete,
-            disputed_cells=[],
-            agent_agreement_rate=1.0,
-            shape_agreement=True,
-            winning_shape=transcriber.raw_shape,
-            num_agents_succeeded=1,
-        )
-        elapsed = (time.monotonic() - t0) * 1000.0
-        return VisionExtractionResult(
-            consensus=consensus, agent_responses=[transcriber],
-            render_attempts=render_attempts, timing_ms=elapsed,
-        )
-
-    # --- Extract word positions for verifiers ---
-    word_positions = _extract_word_positions(pdf_path, page_num, current_bbox)
-    y_evidence = _format_y_evidence(word_positions, headers=transcriber.headers)
-    x_evidence = _format_x_evidence(word_positions)
-
-    # --- Detect inline headers programmatically ---
-    col_boundaries = _compute_x_boundaries(word_positions)
-    inline_headers = _detect_inline_headers(
-        word_positions, col_boundaries, transcriber.rows,
-    )
-
-    if inline_headers:
-        inline_header_section = inline_headers
-        inline_header_instruction = (
-            "INLINE SECTION HEADERS: The programmatic detection above found "
-            "rows that have words ONLY in the leftmost column with NO data at "
-            "column boundary positions. These are VERIFIED inline headers \u2014 "
-            "each MUST be split into its own row with empty strings (\"\") in "
-            "all data columns. Also check the IMAGE for any additional inline "
-            "headers the detection may have missed."
-        )
-    else:
-        inline_header_section = ""
-        inline_header_instruction = (
-            "CRITICAL \u2014 INLINE SECTION HEADERS: Look at the table IMAGE "
-            "carefully. Many tables have inline section headers \u2014 bold or "
-            "italic labels like \"Baseline\", \"Conversation\", \"Panel A\", "
-            "\"Males\", \"Females\" that span the full table width with NO "
-            "data values. These MUST be their own row with empty strings "
-            "(\"\") in all data columns. The transcriber almost always merges "
-            "these into the data row below. If you see ANY such labels in the "
-            "image, add them as separate rows. USE THE IMAGE for this check."
-        )
-
-    transcriber_json = json.dumps(
-        {
-            "table_label": transcriber.table_label,
-            "headers": transcriber.headers,
-            "rows": transcriber.rows,
-            "footnotes": transcriber.footnotes,
-        },
-        indent=2,
-        ensure_ascii=False,
-    )
-
-    # --- Phase 2: Y-Verifier + X-Verifier in parallel ---
-    logger.info("Phase 2: Y-Verifier + X-Verifier (parallel)")
-
-    # Build role-specific text for each verifier (raw_text/caption are in common context)
-    y_role_text = (
-        f"## Transcriber's extraction\n\n{transcriber_json}\n\n"
-        f"## Row gap analysis\n\n{y_evidence}\n\n"
-        f"{inline_header_section + chr(10) + chr(10) if inline_header_section else ''}"
-        f"## Verification\n\n{inline_header_instruction}\n\n"
-        f"Additional checks:\n"
-        f"1. COMPARE the transcriber's row count ({transcriber.raw_shape[0]} "
-        f"data rows + 1 header row = {transcriber.raw_shape[0] + 1} total rows) "
-        f"against what you see in the image.\n"
-        f"2. SUBSCRIPTS: Very small gaps between adjacent rows indicate "
-        f"sub/superscripts \u2014 these belong to the row above, NOT separate rows.\n"
-        f"3. MERGED ROWS: Two visually distinct rows the transcriber combined.\n"
-        f"4. MISSING ROWS: Rows visible in the image with no match.\n"
-    )
-
-    x_role_text = (
-        f"## Transcriber's extraction\n\n{transcriber_json}\n\n"
-        f"## Column gap analysis (cliff method)\n\n"
-        f"Inter-word gaps from all rows are pooled and sorted. The \"cliff\" "
-        f"is the largest ratio jump, separating small within-cell word spacing "
-        f"from larger column-boundary gaps.\n\n{x_evidence}\n\n"
-        f"## Verification\n\n"
-        f"Compare the suggested column count against the transcriber "
-        f"({transcriber.raw_shape[1]} columns).\n"
-    )
-
-    y_verifier, x_verifier = await asyncio.gather(
-        _call_agent_with_role(
-            client, image_b64, media_type, "y_verifier", y_role_text,
-            raw_text, caption, model, "Y-Verifier",
-        ),
-        _call_agent_with_role(
-            client, image_b64, media_type, "x_verifier", x_role_text,
-            raw_text, caption, model, "X-Verifier",
-        ),
-    )
-
-    # --- Phase 3: Synthesizer ---
-    logger.info("Phase 3: Synthesizer")
-
-    def _agent_json(resp: AgentResponse) -> str:
-        if not resp.parse_success:
-            return "(agent failed to produce valid output)"
-        return json.dumps(
-            {"table_label": resp.table_label, "headers": resp.headers,
-             "rows": resp.rows, "footnotes": resp.footnotes},
-            indent=2, ensure_ascii=False,
-        )
-
-    def _agent_corrections(resp: AgentResponse) -> str:
-        if not resp.parse_success:
-            return "N/A (agent failed)"
-        parsed = _parse_agent_json(resp.raw_response)
-        if parsed and parsed.get("corrections"):
-            return json.dumps(parsed["corrections"], ensure_ascii=False)
-        return "None"
-
-    def _shape_str(resp: AgentResponse) -> str:
-        if not resp.parse_success:
-            return "failed"
-        return f"{resp.raw_shape[0]} rows x {resp.raw_shape[1]} cols"
-
-    # Build synthesizer role text (raw_text/caption are in common context)
-    synth_role_text = (
-        f"## Transcriber ({_shape_str(transcriber)})\n\n{_agent_json(transcriber)}\n\n"
-        f"## Row verifier ({_shape_str(y_verifier)})\n\n{_agent_json(y_verifier)}\n\n"
-        f"Row corrections: {_agent_corrections(y_verifier)}\n\n"
-        f"## Column verifier ({_shape_str(x_verifier)})\n\n{_agent_json(x_verifier)}\n\n"
-        f"Column corrections: {_agent_corrections(x_verifier)}\n"
-    )
-    if inline_header_section:
-        synth_role_text += f"\n{inline_header_section}\n"
-
-    synthesizer = await _call_agent_with_role(
-        client, image_b64, media_type, "synthesizer", synth_role_text,
-        raw_text, caption, model, "Synthesizer",
-    )
-
-    # --- Build result ---
-    all_responses = [transcriber, y_verifier, x_verifier, synthesizer]
-
-    # Synthesizer is authoritative; fall back to transcriber if it failed
-    authority = synthesizer if synthesizer.parse_success else transcriber
-
-    agreement_rate = _compute_agreement_rate(authority, all_responses)
-    successful = [r for r in all_responses if r.parse_success]
-    shape_agreeing = sum(
-        1 for r in successful if r.raw_shape == authority.raw_shape
-    )
-
-    consensus = ConsensusResult(
-        headers=tuple(authority.headers),
-        rows=tuple(tuple(r) for r in authority.rows),
-        footnotes=authority.footnotes,
-        table_label=authority.table_label,
-        is_incomplete=authority.is_incomplete,
-        disputed_cells=[],
-        agent_agreement_rate=agreement_rate,
-        shape_agreement=shape_agreeing >= 2,
-        winning_shape=authority.raw_shape,
-        num_agents_succeeded=len(successful),
-    )
-
-    elapsed_ms = (time.monotonic() - t0) * 1000.0
-    logger.info(
-        "Adversarial pipeline complete: shape=%s, agreement=%.0f%%, "
-        "T=%s Y=%s X=%s S=%s, %.0fms",
-        authority.raw_shape, agreement_rate * 100,
-        "ok" if transcriber.parse_success else "FAIL",
-        "ok" if y_verifier.parse_success else "FAIL",
-        "ok" if x_verifier.parse_success else "FAIL",
-        "ok" if synthesizer.parse_success else "FAIL",
-        elapsed_ms,
-    )
-
-    return VisionExtractionResult(
-        consensus=consensus,
-        agent_responses=all_responses,
-        render_attempts=render_attempts,
-        timing_ms=elapsed_ms,
-    )
-
 
 # ---------------------------------------------------------------------------
 # CellGrid conversion
@@ -2130,101 +1878,3 @@ def vision_result_to_cell_grid(result: VisionExtractionResult) -> CellGrid | Non
         method="vision_consensus",
         structure_method="vision_haiku_consensus",
     )
-
-
-# ---------------------------------------------------------------------------
-# Caption verification
-# ---------------------------------------------------------------------------
-
-_CAPTION_NUM_RE = re.compile(
-    r"(\d+|[IVXLCDM]+|[A-Z]\.\d+|S\d+)", re.IGNORECASE
-)
-
-
-def verify_and_swap_captions(
-    tables: list,  # list of ExtractedTable from models.py
-    vision_labels: dict[int, str | None],  # table_index -> agent-reported label
-    all_captions: dict[int, list],  # page_num -> list of DetectedCaption
-) -> list[tuple[int, int, str]]:  # list of (from_idx, to_idx, reason) swaps
-    """Verify vision-reported table labels against pipeline-assigned captions.
-
-    For each table where the vision agent reported a label that differs from the
-    pipeline-assigned caption number, attempt to:
-      a) Find another table whose caption matches the agent-reported number and swap.
-      b) If not found, search all_captions for a floating caption and assign it.
-
-    Returns list of (from_idx, to_idx, reason) tuples for logging.
-    """
-    swaps: list[tuple[int, int, str]] = []
-
-    def _extract_num(text: str | None) -> str | None:
-        if not text:
-            return None
-        m = _CAPTION_NUM_RE.search(text)
-        return m.group(1).upper() if m else None
-
-    # Build index: caption_number -> table index
-    caption_num_to_idx: dict[str, int] = {}
-    for idx, table in enumerate(tables):
-        cap = getattr(table, "caption", None)
-        num = _extract_num(cap)
-        if num:
-            caption_num_to_idx[num] = idx
-
-    for idx, vision_label in vision_labels.items():
-        if vision_label is None:
-            continue
-
-        vision_num = _extract_num(vision_label)
-        if vision_num is None:
-            continue
-
-        if idx >= len(tables):
-            continue
-
-        pipeline_caption = getattr(tables[idx], "caption", None)
-        pipeline_num = _extract_num(pipeline_caption)
-
-        if pipeline_num == vision_num:
-            continue  # Already correct
-
-        # Try to find another table with the agent's number
-        other_idx = caption_num_to_idx.get(vision_num)
-        if other_idx is not None and other_idx != idx:
-            swaps.append((idx, other_idx, f"vision label {vision_label} matched table {other_idx}"))
-            logger.info(
-                "Caption swap: table[%d] <-> table[%d] (vision reported '%s')",
-                idx,
-                other_idx,
-                vision_label,
-            )
-            continue
-
-        # Search floating captions on all pages
-        found_caption = None
-        for page_captions in all_captions.values():
-            for det_caption in page_captions:
-                cap_text = getattr(det_caption, "text", "") or ""
-                cap_num = _extract_num(cap_text)
-                if cap_num == vision_num:
-                    found_caption = cap_text
-                    break
-            if found_caption:
-                break
-
-        if found_caption and idx < len(tables):
-            old_caption = getattr(tables[idx], "caption", None)
-            try:
-                # ExtractedTable may be frozen; attempt attribute assignment
-                object.__setattr__(tables[idx], "caption", found_caption)
-            except (TypeError, AttributeError):
-                pass
-            logger.info(
-                "Caption reassigned: table[%d] caption '%s' -> '%s' (vision reported '%s')",
-                idx,
-                old_caption,
-                found_caption,
-                vision_label,
-            )
-
-    return swaps

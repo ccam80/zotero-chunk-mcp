@@ -1,6 +1,6 @@
 # Stress Test Report: zotero-chunk-rag
 
-**Date**: 2026-02-27 13:52
+**Date**: 2026-02-27 20:52
 **Corpus**: 10 papers from live Zotero library
 
 ## Executive Summary
@@ -17,7 +17,7 @@
 
 | Operation | Time |
 |-----------|------|
-| Total indexing | 484.4s |
+| Total indexing | 519.6s |
 
 ## Extraction Quality per Paper
 
@@ -427,3 +427,164 @@ Table 3: 57/280 cells non-empty (20%). Caption: 'Table 3. Correlations of HRV Pa
 ## OCR Pathway Test
 
 _(See OCR test results in the test output above)_
+
+## Ground Truth Comparison
+
+| Paper | Table ID | Fuzzy Accuracy | Precision | Recall | Splits | Merges | Cell Diffs |
+|-------|----------|----------------|-----------|--------|--------|--------|------------|
+| laird-fick-polyps | 5SIZVS65_table_1 | 84.1% | 76.2% | 93.7% | 1 | 0 | 0 |
+| laird-fick-polyps | 5SIZVS65_table_2 | 88.6% | 82.4% | 95.8% | 0 | 0 | 0 |
+| laird-fick-polyps | 5SIZVS65_table_3 | 48.5% | 40.1% | 61.4% | 1 | 1 | 0 |
+| laird-fick-polyps | 5SIZVS65_table_4 | 86.1% | 80.8% | 92.1% | 0 | 0 | 22 |
+| laird-fick-polyps | 5SIZVS65_table_5 | 96.2% | 94.1% | 98.4% | 1 | 0 | 0 |
+| helm-coregulation | 9GKLLJH9_table_1 | 55.9% | 51.2% | 61.5% | 0 | 0 | 8 |
+| helm-coregulation | 9GKLLJH9_table_2 | 40.0% | 46.6% | 35.0% | 1 | 0 | 32 |
+| reyes-lf-hrv | AQ3D94VC_table_1 | 87.0% | 89.4% | 84.7% | 0 | 0 | 4 |
+| reyes-lf-hrv | AQ3D94VC_table_2 | 39.7% | 49.7% | 33.1% | 0 | 0 | 19 |
+| reyes-lf-hrv | AQ3D94VC_table_3 | 39.7% | 40.0% | 39.4% | 0 | 0 | 62 |
+| reyes-lf-hrv | AQ3D94VC_table_4 | 39.7% | 40.0% | 39.4% | 0 | 0 | 14 |
+| reyes-lf-hrv | AQ3D94VC_table_5 | 100.0% | 100.0% | 100.0% | 0 | 0 | 0 |
+| hallett-tms-primer | C626CYVT_table_1 | 87.1% | 98.0% | 78.4% | 0 | 0 | 0 |
+| yang-ppv-meta | DPYRZTFI_table_1 | 99.8% | 99.8% | 99.8% | 0 | 0 | 1 |
+| yang-ppv-meta | DPYRZTFI_table_2 | 89.1% | 91.3% | 87.1% | 1 | 0 | 0 |
+| yang-ppv-meta | DPYRZTFI_table_3 | 100.0% | 100.0% | 100.0% | 0 | 0 | 0 |
+| active-inference-tutorial | SCPXVBLY_table_1 | 90.2% | 84.6% | 96.6% | 0 | 0 | 0 |
+| active-inference-tutorial | SCPXVBLY_table_1_p16 | 92.2% | 87.6% | 97.4% | 1 | 0 | 0 |
+| active-inference-tutorial | SCPXVBLY_table_2 | 11.8% | 6.7% | 50.9% | 0 | 0 | 0 |
+| active-inference-tutorial | SCPXVBLY_table_2_p19 | 9.0% | 5.0% | 44.2% | 0 | 0 | 0 |
+| active-inference-tutorial | SCPXVBLY_table_2_p20 | 65.7% | 59.1% | 73.9% | 0 | 0 | 0 |
+| active-inference-tutorial | SCPXVBLY_table_3 | 82.4% | 73.1% | 94.4% | 1 | 0 | 32 |
+| active-inference-tutorial | SCPXVBLY_table_3_p31 | 97.3% | 97.3% | 97.3% | 0 | 0 | 4 |
+| fortune-impedance | VP3NJ74M_table_1 | 84.8% | 83.3% | 86.3% | 0 | 0 | 0 |
+| fortune-impedance | VP3NJ74M_table_2 | 29.6% | 20.8% | 51.6% | 0 | 0 | 0 |
+| fortune-impedance | VP3NJ74M_table_3 | 25.9% | 38.0% | 19.6% | 0 | 0 | 0 |
+| fortune-impedance | VP3NJ74M_table_4 | 81.0% | 73.8% | 89.7% | 0 | 0 | 0 |
+| fortune-impedance | VP3NJ74M_table_5 | 36.3% | 22.7% | 90.8% | 0 | 0 | 0 |
+| fortune-impedance | VP3NJ74M_table_6 | 0.5% | 5.3% | 0.3% | 0 | 0 | 0 |
+| huang-emd-1998 | XIAINRVS_orphan_p1_t0 | 0.0% | 0.0% | 0.0% | 0 | 0 | 0 |
+| huang-emd-1998 | XIAINRVS_orphan_p2_t1 | 0.0% | 0.0% | 0.0% | 0 | 0 | 0 |
+| friston-life | YMWV46JA_table_1 | 33.8% | 26.0% | 48.3% | 0 | 0 | 0 |
+| roland-emg-filter | Z9X4JVZ5_orphan_p5_t0 | 0.0% | 0.0% | 0.0% | 0 | 0 | 0 |
+| roland-emg-filter | Z9X4JVZ5_table_1 | 100.0% | 100.0% | 100.0% | 0 | 0 | 0 |
+| roland-emg-filter | Z9X4JVZ5_table_2 | 72.6% | 59.4% | 93.4% | 0 | 0 | 0 |
+| roland-emg-filter | Z9X4JVZ5_table_3 | 85.7% | 78.6% | 94.3% | 0 | 0 | 2 |
+| roland-emg-filter | Z9X4JVZ5_table_4 | 56.2% | 79.6% | 43.4% | 0 | 0 | 5 |
+| roland-emg-filter | Z9X4JVZ5_table_5 | 70.8% | 74.3% | 67.5% | 0 | 0 | 8 |
+| roland-emg-filter | Z9X4JVZ5_table_6 | 3.4% | 20.5% | 1.9% | 0 | 0 | 0 |
+| roland-emg-filter | Z9X4JVZ5_table_7 | 80.8% | 71.6% | 92.5% | 0 | 0 | 0 |
+
+**Overall corpus fuzzy accuracy**: 59.8% (40 tables compared)
+
+
+## Pipeline Depth Report
+
+### Per-Method Win Rates
+
+**Structure method wins** (how often each method's boundaries produce the best cell accuracy):
+
+| Structure Method | Wins | Participated | Win Rate |
+|-----------------|------|-------------|----------|
+| vision_haiku_consensus | 29 | 41 | 71% |
+| pymupdf_lines | 12 | 80 | 15% |
+
+**Cell method wins** (how often each method is selected as best):
+
+| Cell Method | Wins | Participated | Win Rate |
+|------------|------|-------------|----------|
+| vision_consensus | 29 | 41 | 71% |
+| rawdict | 10 | 80 | 12% |
+| word_assignment | 2 | 80 | 2% |
+
+### Combination Value
+
+Comparison of best-single-method accuracy vs pipeline (consensus boundaries) accuracy:
+
+- **Avg best-single-method accuracy**: 83.6%
+- **Avg pipeline (consensus) accuracy**: 59.8%
+- **Delta (positive = combination helps)**: -23.8%
+- **Tables compared**: 40
+
+### Per-Table Accuracy Chain
+
+| Table ID | Best Single Method | Best Accuracy | Pipeline Accuracy | Delta |
+|----------|-------------------|---------------|-------------------|-------|
+| SCPXVBLY_table_1 | vision_haiku_consensus+vision_consensus | 100.0% | 90.2% | -9.8% |
+| SCPXVBLY_table_1_p16 | vision_haiku_consensus+vision_consensus | 98.7% | 92.2% | -6.4% |
+| SCPXVBLY_table_2 | vision_haiku_consensus+vision_consensus | 80.9% | 11.8% | -69.1% |
+| SCPXVBLY_table_2_p19 | vision_haiku_consensus+vision_consensus | 75.2% | 9.0% | -66.2% |
+| SCPXVBLY_table_2_p20 | vision_haiku_consensus+vision_consensus | 91.4% | 65.7% | -25.7% |
+| SCPXVBLY_table_3 | vision_haiku_consensus+vision_consensus | 99.5% | 82.4% | -17.1% |
+| SCPXVBLY_table_3_p31 | vision_haiku_consensus+vision_consensus | 100.0% | 97.3% | -2.7% |
+| XIAINRVS_orphan_p1_t0 | pymupdf_lines+rawdict | 0.0% | 0.0% | +0.0% |
+| XIAINRVS_orphan_p2_t1 | pymupdf_lines+rawdict | 0.0% | 0.0% | +0.0% |
+| C626CYVT_table_1 | vision_haiku_consensus+vision_consensus | 100.0% | 87.1% | -12.9% |
+| 5SIZVS65_table_1 | vision_haiku_consensus+vision_consensus | 96.6% | 84.1% | -12.5% |
+| 5SIZVS65_table_2 | pymupdf_lines+word_assignment | 89.6% | 88.6% | -1.0% |
+| 5SIZVS65_table_3 | vision_haiku_consensus+vision_consensus | 93.5% | 48.5% | -45.0% |
+| 5SIZVS65_table_4 | pymupdf_lines+word_assignment | 90.7% | 86.1% | -4.6% |
+| 5SIZVS65_table_5 | vision_haiku_consensus+vision_consensus | 98.5% | 96.2% | -2.3% |
+| 9GKLLJH9_table_1 | vision_haiku_consensus+vision_consensus | 100.0% | 55.9% | -44.1% |
+| 9GKLLJH9_table_2 | vision_haiku_consensus+vision_consensus | 97.1% | 40.0% | -57.1% |
+| Z9X4JVZ5_orphan_p5_t0 | vision_haiku_consensus+vision_consensus | 100.0% | 0.0% | -100.0% |
+| Z9X4JVZ5_table_1 | pymupdf_lines+rawdict | 100.0% | 100.0% | +0.0% |
+| Z9X4JVZ5_table_2 | vision_haiku_consensus+vision_consensus | 100.0% | 72.6% | -27.4% |
+| Z9X4JVZ5_table_3 | vision_haiku_consensus+vision_consensus | 95.6% | 85.7% | -9.8% |
+| Z9X4JVZ5_table_4 | pymupdf_lines+rawdict | 100.0% | 56.2% | -43.8% |
+| Z9X4JVZ5_table_5 | vision_haiku_consensus+vision_consensus | 95.5% | 70.8% | -24.7% |
+| Z9X4JVZ5_table_7 | vision_haiku_consensus+vision_consensus | 99.8% | 80.8% | -19.1% |
+| Z9X4JVZ5_table_6 | vision_haiku_consensus+vision_consensus | 95.5% | 3.4% | -92.0% |
+| DPYRZTFI_table_1 | pymupdf_lines+rawdict | 99.8% | 99.8% | +0.0% |
+| DPYRZTFI_table_2 | vision_haiku_consensus+vision_consensus | 99.6% | 89.1% | -10.4% |
+| DPYRZTFI_table_3 | vision_haiku_consensus+vision_consensus | 99.9% | 100.0% | +0.1% |
+| VP3NJ74M_table_1 | vision_haiku_consensus+vision_consensus | 84.8% | 84.8% | +0.0% |
+| VP3NJ74M_table_3 | vision_haiku_consensus+vision_consensus | 29.2% | 25.9% | -3.3% |
+| VP3NJ74M_table_2 | pymupdf_lines+rawdict | 29.6% | 29.6% | +0.0% |
+| VP3NJ74M_table_4 | vision_haiku_consensus+vision_consensus | 98.4% | 81.0% | -17.5% |
+| VP3NJ74M_table_5 | vision_haiku_consensus+vision_consensus | 85.2% | 36.3% | -48.8% |
+| VP3NJ74M_table_6 | vision_haiku_consensus+vision_consensus | 84.8% | 0.5% | -84.3% |
+| AQ3D94VC_table_1 | vision_haiku_consensus+vision_consensus | 100.0% | 87.0% | -13.0% |
+| AQ3D94VC_table_2 | vision_haiku_consensus+vision_consensus | 100.0% | 39.7% | -60.3% |
+| AQ3D94VC_table_4 | pymupdf_lines+rawdict | 44.9% | 39.7% | -5.2% |
+| AQ3D94VC_table_3 | pymupdf_lines+rawdict | 44.9% | 39.7% | -5.2% |
+| AQ3D94VC_table_5 | pymupdf_lines+rawdict | 100.0% | 100.0% | +0.0% |
+| YMWV46JA_table_1 | vision_haiku_consensus+vision_consensus | 45.9% | 33.8% | -12.0% |
+
+
+## Variant Comparison
+
+Accuracy and speed across named pipeline configs on corpus tables.
+
+### Summary
+
+| Config | Tables | Avg Accuracy | Avg Time (s) |
+|--------|--------|-------------|-------------|
+| DEFAULT | 24 | 56.9% | 1.891 |
+| FAST | 24 | 56.6% | 0.825 |
+| RULED | 24 | 56.9% | 1.557 |
+| MINIMAL | 24 | 52.2% | 0.817 |
+
+### Per-Table Detail
+
+| Table ID | Paper | DEFAULT | FAST | RULED | MINIMAL | |
+|----------|------|-----|-----|-----|-----||
+| SCPXVBLY_table_1 | active-inference-tutorial | 90.2% | 90.2% | 90.2% | 22.1% | |
+| SCPXVBLY_table_1_p16 | active-inference-tutorial | 92.2% | 92.2% | 92.2% | 45.4% | |
+| SCPXVBLY_table_2 | active-inference-tutorial | 11.8% | 11.8% | 11.8% | 6.3% | |
+| XIAINRVS_orphan_p1_t0 | huang-emd-1998 | 0.0% | 0.0% | 0.0% | 0.0% | |
+| XIAINRVS_orphan_p2_t1 | huang-emd-1998 | 0.0% | 0.0% | 0.0% | 0.0% | |
+| C626CYVT_table_1 | hallett-tms-primer | 87.1% | 77.9% | 87.1% | 77.9% | |
+| 5SIZVS65_table_1 | laird-fick-polyps | 84.1% | 84.1% | 84.1% | 84.1% | |
+| 5SIZVS65_table_2 | laird-fick-polyps | 88.6% | 88.6% | 88.6% | 86.5% | |
+| 5SIZVS65_table_3 | laird-fick-polyps | 48.5% | 48.5% | 48.5% | 48.5% | |
+| 9GKLLJH9_table_1 | helm-coregulation | 55.9% | 55.9% | 55.9% | 54.6% | |
+| 9GKLLJH9_table_2 | helm-coregulation | 40.0% | 40.0% | 40.0% | 38.1% | |
+| Z9X4JVZ5_orphan_p5_t0 | roland-emg-filter | 0.0% | 0.0% | 0.0% | 0.0% | |
+| Z9X4JVZ5_table_1 | roland-emg-filter | 100.0% | 100.0% | 100.0% | 100.0% | |
+| Z9X4JVZ5_table_2 | roland-emg-filter | 72.6% | 72.6% | 72.6% | 72.6% | |
+| YMWV46JA_table_1 | friston-life | 0.0% | 0.0% | 0.0% | 0.0% | |
+| DPYRZTFI_table_1 | yang-ppv-meta | 99.8% | 99.8% | 99.8% | 99.8% | |
+| DPYRZTFI_table_2 | yang-ppv-meta | 89.1% | 89.1% | 89.1% | 88.0% | |
+| DPYRZTFI_table_3 | yang-ppv-meta | 100.0% | 100.0% | 100.0% | 95.3% | |
+| VP3NJ74M_table_1 | fortune-impedance | 84.8% | 84.8% | 84.8% | 65.8% | |
+| VP3NJ74M_table_3 | fortune-impedance | 25.9% | 25.9% | 25.9% | 24.7% | |
+

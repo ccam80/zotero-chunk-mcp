@@ -119,32 +119,62 @@
   "hotPaths": [
     {
       "path": "tests\\stress_test_real_library.py",
-      "accessCount": 86,
-      "lastAccessed": 1772165282983,
-      "type": "directory"
-    },
-    {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\vision_api.py",
-      "accessCount": 10,
-      "lastAccessed": 1772164800012,
+      "accessCount": 90,
+      "lastAccessed": 1772172804659,
       "type": "directory"
     },
     {
       "path": "src\\zotero_chunk_rag\\feature_extraction\\vision_extract.py",
-      "accessCount": 6,
-      "lastAccessed": 1772164953243,
+      "accessCount": 87,
+      "lastAccessed": 1772233335086,
       "type": "directory"
     },
     {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\vision_api.py",
+      "accessCount": 61,
+      "lastAccessed": 1772233208054,
+      "type": "directory"
+    },
+    {
+      "path": "tests\\test_feature_extraction\\test_vision_integration.py",
+      "accessCount": 12,
+      "lastAccessed": 1772172902904,
+      "type": "file"
+    },
+    {
       "path": "src\\zotero_chunk_rag\\feature_extraction\\ground_truth.py",
-      "accessCount": 4,
-      "lastAccessed": 1772165231567,
+      "accessCount": 12,
+      "lastAccessed": 1772234132038,
+      "type": "file"
+    },
+    {
+      "path": "tools\\vision_viewer.py",
+      "accessCount": 12,
+      "lastAccessed": 1772234208511,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 11,
+      "lastAccessed": 1772172305142,
+      "type": "directory"
+    },
+    {
+      "path": "tests",
+      "accessCount": 5,
+      "lastAccessed": 1772233184918,
+      "type": "directory"
+    },
+    {
+      "path": "tools\\debug_viewer.py",
+      "accessCount": 5,
+      "lastAccessed": 1772233460021,
       "type": "file"
     },
     {
       "path": "src\\zotero_chunk_rag\\feature_extraction\\debug_db.py",
-      "accessCount": 3,
-      "lastAccessed": 1772164645368,
+      "accessCount": 4,
+      "lastAccessed": 1772233179758,
       "type": "directory"
     },
     {
@@ -154,21 +184,33 @@
       "type": "directory"
     },
     {
+      "path": "STRESS_TEST_REPORT.md",
+      "accessCount": 2,
+      "lastAccessed": 1772169765075,
+      "type": "directory"
+    },
+    {
+      "path": "tests\\test_feature_extraction\\test_vision_consensus.py",
+      "accessCount": 2,
+      "lastAccessed": 1772172794218,
+      "type": "file"
+    },
+    {
+      "path": "tests\\test_vision_stage_eval.py",
+      "accessCount": 2,
+      "lastAccessed": 1772172795016,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction",
+      "accessCount": 2,
+      "lastAccessed": 1772233183692,
+      "type": "directory"
+    },
+    {
       "path": "src",
       "accessCount": 1,
       "lastAccessed": 1772151363238,
-      "type": "directory"
-    },
-    {
-      "path": "STRESS_TEST_REPORT.md",
-      "accessCount": 1,
-      "lastAccessed": 1772164484562,
-      "type": "directory"
-    },
-    {
-      "path": "",
-      "accessCount": 1,
-      "lastAccessed": 1772164502945,
       "type": "directory"
     },
     {
@@ -176,6 +218,54 @@
       "accessCount": 1,
       "lastAccessed": 1772164966497,
       "type": "directory"
+    },
+    {
+      "path": "tests\\ground_truth_workspace\\friston-life\\table_0_gt.json",
+      "accessCount": 1,
+      "lastAccessed": 1772169771459,
+      "type": "file"
+    },
+    {
+      "path": "tests\\ground_truth_workspace\\friston-life\\table_0_extraction.json",
+      "accessCount": 1,
+      "lastAccessed": 1772169772062,
+      "type": "file"
+    },
+    {
+      "path": "tests\\ground_truth_workspace\\friston-life\\manifest.json",
+      "accessCount": 1,
+      "lastAccessed": 1772169772627,
+      "type": "file"
+    },
+    {
+      "path": "tests\\ground_truth_workspace",
+      "accessCount": 1,
+      "lastAccessed": 1772169966805,
+      "type": "directory"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\indexer.py",
+      "accessCount": 1,
+      "lastAccessed": 1772172274902,
+      "type": "file"
+    },
+    {
+      "path": "pyproject.toml",
+      "accessCount": 1,
+      "lastAccessed": 1772233176114,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\render.py",
+      "accessCount": 1,
+      "lastAccessed": 1772233188375,
+      "type": "file"
+    },
+    {
+      "path": "NORMALIZATION_GAP_ANALYSIS.md",
+      "accessCount": 1,
+      "lastAccessed": 1772234569758,
+      "type": "file"
     }
   ],
   "userDirectives": []

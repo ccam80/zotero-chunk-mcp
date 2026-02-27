@@ -1,7 +1,7 @@
 """Integration tests for the adversarial vision extraction pipeline.
 
 LOCAL TESTS (run by default when Zotero PDFs are available):
-  - TestFallback: client=None returns error result (no API calls)
+  - TestFallback: invalid api_key returns error result (makes real API call, will fail auth)
   - TestPNGRendering: PNG rendering produces valid images (no API calls)
 
 VISION API TESTS (disabled by default, run with: pytest -m vision_api):
@@ -14,7 +14,6 @@ VISION API TESTS (disabled by default, run with: pytest -m vision_api):
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import sqlite3
@@ -28,10 +27,10 @@ from zotero_chunk_rag.feature_extraction.ground_truth import (
     compare_extraction,
 )
 from zotero_chunk_rag.feature_extraction.pipeline import FAST_CONFIG, Pipeline
+from zotero_chunk_rag.feature_extraction.vision_api import VisionAPI, TableVisionSpec
 from zotero_chunk_rag.feature_extraction.vision_extract import (
     VisionExtractionResult,
-    _render_table_png,
-    extract_table_vision,
+    render_table_png,
     vision_result_to_cell_grid,
 )
 
@@ -119,28 +118,17 @@ def _get_raw_text(pdf_path: Path, page_num: int, bbox: tuple) -> str:
         doc.close()
 
 
-async def _run_vision(
-    pdf_path: Path,
-    page_num: int,
-    bbox: tuple[float, float, float, float],
-    raw_text: str,
-    caption: str | None,
-) -> VisionExtractionResult:
-    """Run adversarial 4-agent vision extraction on a single table."""
-    import anthropic
-
-    client = anthropic.AsyncAnthropic(api_key=_API_KEY)
-    return await extract_table_vision(
-        pdf_path=pdf_path,
-        page_num=page_num,
-        bbox=bbox,
-        raw_text=raw_text,
-        caption=caption,
-        client=client,
+def _run_vision_batch(
+    specs: list[TableVisionSpec],
+) -> list[tuple[TableVisionSpec, VisionExtractionResult]]:
+    """Run adversarial 4-agent vision extraction on a list of tables via VisionAPI."""
+    api = VisionAPI(
+        api_key=_API_KEY,
         model="claude-haiku-4-5-20251001",
         dpi=300,
         padding_px=20,
     )
+    return api.extract_tables_sync(specs)
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +158,8 @@ def vision_results() -> dict[str, tuple[VisionExtractionResult, dict]]:
     if not _API_KEY:
         pytest.skip("ANTHROPIC_API_KEY not set")
 
-    results: dict[str, tuple[VisionExtractionResult, dict]] = {}
+    specs: list[TableVisionSpec] = []
+    gt_info: dict[str, dict] = {}
 
     for table_id, paper_key, table_num in TEST_TABLES:
         pdf_path = _resolve_pdf_path(paper_key)
@@ -183,19 +172,28 @@ def vision_results() -> dict[str, tuple[VisionExtractionResult, dict]]:
             continue
 
         raw_text = _get_raw_text(pdf_path, page_num, bbox)
-        result = asyncio.run(
-            _run_vision(pdf_path, page_num, bbox, raw_text, caption)
-        )
-
-        results[table_id] = (result, {
+        specs.append(TableVisionSpec(
+            table_id=table_id,
+            pdf_path=pdf_path,
+            page_num=page_num,
+            bbox=bbox,
+            raw_text=raw_text,
+            caption=caption,
+        ))
+        gt_info[table_id] = {
             "page_num": page_num,
             "caption": caption,
             "headers": gt_headers,
             "rows": gt_rows,
-        })
+        }
 
-    if not results:
+    if not specs:
         pytest.skip("No test PDFs found in Zotero library")
+
+    raw_results = _run_vision_batch(specs)
+    results: dict[str, tuple[VisionExtractionResult, dict]] = {}
+    for spec, result in raw_results:
+        results[spec.table_id] = (result, gt_info[spec.table_id])
 
     return results
 
@@ -213,10 +211,10 @@ def _require(vision_results: dict, table_id: str):
 
 
 class TestFallback:
-    """Verify traditional fallback works when vision is disabled."""
+    """Verify VisionAPI returns error result on authentication failure."""
 
-    def test_no_client_returns_error(self) -> None:
-        """extract_table_vision with client=None returns error result."""
+    def test_invalid_api_key_returns_error(self) -> None:
+        """VisionAPI with invalid api_key returns an error result, not an exception."""
         pdf_path = _resolve_pdf_path("Z9X4JVZ5")
         if pdf_path is None:
             pytest.skip("PDF not found")
@@ -226,27 +224,29 @@ class TestFallback:
         if bbox is None:
             pytest.skip("Pipeline found no table on page")
 
-        result = asyncio.run(
-            extract_table_vision(
-                pdf_path=pdf_path,
-                page_num=page_num,
-                bbox=bbox,
-                raw_text="test",
-                caption=caption,
-                client=None,
-            )
+        raw_text = _get_raw_text(pdf_path, page_num, bbox)
+        spec = TableVisionSpec(
+            table_id="Z9X4JVZ5_table_5",
+            pdf_path=pdf_path,
+            page_num=page_num,
+            bbox=bbox,
+            raw_text=raw_text,
+            caption=caption,
         )
+        api = VisionAPI(api_key="invalid-key-for-test")
+        results = api.extract_tables_sync([spec])
 
+        assert len(results) == 1
+        _spec, result = results[0]
         assert result.consensus is None
         assert result.error is not None
-        assert "No Anthropic client" in result.error
 
 
 class TestPNGRendering:
     """Verify PNG rendering produces valid images."""
 
     def test_render_produces_png(self) -> None:
-        """_render_table_png returns valid PNG bytes."""
+        """render_table_png returns valid PNG bytes."""
         pdf_path = _resolve_pdf_path("Z9X4JVZ5")
         if pdf_path is None:
             pytest.skip("PDF not found")
@@ -256,7 +256,7 @@ class TestPNGRendering:
         if bbox is None:
             pytest.skip("Pipeline found no table on page")
 
-        png_bytes, media_type = _render_table_png(
+        png_bytes, media_type = render_table_png(
             pdf_path, page_num, bbox, dpi=300, padding_px=20,
         )
 
