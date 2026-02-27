@@ -18,7 +18,7 @@ Every failure is logged. The final report is brutally honest.
 """
 from __future__ import annotations
 
-import asyncio
+
 import json
 import logging
 import os
@@ -37,6 +37,8 @@ from zotero_chunk_rag.feature_extraction.debug_db import (
     write_ground_truth_diff,
     write_method_result,
     write_pipeline_run,
+    write_vision_agent_result,
+    write_vision_consensus,
 )
 from zotero_chunk_rag.feature_extraction.ground_truth import (
     GROUND_TRUTH_DB_PATH,
@@ -408,10 +410,6 @@ def run_stress_test():
             corpus_items.append((item, short_name, gt))
             print(f"  [{short_name}] {item.title[:60]} — {item.pdf_path.name}")
 
-        if len(corpus_items) < 5:
-            print("FATAL: Not enough papers found. Aborting.")
-            return report, extractions
-
         # ===================================================================
         # PHASE 2: Extract and index all papers
         # ===================================================================
@@ -467,117 +465,112 @@ def run_stress_test():
 
         for item, short_name, gt in corpus_items:
             print(f"\n  Extracting [{short_name}]...", end=" ", flush=True)
-            try:
-                t0 = time.perf_counter()
-                extraction = extract_document(
-                    item.pdf_path,
-                    write_images=True,
-                    images_dir=figures_path / item.item_key,
-                )
-                t_extract = time.perf_counter() - t0
+            t0 = time.perf_counter()
+            extraction = extract_document(
+                item.pdf_path,
+                write_images=True,
+                images_dir=figures_path / item.item_key,
+            )
+            t_extract = time.perf_counter() - t0
 
-                # Chunk
-                chunks = chunker.chunk(
-                    extraction.full_markdown,
-                    extraction.pages,
-                    extraction.sections,
-                )
+            # Chunk
+            chunks = chunker.chunk(
+                extraction.full_markdown,
+                extraction.pages,
+                extraction.sections,
+            )
 
-                # Build doc metadata
-                journal_quartile = journal_ranker.lookup(item.publication)
-                h = hashlib.sha256()
-                with open(item.pdf_path, "rb") as f:
-                    h.update(f.read(65536))
-                pdf_hash = h.hexdigest()
+            # Build doc metadata
+            journal_quartile = journal_ranker.lookup(item.publication)
+            h = hashlib.sha256()
+            with open(item.pdf_path, "rb") as f:
+                h.update(f.read(65536))
+            pdf_hash = h.hexdigest()
 
-                doc_meta = {
-                    "title": item.title,
-                    "authors": item.authors,
-                    "year": item.year or 0,
-                    "citation_key": item.citation_key,
-                    "publication": item.publication,
-                    "journal_quartile": journal_quartile or "",
-                    "doi": item.doi,
-                    "tags": item.tags,
-                    "collections": item.collections,
-                    "pdf_hash": pdf_hash,
-                    "quality_grade": extraction.quality_grade,
-                }
+            doc_meta = {
+                "title": item.title,
+                "authors": item.authors,
+                "year": item.year or 0,
+                "citation_key": item.citation_key,
+                "publication": item.publication,
+                "journal_quartile": journal_quartile or "",
+                "doi": item.doi,
+                "tags": item.tags,
+                "collections": item.collections,
+                "pdf_hash": pdf_hash,
+                "quality_grade": extraction.quality_grade,
+            }
 
-                # Store text chunks
-                store.add_chunks(item.item_key, doc_meta, chunks)
+            # Store text chunks
+            store.add_chunks(item.item_key, doc_meta, chunks)
 
-                # Build reference map and enrich tables/figures with body-text context
-                # (mirrors production indexer pipeline)
-                from zotero_chunk_rag._reference_matcher import match_references, get_reference_context
-                from zotero_chunk_rag.pdf_processor import SYNTHETIC_CAPTION_PREFIX
-                ref_map = match_references(extraction.full_markdown, chunks, extraction.tables, extraction.figures)
-                _TAB_NUM_RE = re.compile(r"(?:Table|Tab\.?)\s+(\d+)", re.IGNORECASE)
-                _FIG_NUM_RE = re.compile(r"(?:Figure|Fig\.?)\s+(\d+)", re.IGNORECASE)
-                for table in extraction.tables:
-                    if table.caption and not table.caption.startswith(SYNTHETIC_CAPTION_PREFIX):
-                        m_cap = _TAB_NUM_RE.search(table.caption)
-                        if m_cap:
-                            ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "table", int(m_cap.group(1)))
-                            table.reference_context = ctx
-                for fig in extraction.figures:
-                    if fig.caption and not fig.caption.startswith(SYNTHETIC_CAPTION_PREFIX):
-                        m_cap = _FIG_NUM_RE.search(fig.caption)
-                        if m_cap:
-                            ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "figure", int(m_cap.group(1)))
-                            fig.reference_context = ctx
+            # Build reference map and enrich tables/figures with body-text context
+            # (mirrors production indexer pipeline)
+            from zotero_chunk_rag._reference_matcher import match_references, get_reference_context
+            from zotero_chunk_rag.pdf_processor import SYNTHETIC_CAPTION_PREFIX
+            ref_map = match_references(extraction.full_markdown, chunks, extraction.tables, extraction.figures)
+            _TAB_NUM_RE = re.compile(r"(?:Table|Tab\.?)\s+(\d+)", re.IGNORECASE)
+            _FIG_NUM_RE = re.compile(r"(?:Figure|Fig\.?)\s+(\d+)", re.IGNORECASE)
+            for table in extraction.tables:
+                if table.caption and not table.caption.startswith(SYNTHETIC_CAPTION_PREFIX):
+                    m_cap = _TAB_NUM_RE.search(table.caption)
+                    if m_cap:
+                        ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "table", int(m_cap.group(1)))
+                        table.reference_context = ctx
+            for fig in extraction.figures:
+                if fig.caption and not fig.caption.startswith(SYNTHETIC_CAPTION_PREFIX):
+                    m_cap = _FIG_NUM_RE.search(fig.caption)
+                    if m_cap:
+                        ctx = get_reference_context(extraction.full_markdown, chunks, ref_map, "figure", int(m_cap.group(1)))
+                        fig.reference_context = ctx
 
-                # Store tables
-                if extraction.tables:
-                    store.add_tables(item.item_key, doc_meta, extraction.tables, ref_map=ref_map)
+            # Store tables
+            if extraction.tables:
+                store.add_tables(item.item_key, doc_meta, extraction.tables, ref_map=ref_map)
 
-                # Store figures
-                if extraction.figures:
-                    store.add_figures(item.item_key, doc_meta, extraction.figures, ref_map=ref_map)
+            # Store figures
+            if extraction.figures:
+                store.add_figures(item.item_key, doc_meta, extraction.figures, ref_map=ref_map)
 
-                extractions[item.item_key] = (extraction, chunks, item, gt, short_name)
+            extractions[item.item_key] = (extraction, chunks, item, gt, short_name)
 
-                n_sections = len([s for s in extraction.sections if s.label != "preamble"])
-                section_labels = [s.label for s in extraction.sections if s.label not in ("preamble", "unknown")]
-                print(
-                    f"{t_extract:.1f}s | {len(extraction.pages)}pp | "
-                    f"{len(chunks)}ch | {len(extraction.tables)}tab | "
-                    f"{len(extraction.figures)}fig | "
-                    f"sections: {section_labels} | "
-                    f"grade: {extraction.quality_grade}"
-                )
+            n_sections = len([s for s in extraction.sections if s.label != "preamble"])
+            section_labels = [s.label for s in extraction.sections if s.label not in ("preamble", "unknown")]
+            print(
+                f"{t_extract:.1f}s | {len(extraction.pages)}pp | "
+                f"{len(chunks)}ch | {len(extraction.tables)}tab | "
+                f"{len(extraction.figures)}fig | "
+                f"sections: {section_labels} | "
+                f"grade: {extraction.quality_grade}"
+            )
 
-                # Build extraction summary for report
-                comp = extraction.completeness
-                issues_parts = []
-                if comp and comp.figures_missing > 0:
-                    issues_parts.append(f"{comp.figures_missing} figs missing")
-                if comp and comp.tables_missing > 0:
-                    issues_parts.append(f"{comp.tables_missing} tabs missing")
-                if comp and comp.unknown_sections > 0:
-                    issues_parts.append(f"{comp.unknown_sections} unknown sections")
-                if not any(s.label == "abstract" for s in extraction.sections):
-                    issues_parts.append("no abstract detected")
+            # Build extraction summary for report
+            comp = extraction.completeness
+            issues_parts = []
+            if comp and comp.figures_missing > 0:
+                issues_parts.append(f"{comp.figures_missing} figs missing")
+            if comp and comp.tables_missing > 0:
+                issues_parts.append(f"{comp.tables_missing} tabs missing")
+            if comp and comp.unknown_sections > 0:
+                issues_parts.append(f"{comp.unknown_sections} unknown sections")
+            if not any(s.label == "abstract" for s in extraction.sections):
+                issues_parts.append("no abstract detected")
 
-                n_real_tables = sum(1 for t in extraction.tables if not t.artifact_type)
-                n_artifact_tables = sum(1 for t in extraction.tables if t.artifact_type)
-                table_str = str(n_real_tables)
-                if n_artifact_tables:
-                    table_str += f" (+{n_artifact_tables} artifacts)"
+            n_real_tables = sum(1 for t in extraction.tables if not t.artifact_type)
+            n_artifact_tables = sum(1 for t in extraction.tables if t.artifact_type)
+            table_str = str(n_real_tables)
+            if n_artifact_tables:
+                table_str += f" (+{n_artifact_tables} artifacts)"
 
-                report.extraction_summaries.append({
-                    "name": short_name,
-                    "pages": len(extraction.pages),
-                    "sections": n_sections,
-                    "tables": table_str,
-                    "figures": len(extraction.figures),
-                    "grade": extraction.quality_grade,
-                    "issues": "; ".join(issues_parts) if issues_parts else "none",
-                })
-
-            except Exception as e:
-                print(f"FAILED: {e}")
-                report.errors.append(f"Extraction failed for {short_name}: {traceback.format_exc()}")
+            report.extraction_summaries.append({
+                "name": short_name,
+                "pages": len(extraction.pages),
+                "sections": n_sections,
+                "tables": table_str,
+                "figures": len(extraction.figures),
+                "grade": extraction.quality_grade,
+                "issues": "; ".join(issues_parts) if issues_parts else "none",
+            })
 
         t_total_index = time.perf_counter() - t_start
         report.timings["Total indexing"] = t_total_index
@@ -1105,74 +1098,70 @@ def run_stress_test():
 
         # Convert first page of one paper to image, make a new PDF from it,
         # and try to extract text
-        try:
-            import pymupdf
+        import pymupdf
 
-            ocr_path.mkdir(parents=True, exist_ok=True)
+        ocr_path.mkdir(parents=True, exist_ok=True)
 
-            # Pick a paper with clean text
-            test_item = None
-            test_short = None
-            for ik, (ext, ch, it, gt, sn) in extractions.items():
-                if len(ext.pages) >= 5:
-                    test_item = it
-                    test_short = sn
-                    break
+        # Pick a paper with clean text
+        test_item = None
+        test_short = None
+        for ik, (ext, ch, it, gt, sn) in extractions.items():
+            if len(ext.pages) >= 5:
+                test_item = it
+                test_short = sn
+                break
 
-            if test_item:
-                print(f"  Converting [{test_short}] pages 1-3 to images...")
-                src_doc = pymupdf.open(str(test_item.pdf_path))
+        if test_item:
+            print(f"  Converting [{test_short}] pages 1-3 to images...")
+            src_doc = pymupdf.open(str(test_item.pdf_path))
 
-                # Render pages to images at moderate DPI (simulates scanned doc)
-                img_pdf_path = ocr_path / "ocr_test.pdf"
-                img_doc = pymupdf.open()  # New empty PDF
+            # Render pages to images at moderate DPI (simulates scanned doc)
+            img_pdf_path = ocr_path / "ocr_test.pdf"
+            img_doc = pymupdf.open()  # New empty PDF
 
-                for page_idx in range(min(3, len(src_doc))):
-                    page = src_doc[page_idx]
-                    pix = page.get_pixmap(dpi=200)
-                    img_bytes = pix.tobytes("png")
+            for page_idx in range(min(3, len(src_doc))):
+                page = src_doc[page_idx]
+                pix = page.get_pixmap(dpi=200)
+                img_bytes = pix.tobytes("png")
 
-                    # Create a new page from the image
-                    img_page = img_doc.new_page(
-                        width=page.rect.width,
-                        height=page.rect.height,
-                    )
-                    img_page.insert_image(
-                        img_page.rect,
-                        stream=img_bytes,
-                    )
-
-                img_doc.save(str(img_pdf_path))
-                img_doc.close()
-                src_doc.close()
-
-                print(f"  Extracting text from image-only PDF...")
-                ocr_extraction = extract_document(img_pdf_path)
-
-                total_text = sum(len(p.markdown) for p in ocr_extraction.pages)
-                ocr_pages = ocr_extraction.stats.get("ocr_pages", 0)
-
-                report.add(
-                    "ocr-text-extraction",
-                    test_short,
-                    total_text > 100,
-                    f"OCR extracted {total_text} chars from {len(ocr_extraction.pages)} image pages. "
-                    f"OCR pages detected: {ocr_pages}",
-                    severity="MAJOR",
+                # Create a new page from the image
+                img_page = img_doc.new_page(
+                    width=page.rect.width,
+                    height=page.rect.height,
+                )
+                img_page.insert_image(
+                    img_page.rect,
+                    stream=img_bytes,
                 )
 
-                report.add(
-                    "ocr-page-detection",
-                    test_short,
-                    ocr_pages > 0,
-                    f"OCR page detection: {ocr_pages}/{len(ocr_extraction.pages)} pages flagged as OCR",
-                    severity="MINOR",
-                )
-            else:
-                report.errors.append("No suitable paper found for OCR test")
+            img_doc.save(str(img_pdf_path))
+            img_doc.close()
+            src_doc.close()
 
-        except Exception as e:
-            report.errors.append(f"OCR test failed: {traceback.format_exc()}")
+            print(f"  Extracting text from image-only PDF...")
+            ocr_extraction = extract_document(img_pdf_path)
+
+            total_text = sum(len(p.markdown) for p in ocr_extraction.pages)
+            ocr_pages = ocr_extraction.stats.get("ocr_pages", 0)
+
+            report.add(
+                "ocr-text-extraction",
+                test_short,
+                total_text > 100,
+                f"OCR extracted {total_text} chars from {len(ocr_extraction.pages)} image pages. "
+                f"OCR pages detected: {ocr_pages}",
+                severity="MAJOR",
+            )
+
+            report.add(
+                "ocr-page-detection",
+                test_short,
+                ocr_pages > 0,
+                f"OCR page detection: {ocr_pages}/{len(ocr_extraction.pages)} pages flagged as OCR",
+                severity="MINOR",
+            )
+        else:
+            raise RuntimeError("No suitable paper found for OCR test")
 
         # ===================================================================
         # PHASE 11: Edge case tests
@@ -1314,17 +1303,8 @@ def run_stress_test():
                     severity="MINOR",
                 )
 
-    except Exception as e:
-        report.errors.append(f"FATAL: {traceback.format_exc()}")
-        print(f"\nFATAL ERROR: {e}")
-        traceback.print_exc()
-
     finally:
-        # Cleanup
-        try:
-            shutil.rmtree(test_dir, ignore_errors=True)
-        except Exception:
-            pass
+        shutil.rmtree(test_dir, ignore_errors=True)
 
     return report, extractions
 
@@ -1637,7 +1617,17 @@ def write_debug_database(
 
     # --- per-method pipeline analysis ---
     print("\n  Running per-method pipeline analysis...")
-    _test_pipeline_methods(report, extractions, con)
+    try:
+        _test_pipeline_methods(report, extractions, con)
+    except Exception as exc:
+        import traceback
+        print(f"\n  [ERROR] _test_pipeline_methods() crashed: {exc}")
+        traceback.print_exc()
+        # Commit whatever was written before the crash
+        try:
+            con.commit()
+        except Exception:
+            pass
 
     # --- write any new test results from pipeline analysis ---
     # (The _test_pipeline_methods function adds MINOR assertions to the report.)
@@ -1739,23 +1729,35 @@ def _test_pipeline_methods(
         Open SQLite connection to the debug DB.
     """
     from zotero_chunk_rag.feature_extraction.models import TableContext
+    from zotero_chunk_rag.feature_extraction.vision_api import VisionAPI, TableVisionSpec
+
     _fill_rate = _compute_fill_rate
 
     pipeline = Pipeline(DEFAULT_CONFIG)
     gt_db_exists = Path(GROUND_TRUTH_DB_PATH).exists()
+    cost_log_path = Path(__file__).parent.parent / "vision_stress_costs.json"
 
-    # --- Vision client setup (optional) ---
-    _vision_client = None
-    try:
-        import anthropic as _anthropic_mod
-        _api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if _api_key:
-            _vision_client = _anthropic_mod.AsyncAnthropic(api_key=_api_key)
-    except ImportError:
-        pass
+    # --- Vision API setup ---
+    from zotero_chunk_rag.config import Config
+    _cfg = Config.load()
+    _api_key = _cfg.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+    if not _api_key:
+        raise RuntimeError(
+            "Vision API key required: set anthropic_api_key in config.json "
+            "or ANTHROPIC_API_KEY env var"
+        )
+    _vision_api = VisionAPI(
+        api_key=_api_key,
+        model="claude-haiku-4-5-20251001",
+        cost_log_path=cost_log_path,
+        cache=True,
+        dpi=300,
+        padding_px=20,
+    )
+    print(f"  [Vision] API enabled (batch mode)", flush=True)
 
     # Specs collected during serial loop for parallel vision phase
-    vision_specs: list[tuple[str, Path, int, tuple, str, str]] = []
+    vision_specs: list = []
 
     # Track which structure and cell methods produced results
     structure_method_table_counts: dict[str, int] = {}
@@ -1768,10 +1770,7 @@ def _test_pipeline_methods(
     for item_key, (extraction, chunks, item, gt, short_name) in extractions.items():
         import pymupdf
 
-        try:
-            doc = pymupdf.open(str(item.pdf_path))
-        except Exception:
-            continue
+        doc = pymupdf.open(str(item.pdf_path))
 
         try:
             for tab in extraction.tables:
@@ -1828,6 +1827,9 @@ def _test_pipeline_methods(
                             gt_accuracy = cmp.fuzzy_accuracy_pct
                         except KeyError:
                             gt_accuracy = None
+                        except Exception as gt_exc:
+                            print(f"\n  [WARN] GT comparison failed for {table_id} {struct_name}+{grid.method}: {gt_exc}")
+                            gt_accuracy = None
 
                     write_method_result(
                         con,
@@ -1867,118 +1869,154 @@ def _test_pipeline_methods(
                 )
 
                 # Collect spec for parallel vision phase
-                if _vision_client is not None:
-                    raw_text = page.get_text("text", clip=pymupdf.Rect(*tab.bbox))
-                    vision_specs.append((
-                        table_id,
-                        Path(item.pdf_path),
-                        tab.page_num,
-                        tab.bbox,
-                        raw_text,
-                        tab.caption or "",
-                    ))
+                raw_text = page.get_text("text", clip=pymupdf.Rect(*tab.bbox))
+                vision_specs.append(TableVisionSpec(
+                    table_id=table_id,
+                    pdf_path=Path(item.pdf_path),
+                    page_num=tab.page_num,
+                    bbox=tab.bbox,
+                    raw_text=raw_text,
+                    caption=tab.caption or "",
+                ))
 
         finally:
             doc.close()
 
-    # --- Phase 2: Parallel vision extraction ---
-    if _vision_client is not None and vision_specs:
+    # Commit serial loop data so it survives if vision phase crashes
+    con.commit()
+    print(f"  [Pipeline] Serial loop done: {total_tables_analysed} tables analysed, data committed.")
+
+    # --- Phase 2: Batch vision extraction via VisionAPI ---
+    if vision_specs:
         from zotero_chunk_rag.feature_extraction.vision_extract import (
-            extract_table_vision,
             vision_result_to_cell_grid,
         )
 
         n_specs = len(vision_specs)
         print(
-            f"\n  [Vision] Running {n_specs} tables in parallel "
-            f"(max 50 concurrent)...",
+            f"\n  [Vision] Running {n_specs} tables via Batch API "
+            f"(3 stages)...",
             end="",
             flush=True,
         )
 
-        async def _run_all_vision(
-            specs: list[tuple[str, Path, int, tuple, str, str]],
-            client,
-            semaphore: asyncio.Semaphore,
-        ):
-            async def _run_one(spec):
-                _, pdf_path, page_num, bbox, raw_text, caption = spec
-                async with semaphore:
-                    return await extract_table_vision(
-                        pdf_path=pdf_path,
-                        page_num=page_num,
-                        bbox=bbox,
-                        raw_text=raw_text,
-                        caption=caption,
-                        client=client,
-                        model="claude-haiku-4-5-20251001",
-                        dpi=300,
-                        padding_px=20,
-                    )
-
-            return await asyncio.gather(
-                *(_run_one(s) for s in specs),
-                return_exceptions=True,
-            )
-
-        sem = asyncio.Semaphore(50)
         t_vis_start = time.perf_counter()
-        vision_results = asyncio.run(
-            _run_all_vision(vision_specs, _vision_client, sem)
-        )
+        vision_results = _vision_api.extract_tables_sync(vision_specs, batch=True)
         vis_elapsed = time.perf_counter() - t_vis_start
 
         # Phase 3: Write vision results to DB
+        from zotero_chunk_rag.feature_extraction.vision_extract import _parse_agent_json
+        _role_names = ["transcriber", "y_verifier", "x_verifier", "synthesizer"]
         n_ok = 0
         n_err = 0
-        for spec, result in zip(vision_specs, vision_results):
-            table_id = spec[0]
-            if isinstance(result, Exception):
+        for spec, result in vision_results:
+            table_id = spec.table_id
+            if result.error is not None:
                 n_err += 1
-                print("v(ERR)", end="", flush=True)
+                print(f"v(ERR:{result.error[:40]})", end="", flush=True)
                 continue
 
-            grid = vision_result_to_cell_grid(result)
-            if grid is None:
-                n_err += 1
-                print("v(nil)", end="", flush=True)
-                continue
-
-            n_ok += 1
-            gt_accuracy: float | None = None
-            if gt_db_exists:
-                try:
-                    cmp = compare_extraction(
-                        GROUND_TRUTH_DB_PATH,
-                        table_id,
-                        list(grid.headers),
-                        [list(row) for row in grid.rows],
+            try:
+                # Write per-agent results (always, even if grid conversion fails)
+                for ai, ag in enumerate(result.agent_responses):
+                    role = _role_names[ai] if ai < len(_role_names) else f"agent_{ai}"
+                    parsed = _parse_agent_json(ag.raw_response) if ag.parse_success else None
+                    corrections = (parsed or {}).get("corrections") or []
+                    ag_acc = None
+                    if gt_db_exists and ag.parse_success and ag.headers:
+                        try:
+                            ag_cmp = compare_extraction(
+                                GROUND_TRUTH_DB_PATH, table_id,
+                                ag.headers, ag.rows,
+                            )
+                            ag_acc = ag_cmp.fuzzy_accuracy_pct
+                        except (KeyError, Exception) as gt_exc:
+                            if not isinstance(gt_exc, KeyError):
+                                print(f"\n  [WARN] GT comparison failed for {table_id} agent {role}: {gt_exc}")
+                    write_vision_agent_result(
+                        con, table_id=table_id, agent_idx=ai,
+                        model="claude-haiku-4-5-20251001",
+                        raw_response=ag.raw_response,
+                        headers_json=json.dumps(ag.headers),
+                        rows_json=json.dumps(ag.rows),
+                        table_label=ag.table_label,
+                        is_incomplete=ag.is_incomplete,
+                        incomplete_reason=ag.incomplete_reason,
+                        parse_success=ag.parse_success,
+                        execution_time_ms=None,
+                        agent_role=role,
+                        corrections_json=json.dumps(corrections) if corrections else None,
+                        num_corrections=len(corrections),
+                        cell_accuracy_pct=ag_acc,
+                        footnotes=ag.footnotes or None,
                     )
-                    gt_accuracy = cmp.fuzzy_accuracy_pct
-                except KeyError:
-                    gt_accuracy = None
 
-            quality = gt_accuracy if gt_accuracy is not None else (
-                sum(1 for row in grid.rows for c in row if c.strip())
-                / max(len(grid.rows) * len(grid.headers), 1)
-                * 100.0
-            )
+                # Write consensus summary
+                if result.consensus:
+                    c = result.consensus
+                    write_vision_consensus(
+                        con, table_id=table_id,
+                        shape_agreement=c.shape_agreement,
+                        winning_shape=f"{c.winning_shape[0]}x{c.winning_shape[1]}",
+                        agent_agreement_rate=c.agent_agreement_rate,
+                        num_disputed_cells=len(c.disputed_cells),
+                        disputed_cells_json=json.dumps(c.disputed_cells),
+                        consensus_label=c.table_label,
+                        consensus_footnotes=c.footnotes or None,
+                        render_attempts=result.render_attempts,
+                        fallback_to_traditional=False,
+                    )
 
-            write_method_result(
-                con,
-                table_id=table_id,
-                method_name=f"{grid.structure_method}+{grid.method}",
-                boundaries_json=json.dumps({
-                    "structure_method": grid.structure_method,
-                    "cell_method": grid.method,
-                    "col_boundaries": list(grid.col_boundaries),
-                    "row_boundaries": list(grid.row_boundaries),
-                }),
-                cell_grid_json=json.dumps(grid.to_dict()),
-                quality_score=quality,
-                execution_time_ms=None,
-            )
-            print("v", end="", flush=True)
+                # Write grid as method result
+                grid = vision_result_to_cell_grid(result)
+                if grid is None:
+                    n_err += 1
+                    print("v(nil)", end="", flush=True)
+                    continue
+
+                n_ok += 1
+                gt_accuracy: float | None = None
+                if gt_db_exists:
+                    try:
+                        cmp = compare_extraction(
+                            GROUND_TRUTH_DB_PATH,
+                            table_id,
+                            list(grid.headers),
+                            [list(row) for row in grid.rows],
+                        )
+                        gt_accuracy = cmp.fuzzy_accuracy_pct
+                    except (KeyError, Exception) as gt_exc:
+                        if not isinstance(gt_exc, KeyError):
+                            print(f"\n  [WARN] GT comparison failed for {table_id} vision grid: {gt_exc}")
+                        gt_accuracy = None
+
+                quality = gt_accuracy if gt_accuracy is not None else (
+                    sum(1 for row in grid.rows for c in row if c.strip())
+                    / max(len(grid.rows) * len(grid.headers), 1)
+                    * 100.0
+                )
+
+                write_method_result(
+                    con,
+                    table_id=table_id,
+                    method_name=f"{grid.structure_method}+{grid.method}",
+                    boundaries_json=json.dumps({
+                        "structure_method": grid.structure_method,
+                        "cell_method": grid.method,
+                        "col_boundaries": list(grid.col_boundaries),
+                        "row_boundaries": list(grid.row_boundaries),
+                    }),
+                    cell_grid_json=json.dumps(grid.to_dict()),
+                    quality_score=quality,
+                    execution_time_ms=None,
+                )
+                print("v", end="", flush=True)
+
+            except Exception as exc:
+                import traceback
+                n_err += 1
+                print(f"\n  [ERROR] Vision DB write failed for {table_id}: {exc}")
+                traceback.print_exc()
 
         print(
             f"\n  [Vision] Done: {n_ok} succeeded, {n_err} failed, "
@@ -2216,10 +2254,7 @@ def _build_variant_comparison(
     for item_key, (extraction, chunks, item, gt, short_name) in extractions.items():
         import pymupdf
 
-        try:
-            doc = pymupdf.open(str(item.pdf_path))
-        except Exception:
-            continue
+        doc = pymupdf.open(str(item.pdf_path))
 
         try:
             tables_processed = 0
@@ -2246,10 +2281,7 @@ def _build_variant_comparison(
                 for config_name, config in named_configs.items():
                     # Suppress weights loading for variant comparison by using a
                     # non-existent path so each config runs with its own defaults
-                    pipeline = Pipeline(
-                        config,
-                        weights_path=Path("__nonexistent_weights__.json"),
-                    )
+                    pipeline = Pipeline(config)
                     ctx = TableContext(
                         page=page,
                         page_num=tab.page_num,
@@ -2258,13 +2290,7 @@ def _build_variant_comparison(
                     )
 
                     t0 = time.perf_counter()
-                    try:
-                        result = pipeline.extract(ctx)
-                    except Exception:
-                        variant_results[config_name].append(0.0)
-                        variant_times[config_name].append(0.0)
-                        detail[config_name] = 0.0
-                        continue
+                    result = pipeline.extract(ctx)
                     elapsed = time.perf_counter() - t0
                     variant_times[config_name].append(elapsed)
 

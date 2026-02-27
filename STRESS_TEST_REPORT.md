@@ -1,14 +1,14 @@
 # Stress Test Report: zotero-chunk-rag
 
-**Date**: 2026-02-26 21:38
+**Date**: 2026-02-27 13:52
 **Corpus**: 10 papers from live Zotero library
 
 ## Executive Summary
 
 - **Total tests**: 290
-- **Passed**: 268 (92%)
-- **Failed**: 22
-- **Major failures**: 7
+- **Passed**: 259 (89%)
+- **Failed**: 31
+- **Major failures**: 9
 
 > **VERDICT**: This tool is NOT reliable for production research use.
 > A researcher depending on this tool WILL miss important results.
@@ -17,7 +17,7 @@
 
 | Operation | Time |
 |-----------|------|
-| Total indexing | 540.7s |
+| Total indexing | 484.4s |
 
 ## Extraction Quality per Paper
 
@@ -80,6 +80,14 @@ Table 0: 39/225 cells non-empty (17%). Caption: 'Table 1 Distribution of Sex by 
 
 Table 1: 93/216 cells non-empty (43%). Caption: 'Table 2 Distribution of Sex by Histology among 13,881 patien'
 
+### ! [MINOR] table-content-quality — laird-fick-polyps/table-2
+
+Table 2: 41/200 cells non-empty (20%). Caption: 'Table 3 Prevalence of sessile serrated adenomas, 2007-2012 i'
+
+### ! [MINOR] table-content-quality — laird-fick-polyps/table-3
+
+Table 3: 73/200 cells non-empty (36%). Caption: 'Table 4 Odds ratios and 95 % confidence intervals for associ'
+
 ### ! [MINOR] section-detection — helm-coregulation
 
 Expected section 'introduction' — MISSING. Got: ['conclusion', 'discussion', 'methods', 'preamble', 'references', 'results', 'unknown']
@@ -88,17 +96,21 @@ Expected section 'introduction' — MISSING. Got: ['conclusion', 'discussion', '
 
 Abstract NOT detected
 
-### !!! [MAJOR] table-dimensions-sanity — helm-coregulation
-
-2 tables are 1x1 (degenerate)
-
 ### ! [MINOR] table-content-quality — roland-emg-filter/table-0
 
-Table 0: 35/88 cells non-empty (40%). Caption: 'Uncaptioned table on page 5'
+Table 0: 126/462 cells non-empty (27%). Caption: 'Uncaptioned table on page 5'
 
 ### ! [MINOR] table-content-quality — roland-emg-filter/table-2
 
-Table 2: 71/154 cells non-empty (46%). Caption: 'Table 2. Floating-point highpass filter coefficients.'
+Table 2: 199/550 cells non-empty (36%). Caption: 'Table 2. Floating-point highpass filter coefficients.'
+
+### !!! [MAJOR] table-content-quality — roland-emg-filter/table-5
+
+Table 5: 9/55 cells non-empty (16%). Caption: 'Table 5. Runtime per sample of filters in C implementation a'
+
+### ! [MINOR] table-content-quality — roland-emg-filter/table-6
+
+Table 6: 20/55 cells non-empty (36%). Caption: 'Table 7. Effect of reducing sampling and clock frequency on '
 
 ### !!! [MAJOR] orphan-tables — roland-emg-filter
 
@@ -106,11 +118,27 @@ Table 2: 71/154 cells non-empty (46%). Caption: 'Table 2. Floating-point highpas
 
 ### !!! [MAJOR] table-dimensions-sanity — roland-emg-filter
 
-2 tables are 1x1 (degenerate)
+1 tables are 1x1 (degenerate)
 
 ### ! [MINOR] abstract-detection — friston-life
 
 Abstract NOT detected
+
+### !!! [MAJOR] table-content-quality — fortune-impedance/table-1
+
+Table 1: 31/204 cells non-empty (15%). Caption: 'Table 3 Error between the custom impedance analyser (CIA) an'
+
+### ! [MINOR] table-content-quality — fortune-impedance/table-2
+
+Table 2: 62/216 cells non-empty (29%). Caption: 'Table 2 Error between the custom impedance analyser (CIA) an'
+
+### ! [MINOR] table-content-quality — fortune-impedance/table-3
+
+Table 3: 292/689 cells non-empty (42%). Caption: 'Table 4 Electrode–skin impedance imbalance quantified using '
+
+### !!! [MAJOR] table-content-quality — fortune-impedance/table-4
+
+Table 4: 80/689 cells non-empty (12%). Caption: 'Table 5 Mean electrode–skin impedance imbalance and imbalanc'
 
 ### ! [MINOR] abstract-detection — fortune-impedance
 
@@ -124,6 +152,14 @@ Abstract NOT detected
 
 Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'methods', 'references', 'unknown']
 
+### ! [MINOR] table-content-quality — reyes-lf-hrv/table-2
+
+Table 2: 61/280 cells non-empty (22%). Caption: 'Table 4. Correlations of HRV Parameters Obtained by the Auto'
+
+### ! [MINOR] table-content-quality — reyes-lf-hrv/table-3
+
+Table 3: 57/280 cells non-empty (20%). Caption: 'Table 3. Correlations of HRV Parameters Obtained by Fast Fou'
+
 ## Passes
 
 | Test | Paper | Detail |
@@ -131,13 +167,13 @@ Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'me
 | section-detection | active-inference-tutorial | Expected section 'introduction' — FOUND |
 | section-detection | active-inference-tutorial | Expected section 'conclusion' — FOUND |
 | table-extraction | active-inference-tutorial | Expected tables — found 7 |
-| table-content-quality | active-inference-tutorial/table-0 | Table 0: 7/7 cells non-empty (100%). Caption: 'Table 1 Model variables.' |
-| table-content-quality | active-inference-tutorial/table-1 | Table 1: 2/2 cells non-empty (100%). Caption: 'Table 1 (continued).' |
-| table-content-quality | active-inference-tutorial/table-2 | Table 2: 8/8 cells non-empty (100%). Caption: 'Table 2 Matrix formulation of equ |
-| table-content-quality | active-inference-tutorial/table-3 | Table 3: 6/6 cells non-empty (100%). Caption: 'Table 2 (continued).' |
-| table-content-quality | active-inference-tutorial/table-4 | Table 4: 2/2 cells non-empty (100%). Caption: 'Table 2 (continued).' |
-| table-content-quality | active-inference-tutorial/table-5 | Table 5: 11/11 cells non-empty (100%). Caption: 'Table 3 Output fields for spm_M |
-| table-content-quality | active-inference-tutorial/table-6 | Table 6: 4/4 cells non-empty (100%). Caption: 'Table 3 (continued).' |
+| table-content-quality | active-inference-tutorial/table-0 | Table 0: 23/27 cells non-empty (85%). Caption: 'Table 1 Model variables.' |
+| table-content-quality | active-inference-tutorial/table-1 | Table 1: 7/9 cells non-empty (78%). Caption: 'Table 1 (continued).' |
+| table-content-quality | active-inference-tutorial/table-2 | Table 2: 121/180 cells non-empty (67%). Caption: 'Table 2 Matrix formulation of  |
+| table-content-quality | active-inference-tutorial/table-3 | Table 3: 106/192 cells non-empty (55%). Caption: 'Table 2 (continued).' |
+| table-content-quality | active-inference-tutorial/table-4 | Table 4: 10/12 cells non-empty (83%). Caption: 'Table 2 (continued).' |
+| table-content-quality | active-inference-tutorial/table-5 | Table 5: 58/60 cells non-empty (97%). Caption: 'Table 3 Output fields for spm_MD |
+| table-content-quality | active-inference-tutorial/table-6 | Table 6: 16/16 cells non-empty (100%). Caption: 'Table 3 (continued).' |
 | figure-extraction | active-inference-tutorial | Expected figures — found 17 |
 | figure-caption-rate | active-inference-tutorial | 17/17 figures have captions (100%) |
 | completeness-grade | active-inference-tutorial | Grade: B / Figs: 17 found / 18 captioned / 1 missing / Tables: 7 found / 6 capti |
@@ -175,8 +211,6 @@ Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'me
 | section-detection | laird-fick-polyps | Expected section 'results' — FOUND |
 | section-detection | laird-fick-polyps | Expected section 'discussion' — FOUND |
 | table-extraction | laird-fick-polyps | Expected tables — found 5 |
-| table-content-quality | laird-fick-polyps/table-2 | Table 2: 3/3 cells non-empty (100%). Caption: 'Table 3 Prevalence of sessile ser |
-| table-content-quality | laird-fick-polyps/table-3 | Table 3: 3/3 cells non-empty (100%). Caption: 'Table 4 Odds ratios and 95 % conf |
 | table-content-quality | laird-fick-polyps/table-4 | Table 4: 63/66 cells non-empty (95%). Caption: 'Table 5 Distribution of polyps b |
 | completeness-grade | laird-fick-polyps | Grade: A / Figs: 3 found / 3 captioned / 0 missing / Tables: 5 found / 5 caption |
 | abstract-detection | laird-fick-polyps | Abstract detected |
@@ -190,12 +224,13 @@ Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'me
 | section-detection | helm-coregulation | Expected section 'results' — FOUND |
 | section-detection | helm-coregulation | Expected section 'discussion' — FOUND |
 | table-extraction | helm-coregulation | Expected tables — found 2 |
-| table-content-quality | helm-coregulation/table-0 | Table 0: 1/1 cells non-empty (100%). Caption: 'Table 1 Comparisons of Model Fit  |
-| table-content-quality | helm-coregulation/table-1 | Table 1: 1/1 cells non-empty (100%). Caption: 'Table 2 Coefficients From Best-Fi |
+| table-content-quality | helm-coregulation/table-0 | Table 0: 44/44 cells non-empty (100%). Caption: 'Table 1 Comparisons of Model Fi |
+| table-content-quality | helm-coregulation/table-1 | Table 1: 44/70 cells non-empty (63%). Caption: 'Table 2 Coefficients From Best-F |
 | figure-extraction | helm-coregulation | Expected figures — found 2 |
 | figure-caption-rate | helm-coregulation | 2/2 figures have captions (100%) |
 | completeness-grade | helm-coregulation | Grade: A / Figs: 2 found / 2 captioned / 0 missing / Tables: 2 found / 2 caption |
 | content-readability | helm-coregulation | 0 tables with readability issues |
+| table-dimensions-sanity | helm-coregulation | 0 tables are 1x1 (degenerate) |
 | caption-encoding-quality | helm-coregulation | 0 captions with encoding artifacts |
 | caption-number-continuity | helm-coregulation | Figure gaps: none, Table gaps: none |
 | duplicate-captions | helm-coregulation | 0 duplicate caption(s) found |
@@ -206,10 +241,8 @@ Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'me
 | section-detection | roland-emg-filter | Expected section 'conclusion' — FOUND |
 | table-extraction | roland-emg-filter | Expected tables — found 9 |
 | table-content-quality | roland-emg-filter/table-1 | Table 1: 81/81 cells non-empty (100%). Caption: 'Table 1. Floating-point comb fi |
-| table-content-quality | roland-emg-filter/table-3 | Table 3: 6/10 cells non-empty (60%). Caption: 'Table 3. Poles of comb filters wi |
+| table-content-quality | roland-emg-filter/table-3 | Table 3: 13/24 cells non-empty (54%). Caption: 'Table 3. Poles of comb filters w |
 | table-content-quality | roland-emg-filter/table-4 | Table 4: 12/12 cells non-empty (100%). Caption: 'Table 4. Poles of highpass filt |
-| table-content-quality | roland-emg-filter/table-5 | Table 5: 3/4 cells non-empty (75%). Caption: 'Table 5. Runtime per sample of fil |
-| table-content-quality | roland-emg-filter/table-6 | Table 6: 1/1 cells non-empty (100%). Caption: 'Table 7. Effect of reducing sampl |
 | table-content-quality | roland-emg-filter/table-7 | Table 7: 26/26 cells non-empty (100%). Caption: 'Abbreviations' |
 | table-content-quality | roland-emg-filter/table-8 | Table 8: 1/1 cells non-empty (100%). Caption: 'Table 6. Comparison of runtime pe |
 | figure-extraction | roland-emg-filter | Expected figures — found 17 |
@@ -256,11 +289,7 @@ Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'me
 | section-detection | fortune-impedance | Expected section 'methods' — FOUND |
 | section-detection | fortune-impedance | Expected section 'results' — FOUND |
 | table-extraction | fortune-impedance | Expected tables — found 6 |
-| table-content-quality | fortune-impedance/table-0 | Table 0: 2/2 cells non-empty (100%). Caption: 'Table 1 Component values used for |
-| table-content-quality | fortune-impedance/table-1 | Table 1: 3/3 cells non-empty (100%). Caption: 'Table 3 Error between the custom  |
-| table-content-quality | fortune-impedance/table-2 | Table 2: 3/3 cells non-empty (100%). Caption: 'Table 2 Error between the custom  |
-| table-content-quality | fortune-impedance/table-3 | Table 3: 14/14 cells non-empty (100%). Caption: 'Table 4 Electrode–skin impedanc |
-| table-content-quality | fortune-impedance/table-4 | Table 4: 6/6 cells non-empty (100%). Caption: 'Table 5 Mean electrode–skin imped |
+| table-content-quality | fortune-impedance/table-0 | Table 0: 21/24 cells non-empty (88%). Caption: 'Table 1 Component values used fo |
 | table-content-quality | fortune-impedance/table-5 | Table 5: 1/1 cells non-empty (100%). Caption: 'Table 6 Mean and standard deviati |
 | figure-extraction | fortune-impedance | Expected figures — found 7 |
 | figure-caption-rate | fortune-impedance | 7/7 figures have captions (100%) |
@@ -273,10 +302,8 @@ Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'me
 | figure-images-saved | fortune-impedance | 7/7 figure images saved to disk |
 | section-detection | reyes-lf-hrv | Expected section 'conclusion' — FOUND |
 | table-extraction | reyes-lf-hrv | Expected tables — found 5 |
-| table-content-quality | reyes-lf-hrv/table-0 | Table 0: 2/2 cells non-empty (100%). Caption: 'Table 1. Means and Standard Devia |
-| table-content-quality | reyes-lf-hrv/table-1 | Table 1: 2/2 cells non-empty (100%). Caption: 'Table 2. Means and Standard Devia |
-| table-content-quality | reyes-lf-hrv/table-2 | Table 2: 2/2 cells non-empty (100%). Caption: 'Table 4. Correlations of HRV Para |
-| table-content-quality | reyes-lf-hrv/table-3 | Table 3: 2/2 cells non-empty (100%). Caption: 'Table 3. Correlations of HRV Para |
+| table-content-quality | reyes-lf-hrv/table-0 | Table 0: 49/54 cells non-empty (91%). Caption: 'Table 1. Means and Standard Devi |
+| table-content-quality | reyes-lf-hrv/table-1 | Table 1: 25/30 cells non-empty (83%). Caption: 'Table 2. Means and Standard Devi |
 | table-content-quality | reyes-lf-hrv/table-4 | Table 4: 90/90 cells non-empty (100%). Caption: 'Table 5. Hypothetical Database  |
 | figure-extraction | reyes-lf-hrv | Expected figures — found 2 |
 | figure-caption-rate | reyes-lf-hrv | 2/2 figures have captions (100%) |
@@ -309,22 +336,22 @@ Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'me
 | semantic-search-ranking | fortune-impedance | Ranked 1/10 for its own core content query |
 | semantic-search-recall | reyes-lf-hrv | Query: 'low frequency heart rate variability sympathetic' — found at rank 1/10 ( |
 | semantic-search-ranking | reyes-lf-hrv | Ranked 1/10 for its own core content query |
-| table-search-recall | active-inference-tutorial | Query: 'algorithm update rules' — found 6 matching table(s), best score 0.300, c |
-| table-markdown-quality | active-inference-tutorial | Table markdown has pipes and 11 lines. Preview: **Table 2 Matrix formulation of  |
+| table-search-recall | active-inference-tutorial | Query: 'algorithm update rules' — found 6 matching table(s), best score 0.280, c |
+| table-markdown-quality | active-inference-tutorial | Table markdown has pipes and 15 lines. Preview: **Table 2 Matrix formulation of  |
 | table-search-recall | hallett-tms-primer | Query: 'stimulation parameters coil' — found 1 matching table(s), best score 0.3 |
 | table-markdown-quality | hallett-tms-primer | Table markdown has pipes and 7 lines. Preview: **Table 1. Summary of Noninvasive |
 | table-search-recall | laird-fick-polyps | Query: 'polyp location demographics patient' — found 5 matching table(s), best s |
 | table-markdown-quality | laird-fick-polyps | Table markdown has pipes and 14 lines. Preview: **Table 5 Distribution of polyps |
-| table-search-recall | helm-coregulation | Query: 'correlation coefficient RSA' — found 1 matching table(s), best score 0.5 |
-| table-markdown-quality | helm-coregulation | Table markdown has pipes and 9 lines. Preview: **Table 2 Coefficients From Best- |
-| table-search-recall | roland-emg-filter | Query: 'power consumption filter' — found 8 matching table(s), best score 0.425, |
-| table-markdown-quality | roland-emg-filter | Table markdown has pipes and 4 lines. Preview: **Table 7. Effect of reducing sam |
+| table-search-recall | helm-coregulation | Query: 'correlation coefficient RSA' — found 1 matching table(s), best score 0.3 |
+| table-markdown-quality | helm-coregulation | Table markdown has pipes and 42 lines. Preview: **Table 2 Coefficients From Best |
+| table-search-recall | roland-emg-filter | Query: 'power consumption filter' — found 7 matching table(s), best score 0.411, |
+| table-markdown-quality | roland-emg-filter | Table markdown has pipes and 14 lines. Preview: **Table 5. Runtime per sample of |
 | table-search-recall | yang-ppv-meta | Query: 'sensitivity specificity diagnostic' — found 2 matching table(s), best sc |
 | table-markdown-quality | yang-ppv-meta | Table markdown has pipes and 25 lines. Preview: **Table 3 Diagnostic performance |
 | table-search-recall | fortune-impedance | Query: 'impedance measurement electrode' — found 6 matching table(s), best score |
 | table-markdown-quality | fortune-impedance | Table markdown has pipes and 2 lines. Preview: **Table 6 Mean and standard devia |
-| table-search-recall | reyes-lf-hrv | Query: 'autonomic measures' — found 4 matching table(s), best score 0.380, capti |
-| table-markdown-quality | reyes-lf-hrv | Table markdown has pipes and 5 lines. Preview: **Table 3. Correlations of HRV Pa |
+| table-search-recall | reyes-lf-hrv | Query: 'autonomic measures' — found 5 matching table(s), best score 0.442, capti |
+| table-markdown-quality | reyes-lf-hrv | Table markdown has pipes and 31 lines. Preview: **Table 4. Correlations of HRV P |
 | figure-search-recall | active-inference-tutorial | Query: 'generative model graphical' — found 10 matching figure(s), best score 0. |
 | figure-search-recall | huang-emd-1998 | Query: 'intrinsic mode function' — found 8 matching figure(s), best score 0.501, |
 | figure-search-recall | hallett-tms-primer | Query: 'magnetic field coil' — found 5 matching figure(s), best score 0.597, cap |
@@ -340,7 +367,7 @@ Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'me
 | author-filter | laird-fick-polyps | Filter author='laird' — target paper found (31 total results after filter) |
 | author-filter | helm-coregulation | Filter author='helm' — target paper found (19 total results after filter) |
 | author-filter | roland-emg-filter | Filter author='roland' — target paper found (47 total results after filter) |
-| author-filter | friston-life | Filter author='friston' — target paper found (41 total results after filter) |
+| author-filter | friston-life | Filter author='friston' — target paper found (42 total results after filter) |
 | author-filter | yang-ppv-meta | Filter author='yang' — target paper found (33 total results after filter) |
 | author-filter | fortune-impedance | Filter author='fortune' — target paper found (43 total results after filter) |
 | author-filter | reyes-lf-hrv | Filter author='reyes' — target paper found (46 total results after filter) |
@@ -355,8 +382,8 @@ Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'me
 | context-adds-value | laird-fick-polyps | Full context (7703 chars) vs hit (1576 chars) |
 | context-expansion | helm-coregulation | Context expansion: before=0, after=2, full_context=4450 chars |
 | context-adds-value | helm-coregulation | Full context (4450 chars) vs hit (1600 chars) |
-| context-expansion | roland-emg-filter | Context expansion: before=4, after=2, full_context=9827 chars |
-| context-adds-value | roland-emg-filter | Full context (9827 chars) vs hit (1503 chars) |
+| context-expansion | roland-emg-filter | Context expansion: before=4, after=2, full_context=10058 chars |
+| context-adds-value | roland-emg-filter | Full context (10058 chars) vs hit (1503 chars) |
 | context-expansion | friston-life | Context expansion: before=2, after=2, full_context=7897 chars |
 | context-adds-value | friston-life | Full context (7897 chars) vs hit (1591 chars) |
 | context-expansion | yang-ppv-meta | Context expansion: before=2, after=2, full_context=8007 chars |
@@ -400,126 +427,3 @@ Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'me
 ## OCR Pathway Test
 
 _(See OCR test results in the test output above)_
-
-## Ground Truth Comparison
-
-| Paper | Table ID | Fuzzy Accuracy | Precision | Recall | Splits | Merges | Cell Diffs |
-|-------|----------|----------------|-----------|--------|--------|--------|------------|
-| laird-fick-polyps | 5SIZVS65_table_1 | 84.1% | 76.2% | 93.7% | 1 | 0 | 0 |
-| laird-fick-polyps | 5SIZVS65_table_2 | 88.6% | 82.4% | 95.8% | 0 | 0 | 0 |
-| laird-fick-polyps | 5SIZVS65_table_3 | 13.1% | 39.2% | 7.8% | 0 | 0 | 1 |
-| laird-fick-polyps | 5SIZVS65_table_4 | 5.2% | 35.7% | 2.8% | 0 | 0 | 2 |
-| laird-fick-polyps | 5SIZVS65_table_5 | 96.2% | 94.1% | 98.4% | 1 | 0 | 0 |
-| helm-coregulation | 9GKLLJH9_table_1 | 1.2% | 12.8% | 0.6% | 0 | 0 | 0 |
-| helm-coregulation | 9GKLLJH9_table_2 | 1.1% | 19.2% | 0.6% | 0 | 0 | 0 |
-| reyes-lf-hrv | AQ3D94VC_table_1 | 0.7% | 11.1% | 0.4% | 0 | 0 | 2 |
-| reyes-lf-hrv | AQ3D94VC_table_2 | 1.5% | 17.6% | 0.8% | 0 | 0 | 2 |
-| reyes-lf-hrv | AQ3D94VC_table_3 | 0.8% | 12.6% | 0.4% | 0 | 0 | 2 |
-| reyes-lf-hrv | AQ3D94VC_table_4 | 0.8% | 12.7% | 0.4% | 0 | 0 | 2 |
-| reyes-lf-hrv | AQ3D94VC_table_5 | 100.0% | 100.0% | 100.0% | 0 | 0 | 0 |
-| hallett-tms-primer | C626CYVT_table_1 | 87.1% | 98.0% | 78.4% | 0 | 0 | 0 |
-| yang-ppv-meta | DPYRZTFI_table_1 | 99.8% | 99.8% | 99.8% | 0 | 0 | 1 |
-| yang-ppv-meta | DPYRZTFI_table_2 | 89.1% | 91.3% | 87.1% | 1 | 0 | 0 |
-| yang-ppv-meta | DPYRZTFI_table_3 | 100.0% | 100.0% | 100.0% | 0 | 0 | 0 |
-| active-inference-tutorial | SCPXVBLY_table_1 | 37.5% | 68.0% | 25.9% | 0 | 0 | 0 |
-| active-inference-tutorial | SCPXVBLY_table_1_p16 | 31.3% | 62.5% | 20.8% | 0 | 0 | 0 |
-| active-inference-tutorial | SCPXVBLY_table_2 | 24.0% | 33.3% | 18.7% | 0 | 0 | 0 |
-| active-inference-tutorial | SCPXVBLY_table_2_p19 | 17.2% | 25.8% | 12.9% | 0 | 0 | 0 |
-| active-inference-tutorial | SCPXVBLY_table_2_p20 | 19.8% | 49.4% | 12.4% | 0 | 0 | 0 |
-| active-inference-tutorial | SCPXVBLY_table_3 | 22.4% | 56.0% | 14.0% | 0 | 0 | 0 |
-| active-inference-tutorial | SCPXVBLY_table_3_p31 | 17.5% | 43.8% | 11.0% | 0 | 0 | 0 |
-| fortune-impedance | VP3NJ74M_table_1 | 2.1% | 11.0% | 1.2% | 0 | 0 | 0 |
-| fortune-impedance | VP3NJ74M_table_2 | 2.7% | 9.9% | 1.6% | 0 | 0 | 0 |
-| fortune-impedance | VP3NJ74M_table_3 | 1.9% | 15.2% | 1.0% | 0 | 0 | 0 |
-| fortune-impedance | VP3NJ74M_table_4 | 3.1% | 26.8% | 1.7% | 0 | 0 | 0 |
-| fortune-impedance | VP3NJ74M_table_5 | 5.1% | 9.9% | 3.5% | 0 | 0 | 0 |
-| fortune-impedance | VP3NJ74M_table_6 | 0.5% | 5.3% | 0.3% | 0 | 0 | 0 |
-| huang-emd-1998 | XIAINRVS_orphan_p1_t0 | 0.0% | 0.0% | 0.0% | 0 | 0 | 0 |
-| huang-emd-1998 | XIAINRVS_orphan_p2_t1 | 0.0% | 0.0% | 0.0% | 0 | 0 | 0 |
-| friston-life | YMWV46JA_table_1 | 33.8% | 26.0% | 48.3% | 0 | 0 | 0 |
-| roland-emg-filter | Z9X4JVZ5_orphan_p5_t0 | 0.0% | 0.0% | 0.0% | 0 | 0 | 0 |
-| roland-emg-filter | Z9X4JVZ5_table_1 | 100.0% | 100.0% | 100.0% | 0 | 0 | 0 |
-| roland-emg-filter | Z9X4JVZ5_table_2 | 12.6% | 17.1% | 9.9% | 0 | 0 | 0 |
-| roland-emg-filter | Z9X4JVZ5_table_3 | 29.2% | 42.0% | 22.4% | 0 | 0 | 0 |
-| roland-emg-filter | Z9X4JVZ5_table_4 | 56.2% | 79.6% | 43.4% | 0 | 0 | 5 |
-| roland-emg-filter | Z9X4JVZ5_table_5 | 36.0% | 67.6% | 24.6% | 0 | 0 | 4 |
-| roland-emg-filter | Z9X4JVZ5_table_6 | 3.4% | 20.5% | 1.9% | 0 | 0 | 0 |
-| roland-emg-filter | Z9X4JVZ5_table_7 | 2.7% | 17.7% | 1.5% | 0 | 0 | 0 |
-
-**Overall corpus fuzzy accuracy**: 30.7% (40 tables compared)
-
-
-## Pipeline Depth Report
-
-### Per-Method Win Rates
-
-**Structure method wins** (how often each method's boundaries produce the best cell accuracy):
-
-| Structure Method | Wins | Participated | Win Rate |
-|-----------------|------|-------------|----------|
-| vision_haiku_consensus | 25 | 40 | 62% |
-| pymupdf_lines | 11 | 80 | 14% |
-| pymupdf_text | 5 | 80 | 6% |
-
-**Cell method wins** (how often each method is selected as best):
-
-| Cell Method | Wins | Participated | Win Rate |
-|------------|------|-------------|----------|
-| vision_consensus | 25 | 40 | 62% |
-| rawdict | 13 | 150 | 9% |
-| word_assignment | 3 | 150 | 2% |
-
-### Combination Value
-
-Comparison of best-single-method accuracy vs pipeline (consensus boundaries) accuracy:
-
-- **Avg best-single-method accuracy**: 81.4%
-- **Avg pipeline (consensus) accuracy**: 30.7%
-- **Delta (positive = combination helps)**: -50.7%
-- **Tables compared**: 40
-
-### Per-Table Accuracy Chain
-
-| Table ID | Best Single Method | Best Accuracy | Pipeline Accuracy | Delta |
-|----------|-------------------|---------------|-------------------|-------|
-| SCPXVBLY_table_1 | vision_haiku_consensus+vision_consensus | 81.3% | 37.5% | -43.8% |
-| SCPXVBLY_table_1_p16 | vision_haiku_consensus+vision_consensus | 95.6% | 31.3% | -64.3% |
-| SCPXVBLY_table_2 | vision_haiku_consensus+vision_consensus | 74.5% | 24.0% | -50.5% |
-| SCPXVBLY_table_2_p19 | vision_haiku_consensus+vision_consensus | 68.3% | 17.2% | -51.1% |
-| SCPXVBLY_table_2_p20 | vision_haiku_consensus+vision_consensus | 81.0% | 19.8% | -61.2% |
-| SCPXVBLY_table_3 | vision_haiku_consensus+vision_consensus | 99.5% | 22.4% | -77.1% |
-| SCPXVBLY_table_3_p31 | vision_haiku_consensus+vision_consensus | 100.0% | 17.5% | -82.5% |
-| XIAINRVS_orphan_p1_t0 | pymupdf_lines+rawdict | 0.0% | 0.0% | +0.0% |
-| XIAINRVS_orphan_p2_t1 | pymupdf_lines+rawdict | 0.0% | 0.0% | +0.0% |
-| C626CYVT_table_1 | vision_haiku_consensus+vision_consensus | 100.0% | 87.1% | -12.9% |
-| 5SIZVS65_table_1 | vision_haiku_consensus+vision_consensus | 97.0% | 84.1% | -12.9% |
-| 5SIZVS65_table_2 | vision_haiku_consensus+vision_consensus | 98.2% | 88.6% | -9.6% |
-| 5SIZVS65_table_3 | vision_haiku_consensus+vision_consensus | 96.5% | 13.1% | -83.4% |
-| 5SIZVS65_table_4 | pymupdf_text+word_assignment | 92.2% | 5.2% | -87.0% |
-| 5SIZVS65_table_5 | vision_haiku_consensus+vision_consensus | 98.3% | 96.2% | -2.1% |
-| 9GKLLJH9_table_1 | vision_haiku_consensus+vision_consensus | 100.0% | 1.2% | -98.8% |
-| 9GKLLJH9_table_2 | vision_haiku_consensus+vision_consensus | 85.3% | 1.1% | -84.2% |
-| Z9X4JVZ5_orphan_p5_t0 | vision_haiku_consensus+vision_consensus | 100.0% | 0.0% | -100.0% |
-| Z9X4JVZ5_table_1 | pymupdf_lines+rawdict | 100.0% | 100.0% | +0.0% |
-| Z9X4JVZ5_table_2 | vision_haiku_consensus+vision_consensus | 100.0% | 12.6% | -87.4% |
-| Z9X4JVZ5_table_3 | vision_haiku_consensus+vision_consensus | 94.7% | 29.2% | -65.5% |
-| Z9X4JVZ5_table_4 | pymupdf_lines+rawdict | 100.0% | 56.2% | -43.8% |
-| Z9X4JVZ5_table_5 | pymupdf_text+rawdict | 100.0% | 36.0% | -64.0% |
-| Z9X4JVZ5_table_7 | pymupdf_text+rawdict | 100.0% | 2.7% | -97.3% |
-| Z9X4JVZ5_table_6 | vision_haiku_consensus+vision_consensus | 91.3% | 3.4% | -87.9% |
-| DPYRZTFI_table_1 | pymupdf_lines+rawdict | 99.8% | 99.8% | +0.0% |
-| DPYRZTFI_table_2 | vision_haiku_consensus+vision_consensus | 98.4% | 89.1% | -9.2% |
-| DPYRZTFI_table_3 | vision_haiku_consensus+vision_consensus | 99.7% | 100.0% | +0.3% |
-| VP3NJ74M_table_1 | pymupdf_text+rawdict | 85.7% | 2.1% | -83.6% |
-| VP3NJ74M_table_3 | pymupdf_text+word_assignment | 29.6% | 1.9% | -27.7% |
-| VP3NJ74M_table_2 | pymupdf_lines+rawdict | 29.6% | 2.7% | -26.9% |
-| VP3NJ74M_table_4 | vision_haiku_consensus+vision_consensus | 95.4% | 3.1% | -92.3% |
-| VP3NJ74M_table_5 | pymupdf_lines+word_assignment | 38.3% | 5.1% | -33.2% |
-| VP3NJ74M_table_6 | vision_haiku_consensus+vision_consensus | 93.0% | 0.5% | -92.5% |
-| AQ3D94VC_table_1 | vision_haiku_consensus+vision_consensus | 98.8% | 0.7% | -98.1% |
-| AQ3D94VC_table_2 | vision_haiku_consensus+vision_consensus | 100.0% | 1.5% | -98.5% |
-| AQ3D94VC_table_4 | pymupdf_lines+rawdict | 44.9% | 0.8% | -44.1% |
-| AQ3D94VC_table_3 | pymupdf_lines+rawdict | 44.9% | 0.8% | -44.1% |
-| AQ3D94VC_table_5 | pymupdf_lines+rawdict | 100.0% | 100.0% | +0.0% |
-| YMWV46JA_table_1 | vision_haiku_consensus+vision_consensus | 45.1% | 33.8% | -11.2% |
-

@@ -122,7 +122,7 @@ class Reranker:
             section_weight = effective_section.get(result.section, 0.7)
             journal_weight = effective_journal.get(result.journal_quartile, 0.7)
 
-            composite = (result.score ** self.alpha) * section_weight * journal_weight
+            composite = (max(result.score, 0.0) ** self.alpha) * section_weight * journal_weight
 
             logger.debug(
                 f"  {result.doc_id}[{result.chunk_index}]: "

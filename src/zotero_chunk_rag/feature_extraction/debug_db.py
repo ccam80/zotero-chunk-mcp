@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS vision_agent_results (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     table_id          TEXT NOT NULL,
     agent_idx         INTEGER NOT NULL,
+    agent_role        TEXT,
     model             TEXT NOT NULL,
     raw_response      TEXT,
     headers_json      TEXT,
@@ -55,7 +56,11 @@ CREATE TABLE IF NOT EXISTS vision_agent_results (
     is_incomplete     INTEGER,
     incomplete_reason TEXT,
     parse_success     INTEGER,
-    execution_time_ms INTEGER
+    execution_time_ms INTEGER,
+    corrections_json  TEXT,
+    num_corrections   INTEGER,
+    cell_accuracy_pct REAL,
+    footnotes         TEXT
 );
 
 CREATE TABLE IF NOT EXISTS vision_consensus (
@@ -180,16 +185,23 @@ def write_vision_agent_result(
     incomplete_reason: str,
     parse_success: bool,
     execution_time_ms: int | None,
+    agent_role: str | None = None,
+    corrections_json: str | None = None,
+    num_corrections: int | None = None,
+    cell_accuracy_pct: float | None = None,
+    footnotes: str | None = None,
 ) -> None:
     """Insert a single vision agent result row."""
     con.execute(
         "INSERT INTO vision_agent_results "
-        "(table_id, agent_idx, model, raw_response, headers_json, rows_json, "
-        "table_label, is_incomplete, incomplete_reason, parse_success, execution_time_ms) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (table_id, agent_idx, model, raw_response, headers_json, rows_json,
+        "(table_id, agent_idx, agent_role, model, raw_response, headers_json, rows_json, "
+        "table_label, is_incomplete, incomplete_reason, parse_success, execution_time_ms, "
+        "corrections_json, num_corrections, cell_accuracy_pct, footnotes) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (table_id, agent_idx, agent_role, model, raw_response, headers_json, rows_json,
          table_label, int(is_incomplete), incomplete_reason, int(parse_success),
-         execution_time_ms),
+         execution_time_ms, corrections_json, num_corrections, cell_accuracy_pct,
+         footnotes),
     )
 
 
