@@ -144,9 +144,27 @@
       "type": "file"
     },
     {
+      "path": "tools\\cache_1h_analysis.py",
+      "accessCount": 6,
+      "lastAccessed": 1772251143489,
+      "type": "file"
+    },
+    {
       "path": "src\\zotero_chunk_rag\\feature_extraction\\debug_db.py",
       "accessCount": 4,
       "lastAccessed": 1772245902477,
+      "type": "file"
+    },
+    {
+      "path": "tools\\vision_viewer.py",
+      "accessCount": 4,
+      "lastAccessed": 1772248900651,
+      "type": "directory"
+    },
+    {
+      "path": "tools\\cache_analysis.py",
+      "accessCount": 2,
+      "lastAccessed": 1772250578776,
       "type": "file"
     },
     {
@@ -168,10 +186,10 @@
       "type": "directory"
     },
     {
-      "path": "tools\\vision_viewer.py",
+      "path": "tools\\cache_bp3_analysis.py",
       "accessCount": 1,
-      "lastAccessed": 1772245940747,
-      "type": "directory"
+      "lastAccessed": 1772251765357,
+      "type": "file"
     }
   ],
   "userDirectives": []
