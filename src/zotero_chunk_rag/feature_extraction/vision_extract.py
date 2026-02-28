@@ -1357,6 +1357,25 @@ def _detect_inline_headers(
 # ---------------------------------------------------------------------------
 
 
+def build_transcriber_cache_block(transcriber: "AgentResponse") -> str:
+    """Build canonical transcriber output text for BP3 caching.
+
+    This text is identical for y_verifier, x_verifier, and synthesizer,
+    enabling cache reads across verifier pairs and cross-batch to synthesizer.
+    """
+    transcriber_json = json.dumps(
+        {
+            "table_label": transcriber.table_label,
+            "headers": transcriber.headers,
+            "rows": transcriber.rows,
+            "footnotes": transcriber.footnotes,
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
+    return f"## Transcriber's extraction\n\n{transcriber_json}"
+
+
 def build_verifier_inputs(
     pdf_path: Path,
     page_num: int,
@@ -1399,19 +1418,7 @@ def build_verifier_inputs(
             "image, add them as separate rows. USE THE IMAGE for this check."
         )
 
-    transcriber_json = json.dumps(
-        {
-            "table_label": transcriber.table_label,
-            "headers": transcriber.headers,
-            "rows": transcriber.rows,
-            "footnotes": transcriber.footnotes,
-        },
-        indent=2,
-        ensure_ascii=False,
-    )
-
     y_role_text = (
-        f"## Transcriber's extraction\n\n{transcriber_json}\n\n"
         f"## Row gap analysis\n\n{y_evidence}\n\n"
         f"{inline_header_section + chr(10) + chr(10) if inline_header_section else ''}"
         f"## Verification\n\n{inline_header_instruction}\n\n"
@@ -1426,7 +1433,6 @@ def build_verifier_inputs(
     )
 
     x_role_text = (
-        f"## Transcriber's extraction\n\n{transcriber_json}\n\n"
         f"## Column gap analysis (cliff method)\n\n"
         f"Inter-word gaps from all rows are pooled and sorted. The \"cliff\" "
         f"is the largest ratio jump, separating small within-cell word spacing "
@@ -1470,7 +1476,7 @@ def build_synthesizer_user_text(
         return f"{resp.raw_shape[0]} rows x {resp.raw_shape[1]} cols"
 
     text = (
-        f"## Transcriber ({_shape_str(transcriber)})\n\n{_agent_json(transcriber)}\n\n"
+        f"Transcriber shape: {_shape_str(transcriber)}\n\n"
         f"## Row verifier ({_shape_str(y_verifier)})\n\n{_agent_json(y_verifier)}\n\n"
         f"Row corrections: {_agent_corrections(y_verifier)}\n\n"
         f"## Column verifier ({_shape_str(x_verifier)})\n\n{_agent_json(x_verifier)}\n\n"

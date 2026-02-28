@@ -894,8 +894,15 @@ def compare_extraction(
             else:
                 cell_diffs.append(CellDiff(row=gt_ri, col=gt_ci, expected=gt_val, actual=ext_val))
 
-    # Accuracy over comparable cells (headers + data), not penalized for structural issues
-    cell_accuracy_pct = (correct_cells / comparable_cells * 100.0) if comparable_cells > 0 else 0.0
+    # Penalty for extra columns/rows: cells that exist in the extraction
+    # but have no GT counterpart are counted as wrong.  Extra columns
+    # contribute cells across all extraction rows (header + data); extra
+    # rows contribute cells across non-extra columns (avoid double-count).
+    extra_col_cells = len(extra_columns) * (1 + len(rows))
+    extra_row_cells = len(extra_rows) * (len(headers) - len(extra_columns))
+    extra_penalty = extra_col_cells + extra_row_cells
+    denominator = comparable_cells + extra_penalty
+    cell_accuracy_pct = (correct_cells / denominator * 100.0) if denominator > 0 else 0.0
     structural_coverage_pct = (comparable_cells / total_gt_cells * 100.0) if total_gt_cells > 0 else 100.0
 
     # --- Header comparison ---

@@ -1,7 +1,7 @@
 {
   "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"cd \\\"C:\\\\local_working_projects\\\\zotero_citation_mcp\\\" && \\\"./.venv/Scripts/python.exe\\\" -c \\\"\\nimport json\\nwith open('_vision_stage_costs.json') as f:\\n    entries = json.load(f)\\n\\n# Gr...",
-  "error": "Exit code 1\n/usr/bin/bash: line 117: \nimport json\nwith open('_vision_stage_costs.json') as f:\n    entries = json.load(f)\n\n# Group by table_id to see per-table non-cached input across stages\ntables = {}\nfor e in entries:\n    tid = e['table_id']\n    tables.setdefault(tid, {})[e['agent_role']] = e\n\nprint('Non-cached input tokens per request (first 10 tables):')\nprint(f\"{'table_id':<25} {'transcr':>8} {'y_ver':>8} {'x_ver':>8} {'synth':>8}\")\nprint('-' * 60)\nfor tid in sorted(tables.keys())[:10]:\n   ...",
-  "timestamp": "2026-02-28T04:08:36.748Z",
+  "tool_input_preview": "{\"command\":\"cd \\\"C:/local_working_projects/zotero_citation_mcp\\\" && \\\"./.venv/Scripts/python.exe\\\" -c \\\"\\nimport sqlite3, json\\n\\nconn = sqlite3.connect('_vision_stage_eval.db')\\nconn.row_factory = sq...",
+  "error": "Exit code 1\nTraceback (most recent call last):\r\n  File \"<string>\", line 89, in <module>\r\n  File \"C:\\Python312\\Lib\\encodings\\cp1252.py\", line 19, in encode\r\n    return codecs.charmap_encode(input,self.errors,encoding_table)[0]\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nUnicodeEncodeError: 'charmap' codec can't encode character '\\u03c4' in position 32: character maps to <undefined>\r\nRun: 20260228_171350\r\n\r\n==================================================================...",
+  "timestamp": "2026-02-28T08:29:50.462Z",
   "retry_count": 1
 }

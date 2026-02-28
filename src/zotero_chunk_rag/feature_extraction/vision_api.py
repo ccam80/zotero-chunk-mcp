@@ -36,6 +36,7 @@ from .vision_extract import (
     _MAX_TOKENS,
     _ROLE_PREAMBLES,
     build_common_ctx,
+    build_transcriber_cache_block,
     build_verifier_inputs,
     build_synthesizer_user_text,
     compute_agreement_rate,
@@ -320,7 +321,7 @@ class VisionAPI:
                 build_verifier_inputs(spec.pdf_path, spec.page_num, bbox, t_resp)
             )
         y_results, x_results = await self._submit_verifier_batch(
-            specs, prep, verifier_inputs,
+            specs, prep, verifier_inputs, transcriber_results,
         )
 
         # Stage 3: Synthesizer
@@ -533,24 +534,48 @@ class VisionAPI:
         specs: list[TableVisionSpec],
         prep: list[tuple[str, str, tuple]],
         verifier_inputs: list[tuple[str, str, str, str]],
+        transcriber_results: list[AgentResponse],
     ) -> tuple[list[AgentResponse], list[AgentResponse]]:
-        """Submit Y+X verifier requests as a single batch."""
-        requests = []
-        for spec, (image_b64, media_type, _bbox), (y_text, x_text, _ih, _ih_instr) in zip(
-            specs, prep, verifier_inputs,
+        """Submit Y and X verifier requests as separate batches with 30s delay.
+
+        The Y-verifier batch is submitted first so it writes BP3 cache
+        entries (transcriber output).  After a 30s delay the X-verifier
+        batch is submitted, allowing it to read BP3 from the Y batch.
+        """
+        y_requests: list[dict] = []
+        x_requests: list[dict] = []
+        for spec, (image_b64, media_type, _bbox), (y_text, x_text, _ih, _ih_instr), t_resp in zip(
+            specs, prep, verifier_inputs, transcriber_results,
         ):
-            requests.append(self._build_batch_request(
+            cached_prefix = build_transcriber_cache_block(t_resp)
+            y_requests.append(self._build_batch_request(
                 f"{spec.table_id}__y_verifier",
                 "y_verifier", image_b64, media_type, y_text,
                 raw_text=spec.raw_text, caption=spec.caption, garbled=spec.garbled,
+                cached_prefix=cached_prefix,
             ))
-            requests.append(self._build_batch_request(
+            x_requests.append(self._build_batch_request(
                 f"{spec.table_id}__x_verifier",
                 "x_verifier", image_b64, media_type, x_text,
                 raw_text=spec.raw_text, caption=spec.caption, garbled=spec.garbled,
+                cached_prefix=cached_prefix,
             ))
 
-        raw_results = await self._submit_and_poll(requests)
+        # Submit Y first, delay 30s for cache writes, then X
+        y_batch_id = self._create_batch(y_requests)
+        logger.info(
+            "Y-verifier batch submitted; waiting 30s for cache "
+            "propagation before X-verifiers",
+        )
+        await asyncio.sleep(30)
+        x_batch_id = self._create_batch(x_requests)
+
+        # Poll both concurrently
+        y_raw, x_raw = await asyncio.gather(
+            self._poll_batch(y_batch_id, len(y_requests)),
+            self._poll_batch(x_batch_id, len(x_requests)),
+        )
+        raw_results = {**y_raw, **x_raw}
 
         y_results, x_results = [], []
         for spec in specs:
@@ -579,10 +604,12 @@ class VisionAPI:
             specs, prep, t_results, y_results, x_results, verifier_inputs,
         ):
             synth_text = build_synthesizer_user_text(t, y, x, ih)
+            cached_prefix = build_transcriber_cache_block(t)
             requests.append(self._build_batch_request(
                 f"{spec.table_id}__synthesizer",
                 "synthesizer", image_b64, media_type, synth_text,
                 raw_text=spec.raw_text, caption=spec.caption, garbled=spec.garbled,
+                cached_prefix=cached_prefix,
             ))
 
         raw_results = await self._submit_and_poll(requests)
@@ -605,11 +632,20 @@ class VisionAPI:
         raw_text: str = "",
         caption: str | None = None,
         garbled: bool = False,
+        cached_prefix: str | None = None,
     ) -> dict:
-        """Build one Anthropic batch request dict with dual cache breakpoints."""
+        """Build one Anthropic batch request dict with cache breakpoints.
+
+        Cache breakpoints (when cache=True, all 1-hour TTL):
+          BP1 (system): SHARED_SYSTEM -- shared across ALL requests.
+          BP2 (image): common_ctx + image -- shared within one table.
+          BP3 (text): transcriber output -- shared across verifier
+              pair and cross-batch to synthesizer.  Only set when
+              *cached_prefix* is provided (verifier/synthesizer stages).
+        """
         system_blocks = [{"type": "text", "text": SHARED_SYSTEM}]
         if self._cache:
-            system_blocks[0]["cache_control"] = {"type": "ephemeral"}
+            system_blocks[0]["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
 
         common_ctx = build_common_ctx(raw_text, caption, garbled=garbled)
 
@@ -622,9 +658,24 @@ class VisionAPI:
             },
         }
         if self._cache:
-            image_block["cache_control"] = {"type": "ephemeral"}
+            image_block["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
 
         full_role_text = _ROLE_PREAMBLES[role] + "\n" + role_text
+
+        # Build user content blocks
+        content: list[dict] = [
+            {"type": "text", "text": common_ctx},
+            image_block,
+        ]
+
+        # BP3: transcriber output (verifier/synthesizer stages only)
+        if cached_prefix:
+            prefix_block: dict = {"type": "text", "text": cached_prefix}
+            if self._cache:
+                prefix_block["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
+            content.append(prefix_block)
+
+        content.append({"type": "text", "text": full_role_text})
 
         return {
             "custom_id": custom_id,
@@ -632,30 +683,23 @@ class VisionAPI:
                 "model": self._model,
                 "max_tokens": _MAX_TOKENS[role],
                 "system": system_blocks,
-                "messages": [{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": common_ctx},
-                        image_block,
-                        {"type": "text", "text": full_role_text},
-                    ],
-                }],
+                "messages": [{"role": "user", "content": content}],
             },
         }
 
-    async def _submit_and_poll(
+    def _create_batch(self, requests: list[dict]) -> str:
+        """Submit a batch and return the batch ID (synchronous API call)."""
+        batch = self._sync_client.messages.batches.create(requests=requests)
+        logger.info("Submitted batch %s (%d requests)", batch.id, len(requests))
+        return batch.id
+
+    async def _poll_batch(
         self,
-        requests: list[dict],
+        batch_id: str,
+        expected_count: int,
         poll_interval: float = 5.0,
     ) -> dict[str, str]:
-        """Submit a batch, poll until done, return {custom_id: response_text}."""
-        if not requests:
-            return {}
-
-        batch = self._sync_client.messages.batches.create(requests=requests)
-        batch_id = batch.id
-        logger.info("Submitted batch %s (%d requests)", batch_id, len(requests))
-
+        """Poll a batch until done, return {custom_id: response_text}."""
         while True:
             await asyncio.sleep(poll_interval)
             status = self._sync_client.messages.batches.retrieve(batch_id)
@@ -702,15 +746,26 @@ class VisionAPI:
             except (AttributeError, IndexError) as exc:
                 logger.warning("Could not parse batch result %s: %s", cid, exc)
 
-        if len(results) < len(requests):
+        if len(results) < expected_count:
             logger.error(
                 "Batch %s: received %d/%d results — %d missing. "
                 "Missing tables will have no data for this stage.",
-                batch_id, len(results), len(requests),
-                len(requests) - len(results),
+                batch_id, len(results), expected_count,
+                expected_count - len(results),
             )
 
         return results
+
+    async def _submit_and_poll(
+        self,
+        requests: list[dict],
+        poll_interval: float = 5.0,
+    ) -> dict[str, str]:
+        """Submit a batch, poll until done, return {custom_id: response_text}."""
+        if not requests:
+            return {}
+        batch_id = self._create_batch(requests)
+        return await self._poll_batch(batch_id, len(requests), poll_interval)
 
     # ------------------------------------------------------------------
     # Per-table pipeline (async mode)
@@ -789,15 +844,18 @@ class VisionAPI:
         y_role_text, x_role_text, inline_header_section, _inline_header_instruction = (
             build_verifier_inputs(spec.pdf_path, spec.page_num, current_bbox, transcriber)
         )
+        t_cache_block = build_transcriber_cache_block(transcriber)
 
         y_verifier, x_verifier = await asyncio.gather(
             self._call_agent(
                 "y_verifier", spec.table_id, image_b64, media_type,
                 y_role_text, raw_text=spec.raw_text, caption=spec.caption, garbled=spec.garbled,
+                cached_prefix=t_cache_block,
             ),
             self._call_agent(
                 "x_verifier", spec.table_id, image_b64, media_type,
                 x_role_text, raw_text=spec.raw_text, caption=spec.caption, garbled=spec.garbled,
+                cached_prefix=t_cache_block,
             ),
         )
 
@@ -809,6 +867,7 @@ class VisionAPI:
         synthesizer = await self._call_agent(
             "synthesizer", spec.table_id, image_b64, media_type,
             synth_user_text, raw_text=spec.raw_text, caption=spec.caption, garbled=spec.garbled,
+            cached_prefix=t_cache_block,
         )
 
         # Build result
@@ -866,20 +925,24 @@ class VisionAPI:
         raw_text: str = "",
         caption: str | None = None,
         garbled: bool = False,
+        cached_prefix: str | None = None,
     ) -> AgentResponse:
-        """Call one agent with shared system prompt + dual cache breakpoints.
+        """Call one agent with shared system prompt + cache breakpoints.
 
-        Cache strategy:
-          Breakpoint 1 (system): SHARED_SYSTEM cached across ALL calls.
-          Breakpoint 2 (image):  system + common_context + image cached
-                                 within one table's 4-agent pipeline.
+        Cache strategy (all 1-hour TTL):
+          BP1 (system): SHARED_SYSTEM cached across ALL calls.
+          BP2 (image):  system + common_context + image cached
+                        within one table's 4-agent pipeline.
+          BP3 (text):   transcriber output cached across verifier
+                        pair and cross-batch to synthesizer.
+                        Only set when *cached_prefix* is provided.
         """
         # Breakpoint 1: shared system prompt (cached across all calls)
         system_blocks: list[dict] = [
             {"type": "text", "text": SHARED_SYSTEM},
         ]
         if self._cache:
-            system_blocks[0]["cache_control"] = {"type": "ephemeral"}
+            system_blocks[0]["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
 
         # Common context (identical for all 4 roles on the same table)
         common_ctx = build_common_ctx(raw_text, caption, garbled=garbled)
@@ -894,10 +957,25 @@ class VisionAPI:
             },
         }
         if self._cache:
-            image_block["cache_control"] = {"type": "ephemeral"}
+            image_block["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
 
         # Role-specific text (varies per agent — NOT cached)
         full_role_text = _ROLE_PREAMBLES[role] + "\n" + role_text
+
+        # Build user content blocks
+        content: list[dict] = [
+            {"type": "text", "text": common_ctx},
+            image_block,
+        ]
+
+        # BP3: transcriber output (verifier/synthesizer stages only)
+        if cached_prefix:
+            prefix_block: dict = {"type": "text", "text": cached_prefix}
+            if self._cache:
+                prefix_block["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
+            content.append(prefix_block)
+
+        content.append({"type": "text", "text": full_role_text})
 
         _failure = AgentResponse(
             headers=[], rows=[], footnotes="",
@@ -911,14 +989,7 @@ class VisionAPI:
                 model=self._model,
                 max_tokens=_MAX_TOKENS[role],
                 system=system_blocks,
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": common_ctx},
-                        image_block,
-                        {"type": "text", "text": full_role_text},
-                    ],
-                }],
+                messages=[{"role": "user", "content": content}],
             )
         except Exception as exc:
             logger.warning("%s[%s] API error: %s", role, table_id, exc)

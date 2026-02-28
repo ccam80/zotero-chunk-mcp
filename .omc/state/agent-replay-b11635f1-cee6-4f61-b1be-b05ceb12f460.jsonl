@@ -1,0 +1,3 @@
+{"t":0,"agent":"system","event":"keyword_detected","keyword":"pipeline"}
+{"t":0,"agent":"system","event":"skill_invoked","skill_name":"oh-my-claudecode:pipeline"}
+{"t":0,"agent":"a27a6c8","agent_type":"Explore","event":"agent_start","parent_mode":"none"}
