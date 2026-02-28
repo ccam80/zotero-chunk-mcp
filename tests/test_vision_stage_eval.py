@@ -48,8 +48,20 @@ logger = logging.getLogger(__name__)
 
 # Stress test corpus (10 papers, 44 GT tables)
 CORPUS_KEYS = [
+    # Original 10 (with ground truth)
     "SCPXVBLY", "XIAINRVS", "C626CYVT", "5SIZVS65", "9GKLLJH9",
     "Z9X4JVZ5", "YMWV46JA", "DPYRZTFI", "VP3NJ74M", "AQ3D94VC",
+    # Extended 10 (no ground truth — diverse fields, years, formats)
+    "WQUBYBI7",  # 1973 - electrode impedance temporal changes
+    "I5R3QYIK",  # 1985 - constrained iterative reconstruction (tomography)
+    "GAAE25GY",  # 1997 - low-frequency EMF biological effects
+    "6KB8FWFN",  # 2002 - ATS/ERS respiratory muscle testing statement
+    "W8S925HR",  # 2012 - sample size estimation / power analysis
+    "JB9TAKBU",  # 2013 - dry electrodes for ECG
+    "QRN8G52V",  # 2016 - stress, cortisol, electrophysiology
+    "XUPJ4I7D",  # 2020 - multimodal PPG detection
+    "GMVKXTRD",  # 2022 - peak detection HRV on ECG/PPG
+    "4J8QJNNY",  # 2023 - electrical impedance tomography review
 ]
 
 GT_DB = Path("tests/ground_truth.db")
@@ -129,6 +141,22 @@ def _init_db(db_path: Path) -> sqlite3.Connection:
             correction_index INTEGER,
             correction_text TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS papers (
+            item_key TEXT PRIMARY KEY,
+            short_name TEXT,
+            pdf_path TEXT,
+            title TEXT,
+            year INTEGER
+        );
+
+        CREATE TABLE IF NOT EXISTS extracted_tables (
+            table_id TEXT PRIMARY KEY,
+            item_key TEXT,
+            page_num INTEGER,
+            bbox TEXT,
+            caption TEXT
+        );
     """)
     return conn
 
@@ -189,6 +217,22 @@ def _cell_diff_count(a: AgentResponse, b: AgentResponse) -> dict:
         "cells_added": cells_added,
         "cells_removed": cells_removed,
     }
+
+
+def _make_short_name(item) -> str:
+    """Derive a short name like 'smith-hrv-2014' from a ZoteroItem."""
+    # First author surname
+    author = (item.authors or "").split(",")[0].strip().lower()
+    author = author.split()[-1] if author else "unknown"
+    # First meaningful word from title (skip articles/prepositions)
+    skip = {"a", "an", "the", "of", "in", "on", "for", "and", "to", "with", "from", "by"}
+    words = [w.lower() for w in (item.title or "").split() if w.lower() not in skip]
+    keyword = words[0] if words else "paper"
+    # Sanitise
+    keyword = "".join(c for c in keyword if c.isalnum())[:15]
+    author = "".join(c for c in author if c.isalnum())[:15]
+    year = item.year or 0
+    return f"{author}-{keyword}-{year}"
 
 
 def main():
@@ -253,7 +297,47 @@ def main():
             doc.close()
 
     extraction_time = time.time() - t0
+
+    # Disambiguate colliding table_ids: long documents (e.g. clinical
+    # guidelines) restart table numbering per section, so "Table 1" can
+    # appear on pages 32, 45, 73, 86, 101 — all genuinely different tables.
+    # Append _p{page} to every instance of a colliding ID.
+    from collections import Counter
+    id_counts = Counter(s.table_id for s in specs)
+    collisions = {tid for tid, n in id_counts.items() if n > 1}
+    if collisions:
+        for i, spec in enumerate(specs):
+            if spec.table_id in collisions:
+                specs[i] = TableVisionSpec(
+                    table_id=f"{spec.table_id}_p{spec.page_num}",
+                    pdf_path=spec.pdf_path,
+                    page_num=spec.page_num,
+                    bbox=spec.bbox,
+                    raw_text=spec.raw_text,
+                    caption=spec.caption,
+                    garbled=spec.garbled,
+                )
+        print(f"Disambiguated {sum(id_counts[t] for t in collisions)} tables with colliding IDs across {len(collisions)} base IDs")
+
     print(f"Tables: {len(specs)} in {extraction_time:.1f}s")
+
+    # Write paper and table metadata so vision_viewer can render PDFs
+    conn = _init_db(EVAL_DB)
+    for item in papers:
+        short_name = _make_short_name(item)
+        conn.execute(
+            "INSERT OR REPLACE INTO papers VALUES (?, ?, ?, ?, ?)",
+            (item.item_key, short_name, str(item.pdf_path),
+             item.title, item.year),
+        )
+    for spec in specs:
+        paper_key = spec.table_id.split("_")[0]
+        conn.execute(
+            "INSERT OR REPLACE INTO extracted_tables VALUES (?, ?, ?, ?, ?)",
+            (spec.table_id, paper_key, spec.page_num,
+             json.dumps(list(spec.bbox)), spec.caption),
+        )
+    conn.commit()
 
     # Phase 2: Vision pipeline
     print(f"\n--- Phase 2: Vision extraction ---")

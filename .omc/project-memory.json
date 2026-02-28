@@ -120,28 +120,40 @@
   },
   "hotPaths": [
     {
+      "path": "tools\\vision_viewer.py",
+      "accessCount": 51,
+      "lastAccessed": 1772317992085,
+      "type": "directory"
+    },
+    {
       "path": "src\\zotero_chunk_rag\\feature_extraction\\vision_api.py",
-      "accessCount": 26,
-      "lastAccessed": 1772254980756,
+      "accessCount": 28,
+      "lastAccessed": 1772320963833,
       "type": "file"
     },
     {
       "path": "tests\\stress_test_real_library.py",
-      "accessCount": 20,
-      "lastAccessed": 1772246129977,
+      "accessCount": 24,
+      "lastAccessed": 1772269742365,
       "type": "directory"
     },
     {
       "path": "src\\zotero_chunk_rag\\feature_extraction\\vision_extract.py",
-      "accessCount": 17,
-      "lastAccessed": 1772254862005,
+      "accessCount": 23,
+      "lastAccessed": 1772320963391,
       "type": "file"
     },
     {
       "path": "tests\\test_vision_stage_eval.py",
-      "accessCount": 6,
-      "lastAccessed": 1772246042885,
+      "accessCount": 22,
+      "lastAccessed": 1772315436600,
       "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\ground_truth.py",
+      "accessCount": 14,
+      "lastAccessed": 1772315388174,
+      "type": "directory"
     },
     {
       "path": "tools\\cache_1h_analysis.py",
@@ -150,9 +162,9 @@
       "type": "file"
     },
     {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\ground_truth.py",
+      "path": "src\\zotero_chunk_rag\\pdf_processor.py",
       "accessCount": 6,
-      "lastAccessed": 1772268410297,
+      "lastAccessed": 1772320971056,
       "type": "directory"
     },
     {
@@ -162,10 +174,10 @@
       "type": "file"
     },
     {
-      "path": "tools\\vision_viewer.py",
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\captions.py",
       "accessCount": 4,
-      "lastAccessed": 1772248900651,
-      "type": "directory"
+      "lastAccessed": 1772320962499,
+      "type": "file"
     },
     {
       "path": "tools\\cache_analysis.py",
@@ -174,15 +186,27 @@
       "type": "file"
     },
     {
-      "path": "src\\zotero_chunk_rag\\feature_extraction",
-      "accessCount": 1,
-      "lastAccessed": 1772242041426,
+      "path": "src",
+      "accessCount": 2,
+      "lastAccessed": 1772315232565,
       "type": "directory"
     },
     {
-      "path": "src",
+      "path": "spec\\vision_first.md",
+      "accessCount": 2,
+      "lastAccessed": 1772320953490,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\indexer.py",
+      "accessCount": 2,
+      "lastAccessed": 1772320969462,
+      "type": "directory"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction",
       "accessCount": 1,
-      "lastAccessed": 1772245808184,
+      "lastAccessed": 1772242041426,
       "type": "directory"
     },
     {
@@ -219,6 +243,24 @@
       "path": "tools\\recompute_all_gt.py",
       "accessCount": 1,
       "lastAccessed": 1772268513069,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\_gap_fill.py",
+      "accessCount": 1,
+      "lastAccessed": 1772317614838,
+      "type": "directory"
+    },
+    {
+      "path": "_test_page_11.png",
+      "accessCount": 1,
+      "lastAccessed": 1772318891465,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\pipeline.py",
+      "accessCount": 1,
+      "lastAccessed": 1772320970410,
       "type": "file"
     }
   ],

@@ -276,14 +276,17 @@ class VisionViewer(QMainWindow):
         self.d_conn = _conn(self.debug_db) if self.debug_db.exists() else None
         self.gt_conn = _conn(self.gt_db) if self.gt_db.exists() else None
 
-        # Determine run_id (most recent)
+        # Load available runs (most recent first)
+        self._runs: list[dict] = []
         self.run_id: str | None = None
         if self.v_conn:
-            row = self.v_conn.execute(
-                "SELECT run_id FROM runs ORDER BY timestamp DESC LIMIT 1"
-            ).fetchone()
-            if row:
-                self.run_id = row["run_id"]
+            rows = self.v_conn.execute(
+                "SELECT run_id, timestamp, num_papers, num_tables FROM runs "
+                "ORDER BY timestamp DESC"
+            ).fetchall()
+            self._runs = [dict(r) for r in rows]
+            if self._runs:
+                self.run_id = self._runs[0]["run_id"]
 
         self.setWindowTitle(
             f"Vision Pipeline Viewer — run {self.run_id or '(none)'}"
@@ -311,9 +314,10 @@ class VisionViewer(QMainWindow):
         root_layout.setContentsMargins(4, 4, 4, 4)
         root_layout.setSpacing(4)
 
-        # Info bar at top
+        # Info bar at top (two lines: paper info + table details)
         self.info_bar = QLabel("")
-        self.info_bar.setFont(QFont("Consolas", 10))
+        self.info_bar.setFont(QFont("Consolas", 9))
+        self.info_bar.setWordWrap(True)
         self.info_bar.setStyleSheet(
             "background: #263238; color: #eceff1; padding: 6px; border-radius: 3px;"
         )
@@ -329,10 +333,24 @@ class VisionViewer(QMainWindow):
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(2)
 
+        # Run selector
+        run_row = QHBoxLayout()
+        run_row.addWidget(QLabel("Run:"))
+        self.run_combo = QComboBox()
+        for r in self._runs:
+            ts = r["timestamp"][:16].replace("T", " ")
+            label = f"{r['run_id']}  ({r['num_papers']}p / {r['num_tables']}t)  {ts}"
+            self.run_combo.addItem(label, r["run_id"])
+        self.run_combo.currentIndexChanged.connect(self._on_run_changed)
+        run_row.addWidget(self.run_combo, stretch=1)
+        left_layout.addLayout(run_row)
+
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Table", "Accuracy"])
-        self.tree.setColumnWidth(0, 260)
-        self.tree.setMinimumWidth(320)
+        self.tree.setHeaderLabels(["Table", "T acc", "T→S"])
+        self.tree.setColumnWidth(0, 220)
+        self.tree.setColumnWidth(1, 55)
+        self.tree.setColumnWidth(2, 55)
+        self.tree.setMinimumWidth(360)
         self.tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.tree.itemClicked.connect(self._on_tree_click)
         left_layout.addWidget(self.tree)
@@ -415,7 +433,9 @@ class VisionViewer(QMainWindow):
 
         right_layout.addWidget(grid_widget, stretch=1)
 
-        # ── Corrections panel (collapsible-like, below grid) ────────────
+        # ── Bottom panels: corrections + footnotes side by side ─────────
+        bottom_splitter = QSplitter(Qt.Orientation.Horizontal)
+
         self.corrections_group = QGroupBox("Corrections Log")
         corr_inner = QVBoxLayout(self.corrections_group)
         corr_inner.setContentsMargins(4, 4, 4, 4)
@@ -424,7 +444,28 @@ class VisionViewer(QMainWindow):
         self.corrections_text.setFont(QFont("Consolas", 9))
         self.corrections_text.setMaximumHeight(160)
         corr_inner.addWidget(self.corrections_text)
-        right_layout.addWidget(self.corrections_group, stretch=0)
+        bottom_splitter.addWidget(self.corrections_group)
+
+        self.footnotes_group = QGroupBox("Footnotes")
+        fn_inner = QVBoxLayout(self.footnotes_group)
+        fn_inner.setContentsMargins(4, 4, 4, 4)
+        fn_header = QHBoxLayout()
+        fn_header.addWidget(QLabel("Agent:"))
+        self.fn_agent_combo = QComboBox()
+        for role in _AGENT_ROLES:
+            self.fn_agent_combo.addItem(role)
+        self.fn_agent_combo.currentTextChanged.connect(self._on_fn_agent_changed)
+        fn_header.addWidget(self.fn_agent_combo, stretch=1)
+        fn_inner.addLayout(fn_header)
+        self.footnotes_text = QTextEdit()
+        self.footnotes_text.setReadOnly(True)
+        self.footnotes_text.setFont(QFont("Consolas", 9))
+        self.footnotes_text.setMaximumHeight(160)
+        fn_inner.addWidget(self.footnotes_text)
+        bottom_splitter.addWidget(self.footnotes_group)
+
+        bottom_splitter.setSizes([600, 600])
+        right_layout.addWidget(bottom_splitter, stretch=0)
 
         main_splitter.addWidget(right_panel)
         main_splitter.setSizes([320, 1380])
@@ -468,6 +509,30 @@ class VisionViewer(QMainWindow):
         self._agent_data_cache[key] = result
         return result
 
+    def _get_ts_similarity(self, table_id: str) -> float | None:
+        """Compute cell-level similarity between transcriber and synthesizer.
+
+        Returns percentage of matching cells (0-100), or None if data missing.
+        Works regardless of whether GT exists.
+        """
+        t = self._get_agent_data(table_id, "transcriber")
+        s = self._get_agent_data(table_id, "synthesizer")
+        if not t["rows"] and not s["rows"]:
+            return None
+        # Compare headers + rows cell-by-cell
+        t_cells = [c for c in t["headers"]] + [c for row in t["rows"] for c in row]
+        s_cells = [c for c in s["headers"]] + [c for row in s["rows"] for c in row]
+        if not t_cells and not s_cells:
+            return None
+        total = max(len(t_cells), len(s_cells))
+        if total == 0:
+            return None
+        matches = sum(
+            1 for a, b in zip(t_cells, s_cells)
+            if str(a).strip() == str(b).strip()
+        )
+        return 100.0 * matches / total
+
     def _get_gt(self, table_id: str) -> dict | None:
         """Return ground truth data for a table, or None."""
         if table_id in self._gt_cache:
@@ -502,28 +567,46 @@ class VisionViewer(QMainWindow):
         return None
 
     def _get_pdf_info(self, table_id: str) -> tuple[str | None, int | None, str | None]:
-        """Return (pdf_path, page_num, bbox_json) from the debug DB."""
-        if not self.d_conn:
-            return None, None, None
-        # Extract paper_key from table_id (first 8 chars)
+        """Return (pdf_path, page_num, bbox_json) from debug DB or vision DB."""
         paper_key = table_id.split("_")[0] if table_id else None
         if not paper_key:
             return None, None, None
 
-        # Get pdf_path from papers
-        paper = self.d_conn.execute(
-            "SELECT pdf_path FROM papers WHERE item_key = ?", (paper_key,)
-        ).fetchone()
-        pdf_path = paper["pdf_path"] if paper else None
+        pdf_path = None
+        page_num = None
+        bbox = None
 
-        # Get page_num and bbox from extracted_tables
-        et = self.d_conn.execute(
-            "SELECT page_num, bbox FROM extracted_tables WHERE table_id = ?",
-            (table_id,),
-        ).fetchone()
-        if et:
-            return pdf_path, et["page_num"], et["bbox"]
-        return pdf_path, None, None
+        # Try debug DB first
+        if self.d_conn:
+            paper = self.d_conn.execute(
+                "SELECT pdf_path FROM papers WHERE item_key = ?", (paper_key,)
+            ).fetchone()
+            if paper:
+                pdf_path = paper["pdf_path"]
+            et = self.d_conn.execute(
+                "SELECT page_num, bbox FROM extracted_tables WHERE table_id = ?",
+                (table_id,),
+            ).fetchone()
+            if et:
+                page_num, bbox = et["page_num"], et["bbox"]
+
+        # Fall back to vision DB (papers/extracted_tables written by eval script)
+        if self.v_conn and (pdf_path is None or page_num is None):
+            if pdf_path is None:
+                paper = self.v_conn.execute(
+                    "SELECT pdf_path FROM papers WHERE item_key = ?", (paper_key,)
+                ).fetchone()
+                if paper:
+                    pdf_path = paper["pdf_path"]
+            if page_num is None:
+                et = self.v_conn.execute(
+                    "SELECT page_num, bbox FROM extracted_tables WHERE table_id = ?",
+                    (table_id,),
+                ).fetchone()
+                if et:
+                    page_num, bbox = et["page_num"], et["bbox"]
+
+        return pdf_path, page_num, bbox
 
     def _get_corrections(self, table_id: str) -> list[dict]:
         """Return correction_log entries for a table."""
@@ -557,11 +640,19 @@ class VisionViewer(QMainWindow):
             pkey = tid.split("_")[0]
             papers.setdefault(pkey, []).append(tid)
 
-        # Resolve paper short_name from debug DB
+        # Resolve paper short_name from debug DB, falling back to vision DB
         paper_names: dict[str, str] = {}
-        if self.d_conn:
-            for pkey in papers:
+        for pkey in papers:
+            found = False
+            if self.d_conn:
                 p = self.d_conn.execute(
+                    "SELECT short_name FROM papers WHERE item_key = ?", (pkey,)
+                ).fetchone()
+                if p:
+                    paper_names[pkey] = p["short_name"]
+                    found = True
+            if not found and self.v_conn:
+                p = self.v_conn.execute(
                     "SELECT short_name FROM papers WHERE item_key = ?", (pkey,)
                 ).fetchone()
                 if p:
@@ -569,24 +660,62 @@ class VisionViewer(QMainWindow):
 
         for pkey in sorted(papers.keys()):
             name = paper_names.get(pkey, pkey)
-            parent = QTreeWidgetItem(self.tree, [name, ""])
+            parent = QTreeWidgetItem(self.tree, [name, "", ""])
             parent.setData(0, Qt.ItemDataRole.UserRole, None)  # Not a table
             parent.setExpanded(True)
 
             for tid in papers[pkey]:
                 acc = self._get_accuracy(tid)
                 t_acc = acc.get("transcriber")
-                acc_str = f"{t_acc:.1f}%" if t_acc is not None else "N/A"
+                has_gt = self._get_gt(tid) is not None
+
+                if t_acc is not None:
+                    acc_str = f"{t_acc:.1f}%"
+                else:
+                    acc_str = "no GT" if not has_gt else "N/A"
+
+                # T→S column: cell-level similarity (100% = no edits)
+                ts_sim = self._get_ts_similarity(tid)
+                if ts_sim is not None:
+                    delta_str = f"{ts_sim:.0f}%"
+                else:
+                    delta_str = ""
+
                 label = tid.replace(f"{pkey}_", "")  # Shorten display
-                child = QTreeWidgetItem(parent, [label, acc_str])
+                child = QTreeWidgetItem(parent, [label, acc_str, delta_str])
                 child.setData(0, Qt.ItemDataRole.UserRole, tid)
 
-                # Color-code by transcriber accuracy
+                # Color-code by transcriber accuracy (grey for no-GT tables)
                 color = _accuracy_color(t_acc)
                 child.setForeground(0, color)
                 child.setForeground(1, color)
 
+                # Color-code T→S: green if identical, red if heavily edited
+                if ts_sim is not None:
+                    if ts_sim >= 99.5:
+                        child.setForeground(2, _GREEN)  # no edits
+                    elif ts_sim >= 90:
+                        child.setForeground(2, _YELLOW)  # minor edits
+                    elif ts_sim >= 70:
+                        child.setForeground(2, _ORANGE)  # moderate edits
+                    else:
+                        child.setForeground(2, _RED)  # heavy edits
+
     # ── event handlers ───────────────────────────────────────────────────
+
+    def _on_run_changed(self, index: int) -> None:
+        if index < 0 or index >= len(self._runs):
+            return
+        self.run_id = self._runs[index]["run_id"]
+        self.setWindowTitle(
+            f"Vision Pipeline Viewer — run {self.run_id}"
+        )
+        # Clear caches and reload
+        self._accuracy_cache.clear()
+        self._gt_cache.clear()
+        self._agent_data_cache.clear()
+        self._current_table_id = None
+        self._load_tree()
 
     def _on_tree_click(self, item: QTreeWidgetItem, column: int) -> None:
         table_id = item.data(0, Qt.ItemDataRole.UserRole)
@@ -601,6 +730,10 @@ class VisionViewer(QMainWindow):
             self._refresh_tl()
             self._refresh_info_bar()
 
+    def _on_fn_agent_changed(self, role: str) -> None:
+        if self._current_table_id:
+            self._refresh_footnotes()
+
     # ── refresh methods ──────────────────────────────────────────────────
 
     def _refresh_all(self) -> None:
@@ -613,6 +746,34 @@ class VisionViewer(QMainWindow):
         self._refresh_bl()
         self._refresh_png()
         self._refresh_corrections()
+        self._refresh_footnotes()
+
+    def _get_paper_meta(self, paper_key: str) -> dict:
+        """Return paper metadata (title, year, authors) from vision or debug DB."""
+        meta = {"title": "", "year": None, "authors": ""}
+        row = None
+        # Try vision DB first (has title, year)
+        if self.v_conn:
+            row = self.v_conn.execute(
+                "SELECT title, year, pdf_path FROM papers WHERE item_key = ?",
+                (paper_key,),
+            ).fetchone()
+        if not row and self.d_conn:
+            row = self.d_conn.execute(
+                "SELECT short_name as title, '' as pdf_path FROM papers WHERE item_key = ?",
+                (paper_key,),
+            ).fetchone()
+        if row:
+            meta["title"] = row["title"] or ""
+            meta["year"] = row["year"] if "year" in row.keys() else None
+            # Parse author from PDF filename: "Smith et al. - 2022 - Title.pdf"
+            pdf_path = row["pdf_path"] if "pdf_path" in row.keys() else ""
+            if pdf_path:
+                fname = Path(pdf_path).stem
+                dash_split = fname.split(" - ")
+                if len(dash_split) >= 2:
+                    meta["authors"] = dash_split[0].strip()
+        return meta
 
     def _refresh_info_bar(self) -> None:
         tid = self._current_table_id
@@ -620,19 +781,35 @@ class VisionViewer(QMainWindow):
             self.info_bar.setText("")
             return
 
+        pkey = tid.split("_")[0]
+        paper = self._get_paper_meta(pkey)
         acc = self._get_accuracy(tid)
         gt = self._get_gt(tid)
         gt_cmp = self._get_gt_comparison(tid, "transcriber")
 
-        parts = [f"Table: {tid}"]
+        # Line 1: paper info
+        paper_parts = []
+        if paper["authors"]:
+            paper_parts.append(paper["authors"])
+        if paper["year"]:
+            paper_parts.append(f"({paper['year']})")
+        if paper["title"]:
+            # Truncate long titles
+            t = paper["title"]
+            paper_parts.append(t[:90] + "..." if len(t) > 90 else t)
+        paper_line = " ".join(paper_parts) if paper_parts else pkey
 
+        # Line 2: table details
+        detail_parts = [f"Table: {tid}"]
         if gt:
-            parts.append(f"GT shape: {gt['shape']}")
+            detail_parts.append(f"GT shape: {gt['shape']}")
+        else:
+            detail_parts.append("NO GT — diffs vs Transcriber")
         if gt_cmp:
-            parts.append(f"Ext shape: {gt_cmp.get('ext_shape', '?')}")
+            detail_parts.append(f"Ext shape: {gt_cmp.get('ext_shape', '?')}")
             scov = gt_cmp.get("structural_coverage_pct")
             if scov is not None:
-                parts.append(f"Coverage: {scov:.1f}%")
+                detail_parts.append(f"Coverage: {scov:.1f}%")
 
         # Accuracy row
         acc_parts = []
@@ -640,12 +817,17 @@ class VisionViewer(QMainWindow):
             short = _ROLE_SHORT[role]
             val = acc.get(role)
             acc_parts.append(f"{short}: {val:.1f}%" if val is not None else f"{short}: N/A")
-        parts.append(" | ".join(acc_parts))
+        detail_parts.append(" | ".join(acc_parts))
 
-        self.info_bar.setText("    ".join(parts))
+        self.info_bar.setText(f"{paper_line}\n{'    '.join(detail_parts)}")
 
     def _refresh_tl(self) -> None:
-        """Refresh top-left: selected agent output with diff highlighting."""
+        """Refresh top-left: selected agent output with diff highlighting.
+
+        When ground truth exists, diffs are against GT.  When GT is absent,
+        diffs are against the transcriber output so the user can see what the
+        later stages changed.
+        """
         tid = self._current_table_id
         role = self._current_selected_role
         if not tid:
@@ -659,12 +841,30 @@ class VisionViewer(QMainWindow):
         title = f"{role}"
         if role_acc is not None:
             title += f" ({role_acc:.1f}%)"
-        self.tl_group.setTitle(title)
 
-        self._populate_diff_table(self.tl_table, data, gt, self.tl_header_warn)
+        if gt is not None:
+            self.tl_group.setTitle(title)
+            self._populate_diff_table(self.tl_table, data, gt, self.tl_header_warn)
+        else:
+            # No GT — diff against transcriber instead
+            transcriber = self._get_agent_data(tid, "transcriber")
+            ref = {
+                "headers": transcriber["headers"],
+                "rows": transcriber["rows"],
+                "footnotes": transcriber["footnotes"],
+            }
+            self.tl_group.setTitle(f"{title}  [diff vs Transcriber]")
+            self._populate_diff_table(
+                self.tl_table, data, ref, self.tl_header_warn,
+                reference_label="Transcriber",
+            )
 
     def _refresh_tr(self) -> None:
-        """Refresh top-right: transcriber output with diff highlighting."""
+        """Refresh top-right: transcriber output.
+
+        When GT exists, diffs are shown against GT.  When GT is absent the
+        transcriber IS the reference, so it is displayed plain.
+        """
         tid = self._current_table_id
         if not tid:
             return
@@ -677,8 +877,11 @@ class VisionViewer(QMainWindow):
         title = "Transcriber"
         if t_acc is not None:
             title += f" ({t_acc:.1f}%)"
+        if gt is None:
+            title += "  [REFERENCE]"
         self.tr_group.setTitle(title)
 
+        # When no GT, show plain (transcriber is the reference — nothing to diff against)
         self._populate_diff_table(self.tr_table, data, gt, self.tr_header_warn)
 
     def _refresh_bl(self) -> None:
@@ -691,12 +894,18 @@ class VisionViewer(QMainWindow):
         if not gt:
             self.bl_group.setTitle("Ground Truth (not available)")
             self.bl_table.clear()
-            self.bl_table.setRowCount(1)
+            self.bl_table.setRowCount(2)
             self.bl_table.setColumnCount(1)
-            item = QTableWidgetItem("No ground truth available for this table")
-            item.setForeground(QColor("#888888"))
-            self.bl_table.setItem(0, 0, item)
+            msg = QTableWidgetItem("No ground truth for this table")
+            msg.setForeground(QColor("#888888"))
+            self.bl_table.setItem(0, 0, msg)
+            hint = QTableWidgetItem(
+                "Left pane diffs are against Transcriber output"
+            )
+            hint.setForeground(QColor("#64b5f6"))
+            self.bl_table.setItem(1, 0, hint)
             self.bl_table.setHorizontalHeaderLabels([""])
+            self.bl_table.resizeColumnsToContents()
             return
 
         self.bl_group.setTitle(f"Ground Truth ({gt['shape']})")
@@ -785,6 +994,32 @@ class VisionViewer(QMainWindow):
 
         self.corrections_text.setPlainText("\n".join(lines))
 
+    def _refresh_footnotes(self) -> None:
+        """Refresh footnotes panel for the selected agent."""
+        tid = self._current_table_id
+        if not tid:
+            self.footnotes_text.clear()
+            return
+
+        role = self.fn_agent_combo.currentText()
+        data = self._get_agent_data(tid, role)
+        fn = data.get("footnotes", "")
+
+        # Also show GT footnotes for comparison if available
+        gt = self._get_gt(tid)
+        gt_fn = gt.get("footnotes", "") if gt else ""
+
+        parts = []
+        if fn:
+            parts.append(f"[{role}]\n{fn}")
+        else:
+            parts.append(f"[{role}]\n(none)")
+
+        if gt_fn:
+            parts.append(f"\n[Ground Truth]\n{gt_fn}")
+
+        self.footnotes_text.setPlainText("\n".join(parts))
+
     # ── diff table population ────────────────────────────────────────────
 
     def _populate_diff_table(
@@ -793,9 +1028,10 @@ class VisionViewer(QMainWindow):
         agent_data: dict,
         gt: dict | None,
         header_warn_label: QLabel,
+        reference_label: str = "GT",
     ) -> None:
         """Populate a QTableWidget with agent data, applying character-level
-        diff highlighting against ground truth."""
+        diff highlighting against a reference (ground truth or transcriber)."""
         widget.clear()
         headers = agent_data["headers"]
         rows = agent_data["rows"]
@@ -831,7 +1067,7 @@ class VisionViewer(QMainWindow):
                 header_mismatch = True
 
         if header_mismatch:
-            header_warn_label.setText("!! Headers differ from GT")
+            header_warn_label.setText(f"!! Headers differ from {reference_label}")
         else:
             header_warn_label.setText("")
 

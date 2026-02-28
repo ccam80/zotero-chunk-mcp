@@ -41,11 +41,13 @@
       "agent_type": "Explore",
       "started_at": "2026-02-28T09:07:25.107Z",
       "parent_mode": "none",
-      "status": "running"
+      "status": "completed",
+      "completed_at": "2026-02-28T09:08:57.110Z",
+      "duration_ms": 92003
     }
   ],
   "total_spawned": 5,
-  "total_completed": 4,
+  "total_completed": 5,
   "total_failed": 0,
-  "last_updated": "2026-02-28T09:07:25.216Z"
+  "last_updated": "2026-02-28T23:19:58.565Z"
 }

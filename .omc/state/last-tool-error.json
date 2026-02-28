@@ -1,7 +1,7 @@
 {
   "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"cd \\\"C:/local_working_projects/zotero_citation_mcp\\\" && \\\"./.venv/Scripts/python.exe\\\" -c \\\"\\nimport sqlite3, json\\n\\nconn = sqlite3.connect('_vision_stage_eval.db')\\nconn.row_factory = sq...",
-  "error": "Exit code 1\nTraceback (most recent call last):\r\n  File \"<string>\", line 89, in <module>\r\n  File \"C:\\Python312\\Lib\\encodings\\cp1252.py\", line 19, in encode\r\n    return codecs.charmap_encode(input,self.errors,encoding_table)[0]\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nUnicodeEncodeError: 'charmap' codec can't encode character '\\u03c4' in position 32: character maps to <undefined>\r\nRun: 20260228_171350\r\n\r\n==================================================================...",
-  "timestamp": "2026-02-28T08:29:50.462Z",
+  "tool_input_preview": "{\"command\":\"cd \\\"C:\\\\local_working_projects\\\\zotero_citation_mcp\\\" && \\\"./.venv/Scripts/python.exe\\\" -c \\\"\\nimport sqlite3, json\\ndb = sqlite3.connect('_vision_stage_eval.db')\\ndb.row_factory = sqlite...",
+  "error": "Exit code 1\nTraceback (most recent call last):\r\n  File \"<string>\", line 41, in <module>\r\nsqlite3.OperationalError: near \"transcriber\": syntax error\r\n=== RUNS ===\r\n{'run_id': '20260226_203209', 'timestamp': '2026-02-26T21:06:54.012113+00:00', 'num_papers': 10, 'num_tables': 41, 'total_cost_usd': 1.3099356999999998, 'vision_time_s': 1704.2458136081696}\r\n{'run_id': '20260228_171350', 'timestamp': '2026-02-28T17:13:50Z', 'num_papers': 10, 'num_tables': 41, 'total_cost_usd': 1.2930722499999994, 'visi...",
+  "timestamp": "2026-02-28T23:23:12.576Z",
   "retry_count": 1
 }
