@@ -298,7 +298,8 @@ class TestCompare:
         ext_rows = [["1", "WRONG"], ["3", "4"]]
         self._seed(tmp_db, headers, gt_rows)
         result = compare_extraction(tmp_db, "T_table_1", headers, ext_rows)
-        assert result.cell_accuracy_pct == 75.0  # 3 of 4 comparable cells correct
+        # 2 headers correct + 3 of 4 data cells correct = 5/6
+        assert result.cell_accuracy_pct == pytest.approx(83.3, abs=0.1)
         assert len(result.cell_diffs) == 1
         diff = result.cell_diffs[0]
         assert diff.row == 0
@@ -356,11 +357,10 @@ class TestCompare:
         ext_headers = ["A", "B", "C"]
         ext_rows = [["x", "y", ""], ["", "", "z"]]
         result = compare_extraction(tmp_db, "T_table_1", ext_headers, ext_rows)
-        # No comparable cells (the one GT row is in a split)
-        assert result.comparable_cells == 0
-        assert result.structural_coverage_pct == 0.0
-        # With zero comparable cells, accuracy defaults to 0%
-        assert result.cell_accuracy_pct == 0.0
+        # 3 header cells comparable (all match), 0 data rows comparable
+        assert result.comparable_cells == 3
+        assert result.structural_coverage_pct == 50.0  # 3 of 6 total GT cells
+        assert result.cell_accuracy_pct == 100.0  # all 3 comparable (header) cells match
 
     def test_table_not_found(self, tmp_db: Path) -> None:
         create_ground_truth_db(tmp_db)
@@ -520,10 +520,34 @@ class TestCompare:
         # Row 0 split, row 1 matches
         ext_rows = [["1", ""], ["", "2"], ["3", "4"]]
         result = compare_extraction(tmp_db, "T_table_1", ext_headers, ext_rows)
-        assert result.total_gt_cells == 4
-        assert result.comparable_cells == 2  # only row 1 is comparable
-        assert result.cell_accuracy_pct == 100.0  # row 1 is perfect
-        assert result.structural_coverage_pct == 50.0
+        assert result.total_gt_cells == 6  # 2 headers + 4 data
+        assert result.comparable_cells == 4  # 2 headers + row 1 (2 data cells)
+        assert result.cell_accuracy_pct == 100.0  # all 4 comparable cells match
+        assert result.structural_coverage_pct == pytest.approx(66.7, abs=0.1)
+
+    # --- Positional fallback ---
+    def test_positional_fallback_header_mismatch(self, tmp_db: Path) -> None:
+        """When headers differ textually but shapes match, positional fallback
+        aligns columns so data cells are compared.  Header mismatches count
+        against accuracy proportionally (2 wrong out of 10), not catastrophically."""
+        gt_headers = ["", "(µs)"]
+        gt_rows = [["Butterworth", "-1.8278"],
+                    ["Chebyshev", "-1.5432"],
+                    ["Bessel", "-2.1001"],
+                    ["Elliptic", "-0.9876"]]
+        self._seed(tmp_db, gt_headers, gt_rows)
+        ext_headers = ["Filter", "Runtime (µs)"]
+        ext_rows = [["Butterworth", "-1.8278"],
+                     ["Chebyshev", "-1.5432"],
+                     ["Bessel", "-2.1001"],
+                     ["Elliptic", "-0.9876"]]
+        result = compare_extraction(tmp_db, "T_table_1", ext_headers, ext_rows)
+        # Both cols matched by position; 2 header mismatches, 8 data matches
+        assert len(result.matched_columns) == 2
+        assert len(result.header_diffs) == 2
+        assert len(result.cell_diffs) == 0  # all data cells match
+        assert result.cell_accuracy_pct == 80.0  # 8/10
+        assert result.structural_coverage_pct == 100.0
 
     # --- New: Empty header positional matching ---
     def test_multiple_empty_headers(self, tmp_db: Path) -> None:
@@ -706,7 +730,10 @@ class TestComparisonFuzzyFields:
         ext_headers = ["Gamma", "Delta"]
         ext_rows = [["val1", "val2"]]
         result = compare_extraction(tmp_db, "T_table_1", ext_headers, ext_rows)
-        assert result.cell_accuracy_pct == 0.0
+        # Positional fallback matches col 0↔0, col 1↔1.
+        # 2 header mismatches + 2 data matches = 2/4 = 50%.
+        assert result.cell_accuracy_pct == 50.0
+        # Fuzzy accuracy is alignment-free and unchanged.
         # 4 GT cells, 4 ext cells. val1 and val2 match exactly (1.0 each).
         # Delta/Beta share LCS "ta" (2/5=0.4), Gamma/Alpha share LCS "a" (1/5=0.2).
         # Precision = recall = (1.0+1.0+0.4+0.2)/4 = 0.65, F1 = 65%.

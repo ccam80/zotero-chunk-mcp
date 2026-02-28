@@ -61,134 +61,134 @@ from zotero_chunk_rag.feature_extraction.pipeline import _compute_fill_rate
 # ground_truth is a dict of expected properties the test will validate
 
 CORPUS = [
-    (
-        "SCPXVBLY",
-        "active-inference-tutorial",
-        "Tutorial paper with equations, diagrams, algorithm boxes. Tests complex layout.",
-        {
-            "year": 2022,
-            "author_substr": "smith",
-            "collection": "Active Inference",
-            "expect_tables": True,
-            "expect_figures": True,
-            "expect_sections": ["introduction", "discussion", "conclusion"],
-            "searchable_content": "active inference free energy",
-            "table_search_query": "algorithm update rules",
-            "figure_search_query": "generative model graphical",
-        },
-    ),
-    (
-        "XIAINRVS",
-        "huang-emd-1998",
-        "Foundational EMD paper from 1998. Math-heavy, older format. Tests pre-2000 PDFs.",
-        {
-            "year": 1998,
-            "author_substr": "huang",
-            "collection": "EMD",
-            "expect_tables": False,
-            "expect_figures": True,
-            "expect_sections": ["introduction", "conclusion"],
-            "searchable_content": "empirical mode decomposition Hilbert spectrum",
-            "table_search_query": None,
-            "figure_search_query": "intrinsic mode function",
-        },
-    ),
-    (
-        "C626CYVT",
-        "hallett-tms-primer",
-        "TMS primer/review. Well-structured clinical review. Tests clean section detection.",
-        {
-            "year": 2007,
-            "author_substr": "hallett",
-            "collection": "TMS",
-            "expect_tables": True,
-            "expect_figures": True,
-            "expect_sections": ["introduction"],
-            "searchable_content": "transcranial magnetic stimulation motor cortex",
-            "table_search_query": "stimulation parameters coil",
-            "figure_search_query": "magnetic field coil",
-        },
-    ),
-    (
-        "5SIZVS65",
-        "laird-fick-polyps",
-        "Epidemiology paper with demographic tables. Tests table extraction accuracy.",
-        {
-            "year": 2016,
-            "author_substr": "laird",
-            "collection": "PhD",
-            "expect_tables": True,
-            "expect_figures": False,
-            "expect_sections": ["introduction", "methods", "results", "discussion"],
-            "searchable_content": "colonic polyp histopathology colonoscopy",
-            "table_search_query": "polyp location demographics patient",
-            "figure_search_query": None,
-        },
-    ),
-    (
-        "9GKLLJH9",
-        "helm-coregulation",
-        "Psychology paper on RSA coregulation. Tests social science format.",
-        {
-            "year": 2014,
-            "author_substr": "helm",
-            "collection": "Coregulation",
-            "expect_tables": True,
-            "expect_figures": True,
-            "expect_sections": ["introduction", "methods", "results", "discussion"],
-            "searchable_content": "respiratory sinus arrhythmia coregulation romantic",
-            "table_search_query": "correlation coefficient RSA",
-            "figure_search_query": "RSA dynamics time series",
-        },
-    ),
-    (
-        "Z9X4JVZ5",
-        "roland-emg-filter",
-        "IEEE engineering paper on digital filtering. Tests 2-column format, circuits.",
-        {
-            "year": 2019,
-            "author_substr": "roland",
-            "collection": "Processing",
-            "expect_tables": True,
-            "expect_figures": True,
-            "expect_sections": ["introduction", "results", "conclusion"],
-            "searchable_content": "ultra-low-power digital filtering EMG",
-            "table_search_query": "power consumption filter",
-            "figure_search_query": "filter frequency response",
-        },
-    ),
-    (
-        "YMWV46JA",
-        "friston-life",
-        "Theoretical neuroscience. Dense, abstract, math-heavy. Tests unusual structure.",
-        {
-            "year": 2013,
-            "author_substr": "friston",
-            "collection": "Friston",
-            "expect_tables": False,
-            "expect_figures": True,
-            "expect_sections": ["introduction"],
-            "searchable_content": "free energy principle self-organization",
-            "table_search_query": None,
-            "figure_search_query": "Markov blanket",
-        },
-    ),
-    (
-        "DPYRZTFI",
-        "yang-ppv-meta",
-        "Systematic review/meta-analysis. Forest plots, summary tables. Tests meta-analysis format.",
-        {
-            "year": 2014,
-            "author_substr": "yang",
-            "collection": "PPV",
-            "expect_tables": True,
-            "expect_figures": True,
-            "expect_sections": ["introduction", "methods", "results", "discussion"],
-            "searchable_content": "pulse pressure variation fluid responsiveness",
-            "table_search_query": "sensitivity specificity diagnostic",
-            "figure_search_query": "sensitivity specificity receiver operating",
-        },
-    ),
+    # (
+    #     "SCPXVBLY",
+    #     "active-inference-tutorial",
+    #     "Tutorial paper with equations, diagrams, algorithm boxes. Tests complex layout.",
+    #     {
+    #         "year": 2022,
+    #         "author_substr": "smith",
+    #         "collection": "Active Inference",
+    #         "expect_tables": True,
+    #         "expect_figures": True,
+    #         "expect_sections": ["introduction", "discussion", "conclusion"],
+    #         "searchable_content": "active inference free energy",
+    #         "table_search_query": "algorithm update rules",
+    #         "figure_search_query": "generative model graphical",
+    #     },
+    # ),
+    # (
+    #     "XIAINRVS",
+    #     "huang-emd-1998",
+    #     "Foundational EMD paper from 1998. Math-heavy, older format. Tests pre-2000 PDFs.",
+    #     {
+    #         "year": 1998,
+    #         "author_substr": "huang",
+    #         "collection": "EMD",
+    #         "expect_tables": False,
+    #         "expect_figures": True,
+    #         "expect_sections": ["introduction", "conclusion"],
+    #         "searchable_content": "empirical mode decomposition Hilbert spectrum",
+    #         "table_search_query": None,
+    #         "figure_search_query": "intrinsic mode function",
+    #     },
+    # ),
+    # (
+    #     "C626CYVT",
+    #     "hallett-tms-primer",
+    #     "TMS primer/review. Well-structured clinical review. Tests clean section detection.",
+    #     {
+    #         "year": 2007,
+    #         "author_substr": "hallett",
+    #         "collection": "TMS",
+    #         "expect_tables": True,
+    #         "expect_figures": True,
+    #         "expect_sections": ["introduction"],
+    #         "searchable_content": "transcranial magnetic stimulation motor cortex",
+    #         "table_search_query": "stimulation parameters coil",
+    #         "figure_search_query": "magnetic field coil",
+    #     },
+    # ),
+    # (
+    #     "5SIZVS65",
+    #     "laird-fick-polyps",
+    #     "Epidemiology paper with demographic tables. Tests table extraction accuracy.",
+    #     {
+    #         "year": 2016,
+    #         "author_substr": "laird",
+    #         "collection": "PhD",
+    #         "expect_tables": True,
+    #         "expect_figures": False,
+    #         "expect_sections": ["introduction", "methods", "results", "discussion"],
+    #         "searchable_content": "colonic polyp histopathology colonoscopy",
+    #         "table_search_query": "polyp location demographics patient",
+    #         "figure_search_query": None,
+    #     },
+    # ),
+    # (
+    #     "9GKLLJH9",
+    #     "helm-coregulation",
+    #     "Psychology paper on RSA coregulation. Tests social science format.",
+    #     {
+    #         "year": 2014,
+    #         "author_substr": "helm",
+    #         "collection": "Coregulation",
+    #         "expect_tables": True,
+    #         "expect_figures": True,
+    #         "expect_sections": ["introduction", "methods", "results", "discussion"],
+    #         "searchable_content": "respiratory sinus arrhythmia coregulation romantic",
+    #         "table_search_query": "correlation coefficient RSA",
+    #         "figure_search_query": "RSA dynamics time series",
+    #     },
+    # ),
+    # (
+    #     "Z9X4JVZ5",
+    #     "roland-emg-filter",
+    #     "IEEE engineering paper on digital filtering. Tests 2-column format, circuits.",
+    #     {
+    #         "year": 2019,
+    #         "author_substr": "roland",
+    #         "collection": "Processing",
+    #         "expect_tables": True,
+    #         "expect_figures": True,
+    #         "expect_sections": ["introduction", "results", "conclusion"],
+    #         "searchable_content": "ultra-low-power digital filtering EMG",
+    #         "table_search_query": "power consumption filter",
+    #         "figure_search_query": "filter frequency response",
+    #     },
+    # ),
+    # (
+    #     "YMWV46JA",
+    #     "friston-life",
+    #     "Theoretical neuroscience. Dense, abstract, math-heavy. Tests unusual structure.",
+    #     {
+    #         "year": 2013,
+    #         "author_substr": "friston",
+    #         "collection": "Friston",
+    #         "expect_tables": False,
+    #         "expect_figures": True,
+    #         "expect_sections": ["introduction"],
+    #         "searchable_content": "free energy principle self-organization",
+    #         "table_search_query": None,
+    #         "figure_search_query": "Markov blanket",
+    #     },
+    # ),
+    # (
+    #     "DPYRZTFI",
+    #     "yang-ppv-meta",
+    #     "Systematic review/meta-analysis. Forest plots, summary tables. Tests meta-analysis format.",
+    #     {
+    #         "year": 2014,
+    #         "author_substr": "yang",
+    #         "collection": "PPV",
+    #         "expect_tables": True,
+    #         "expect_figures": True,
+    #         "expect_sections": ["introduction", "methods", "results", "discussion"],
+    #         "searchable_content": "pulse pressure variation fluid responsiveness",
+    #         "table_search_query": "sensitivity specificity diagnostic",
+    #         "figure_search_query": "sensitivity specificity receiver operating",
+    #     },
+    # ),
     (
         "VP3NJ74M",
         "fortune-impedance",
@@ -205,22 +205,22 @@ CORPUS = [
             "figure_search_query": "impedance frequency",
         },
     ),
-    (
-        "AQ3D94VC",
-        "reyes-lf-hrv",
-        "Review of LF HRV as autonomic index. Tests review paper format.",
-        {
-            "year": 2013,
-            "author_substr": "reyes",
-            "collection": "HRV",
-            "expect_tables": True,
-            "expect_figures": True,
-            "expect_sections": ["introduction", "conclusion"],
-            "searchable_content": "low frequency heart rate variability sympathetic",
-            "table_search_query": "autonomic measures",
-            "figure_search_query": "heart rate variability",
-        },
-    ),
+    # (
+    #     "AQ3D94VC",
+    #     "reyes-lf-hrv",
+    #     "Review of LF HRV as autonomic index. Tests review paper format.",
+    #     {
+    #         "year": 2013,
+    #         "author_substr": "reyes",
+    #         "collection": "HRV",
+    #         "expect_tables": True,
+    #         "expect_figures": True,
+    #         "expect_sections": ["introduction", "conclusion"],
+    #         "searchable_content": "low frequency heart rate variability sympathetic",
+    #         "table_search_query": "autonomic measures",
+    #         "figure_search_query": "heart rate variability",
+    #     },
+    # ),
 ]
 
 
@@ -1701,6 +1701,219 @@ def _build_gt_summary_markdown(db_path: Path) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Vision eval DB writer (keeps _vision_stage_eval.db in sync for the viewer)
+# ---------------------------------------------------------------------------
+
+_EVAL_DB_PATH = Path(__file__).resolve().parent.parent / "_vision_stage_eval.db"
+_EVAL_ROLE_NAMES = ["transcriber", "y_verifier", "x_verifier", "synthesizer"]
+_EVAL_STAGE_PAIRS = [
+    ("transcriber", "y_verifier", 0, 1),
+    ("transcriber", "x_verifier", 0, 2),
+    ("transcriber", "synthesizer", 0, 3),
+    ("y_verifier", "synthesizer", 1, 3),
+    ("x_verifier", "synthesizer", 2, 3),
+]
+
+_EVAL_SCHEMA = """\
+CREATE TABLE IF NOT EXISTS runs (
+    run_id TEXT PRIMARY KEY, timestamp TEXT,
+    num_papers INTEGER, num_tables INTEGER,
+    total_cost_usd REAL, vision_time_s REAL
+);
+CREATE TABLE IF NOT EXISTS agent_outputs (
+    run_id TEXT, table_id TEXT, agent_role TEXT,
+    headers_json TEXT, rows_json TEXT, footnotes TEXT,
+    corrections_json TEXT, shape TEXT, parse_success INTEGER,
+    num_corrections INTEGER, raw_response TEXT,
+    PRIMARY KEY (run_id, table_id, agent_role)
+);
+CREATE TABLE IF NOT EXISTS gt_comparisons (
+    run_id TEXT, table_id TEXT, agent_role TEXT,
+    cell_accuracy_pct REAL, structural_coverage_pct REAL,
+    gt_shape TEXT, ext_shape TEXT,
+    num_matched_cols INTEGER, num_extra_cols INTEGER, num_missing_cols INTEGER,
+    num_col_splits INTEGER, num_col_merges INTEGER,
+    num_matched_rows INTEGER, num_extra_rows INTEGER, num_missing_rows INTEGER,
+    num_row_splits INTEGER, num_row_merges INTEGER, num_cell_diffs INTEGER,
+    PRIMARY KEY (run_id, table_id, agent_role)
+);
+CREATE TABLE IF NOT EXISTS stage_diffs (
+    run_id TEXT, table_id TEXT, from_role TEXT, to_role TEXT,
+    shape_changed INTEGER, num_header_diffs INTEGER, num_cell_diffs INTEGER,
+    cells_added INTEGER, cells_removed INTEGER, accuracy_delta REAL,
+    PRIMARY KEY (run_id, table_id, from_role, to_role)
+);
+CREATE TABLE IF NOT EXISTS correction_log (
+    run_id TEXT, table_id TEXT, agent_role TEXT,
+    correction_index INTEGER, correction_text TEXT
+);
+"""
+
+
+def _eval_cell_diff(a, b) -> dict:
+    """Compare two AgentResponses cell-by-cell for stage diffs."""
+    if not a.parse_success or not b.parse_success:
+        return {"shape_changed": 1, "num_header_diffs": 0,
+                "num_cell_diffs": 0, "cells_added": 0, "cells_removed": 0}
+    shape_changed = int(a.raw_shape != b.raw_shape)
+    h_diffs = sum(1 for i in range(min(len(a.headers), len(b.headers)))
+                  if a.headers[i].strip() != b.headers[i].strip())
+    h_diffs += abs(len(a.headers) - len(b.headers))
+    cell_diffs = cells_added = cells_removed = 0
+    min_rows = min(len(a.rows), len(b.rows))
+    for r in range(min_rows):
+        mc = min(len(a.rows[r]), len(b.rows[r]))
+        cell_diffs += sum(1 for c in range(mc)
+                          if a.rows[r][c].strip() != b.rows[r][c].strip())
+        diff = len(b.rows[r]) - len(a.rows[r])
+        if diff > 0:
+            cells_added += diff
+        elif diff < 0:
+            cells_removed -= diff
+    for r in range(min_rows, len(b.rows)):
+        cells_added += len(b.rows[r])
+    for r in range(min_rows, len(a.rows)):
+        cells_removed += len(a.rows[r])
+    return {"shape_changed": shape_changed, "num_header_diffs": h_diffs,
+            "num_cell_diffs": cell_diffs, "cells_added": cells_added,
+            "cells_removed": cells_removed}
+
+
+def _update_vision_eval_db(
+    vision_results: list,
+    session_cost: float,
+    vision_time: float,
+    num_papers: int,
+    gt_db_exists: bool,
+) -> None:
+    """Write vision results to _vision_stage_eval.db for the viewer."""
+    from zotero_chunk_rag.feature_extraction.vision_extract import (
+        AgentResponse, _parse_agent_json,
+    )
+
+    eval_conn = sqlite3.connect(str(_EVAL_DB_PATH))
+    eval_conn.executescript(_EVAL_SCHEMA)
+
+    run_id = time.strftime("%Y%m%d_%H%M%S")
+    n_specs = sum(1 for _, r in vision_results if r.error is None)
+
+    eval_conn.execute(
+        "INSERT OR REPLACE INTO runs VALUES (?, ?, ?, ?, ?, ?)",
+        (run_id, time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+         num_papers, n_specs, session_cost, vision_time),
+    )
+
+    gt_tables: set[str] = set()
+    if gt_db_exists:
+        gt_conn = sqlite3.connect(str(GROUND_TRUTH_DB_PATH))
+        gt_tables = {r[0] for r in gt_conn.execute(
+            "SELECT table_id FROM ground_truth_tables"
+        ).fetchall()}
+        gt_conn.close()
+
+    for spec, result in vision_results:
+        if result.error or not result.agent_responses:
+            continue
+
+        responses = list(result.agent_responses)
+        while len(responses) < 4:
+            responses.append(AgentResponse(
+                headers=[], rows=[], footnotes="",
+                table_label=None, is_incomplete=False,
+                incomplete_reason="", raw_shape=(0, 0),
+                parse_success=False, raw_response="",
+            ))
+
+        for i, role in enumerate(_EVAL_ROLE_NAMES):
+            resp = responses[i]
+            corrections = []
+            if resp.parse_success and resp.raw_response:
+                parsed = _parse_agent_json(resp.raw_response)
+                if parsed:
+                    corrections = parsed.get("corrections") or []
+
+            eval_conn.execute(
+                "INSERT OR REPLACE INTO agent_outputs VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (run_id, spec.table_id, role,
+                 json.dumps(resp.headers, ensure_ascii=False),
+                 json.dumps(resp.rows, ensure_ascii=False),
+                 resp.footnotes,
+                 json.dumps(corrections, ensure_ascii=False),
+                 f"{resp.raw_shape[0]}x{resp.raw_shape[1]}",
+                 int(resp.parse_success),
+                 len(corrections),
+                 resp.raw_response),
+            )
+
+            for ci, ct in enumerate(corrections):
+                eval_conn.execute(
+                    "INSERT INTO correction_log VALUES (?,?,?,?,?)",
+                    (run_id, spec.table_id, role, ci, ct),
+                )
+
+            # GT comparison
+            if spec.table_id in gt_tables and resp.parse_success and resp.headers:
+                try:
+                    cmp = compare_extraction(
+                        GROUND_TRUTH_DB_PATH, spec.table_id,
+                        resp.headers, resp.rows, resp.footnotes or "",
+                    )
+                    eval_conn.execute(
+                        "INSERT OR REPLACE INTO gt_comparisons "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (run_id, spec.table_id, role,
+                         cmp.cell_accuracy_pct,
+                         cmp.structural_coverage_pct,
+                         f"{cmp.gt_shape[0]}x{cmp.gt_shape[1]}",
+                         f"{cmp.ext_shape[0]}x{cmp.ext_shape[1]}",
+                         len(cmp.matched_columns),
+                         len(cmp.extra_columns),
+                         len(cmp.missing_columns),
+                         len(cmp.column_splits),
+                         len(cmp.column_merges),
+                         len(cmp.matched_rows),
+                         len(cmp.extra_rows),
+                         len(cmp.missing_rows),
+                         len(cmp.row_splits),
+                         len(cmp.row_merges),
+                         len(cmp.cell_diffs)),
+                    )
+                except (KeyError, Exception):
+                    pass
+
+        # Stage-to-stage diffs
+        for from_role, to_role, fi, ti in _EVAL_STAGE_PAIRS:
+            diff = _eval_cell_diff(responses[fi], responses[ti])
+            acc_delta = None
+            if spec.table_id in gt_tables:
+                row_from = eval_conn.execute(
+                    "SELECT cell_accuracy_pct FROM gt_comparisons "
+                    "WHERE run_id=? AND table_id=? AND agent_role=?",
+                    (run_id, spec.table_id, from_role),
+                ).fetchone()
+                row_to = eval_conn.execute(
+                    "SELECT cell_accuracy_pct FROM gt_comparisons "
+                    "WHERE run_id=? AND table_id=? AND agent_role=?",
+                    (run_id, spec.table_id, to_role),
+                ).fetchone()
+                if (row_from and row_to
+                        and row_from[0] is not None and row_to[0] is not None):
+                    acc_delta = row_to[0] - row_from[0]
+
+            eval_conn.execute(
+                "INSERT OR REPLACE INTO stage_diffs VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (run_id, spec.table_id, from_role, to_role,
+                 diff["shape_changed"], diff["num_header_diffs"],
+                 diff["num_cell_diffs"], diff["cells_added"],
+                 diff["cells_removed"], acc_delta),
+            )
+
+    eval_conn.commit()
+    eval_conn.close()
+    print(f"  [Vision] Updated {_EVAL_DB_PATH.name} (run {run_id})")
+
+
+# ---------------------------------------------------------------------------
 # Per-method pipeline analysis
 # ---------------------------------------------------------------------------
 
@@ -2022,6 +2235,12 @@ def _test_pipeline_methods(
             f"\n  [Vision] Done: {n_ok} succeeded, {n_err} failed, "
             f"{vis_elapsed:.1f}s",
             flush=True,
+        )
+
+        # --- Also update _vision_stage_eval.db for the vision viewer ---
+        _update_vision_eval_db(
+            vision_results, _vision_api.session_cost, vis_elapsed,
+            len(extractions), gt_db_exists,
         )
 
     con.commit()

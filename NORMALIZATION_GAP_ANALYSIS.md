@@ -1,234 +1,151 @@
-# Cell Normalization Analysis: ground_truth.py
+# Cell Normalization Gap Analysis: ground_truth.py
 
 ## Executive Summary
 
-The `_normalize_cell()` function in `ground_truth.py` (lines 294-317) applies **6 normalization steps** to compare vision pipeline output against ground truth. However, it **has a critical gap**: it does **NOT normalize Unicode Greek letters to LaTeX equivalents or ASCII names**.
+The `_normalize_cell()` function in `ground_truth.py` (lines 294-317) applies 6
+normalization steps when comparing extraction output against ground truth. Three
+gaps cause false mismatches:
 
-This causes the specific failure you mentioned:
-- **Vision pipeline output**: `ln(B^{π,τ})` (using Unicode Greek letters π U+03C0, τ U+03C4)
-- **Ground truth**: Same visual representation in the PDF but possibly encoded differently
-- **Comparison result**: MISMATCH because the GT might have LaTeX `\pi`, `\tau` or different Unicode representation
+1. **Smart/curly quotes** — GT or vision may use `'` `'` `"` `"` vs ASCII `'` `"`
+2. **Greek letters** — vision outputs Unicode (π, τ, α), GT may have LaTeX (`\pi`)
+3. **Uppercase Greek/Latin collision** — some Greek capitals are visually identical
+   to Latin letters and must NOT be normalized
+
+Additionally, the vision viewer (`tools/vision_viewer.py`) mirrors this normalizer
+and must be kept in sync.
 
 ---
 
-## Current Normalization Code (lines 294-317)
+## Current Normalization (6 steps)
 
 ```python
 def _normalize_cell(text: str) -> str:
-    """Normalize a cell value for comparison.
-
-    Steps:
-    1. Strip leading/trailing whitespace
-    2. Collapse internal whitespace to single space
-    3. Dash/hyphen normalization (unicode minus, en-dash, em-dash, etc.)
-    4. Ligature normalization
-    5. LaTeX super/subscript stripping (^{...} → ..., _{...} → ...)
-    6. Unicode super/subscript → ASCII
-    """
-    text = text.strip()
-    text = re.sub(r"\s+", " ", text)
-    # Normalize all dash-like characters to ASCII hyphen
-    for ch in "\u2212\u2013\u2014\u2010\u2011\ufe63\uff0d":
+    text = text.strip()                              # 1. strip
+    text = re.sub(r"\s+", " ", text)                 # 2. whitespace collapse (\n → space)
+    for ch in "\u2212\u2013\u2014\u2010\u2011...":   # 3. dash unification
         text = text.replace(ch, "-")
-    for lig, replacement in _LIGATURE_MAP.items():
-        text = text.replace(lig, replacement)
-    # Strip LaTeX super/subscript notation: x^{2} → x2, x_{i} → xi
-    text = _LATEX_SUPER_RE.sub(r"\1", text)
+    for lig, repl in _LIGATURE_MAP.items():           # 4. ligature expansion
+        text = text.replace(lig, repl)
+    text = _LATEX_SUPER_RE.sub(r"\1", text)           # 5. LaTeX super/sub extraction
     text = _LATEX_SUB_RE.sub(r"\1", text)
-    # Unicode super/subscript characters → ASCII equivalents
-    text = text.translate(_SUPER_SUB_MAP)
+    text = text.translate(_SUPER_SUB_MAP)             # 6. Unicode super/sub → ASCII
     return text
 ```
 
-### What It Currently Handles
-
-| Normalization | Examples | Code Location |
-|---------------|----------|---|
-| **Whitespace** | `"  a  b  "` → `"a b"` | Line 305-306 |
-| **Dashes** | `−` (U+2212), `–` (U+2013), `—` (U+2014) → `-` | Lines 308-309 |
-| **Ligatures** | `ﬀ` → `ff`, `ﬁ` → `fi` | Lines 310-311 |
-| **LaTeX super/subscript** | `^{2}`, `_{i}` → stripped to content | Lines 313-314 |
-| **Unicode super/subscript** | `²` → `2`, `₁` → `1` | Lines 316 (via `_SUPER_SUB_MAP`) |
+**What already works**: whitespace (including `\n`), dashes (U+2212 etc.), ligatures,
+LaTeX `^{...}`/`_{...}`, Unicode superscripts/subscripts.
 
 ---
 
-## Missing Normalization: Greek Letters
+## Gap 1: Smart/Curly Quotes
 
-### The Gap
+### Evidence
 
-The current code does **NOT** normalize:
-- **Unicode Greek letters** (α, β, γ, δ, ε, θ, λ, μ, π, ρ, σ, τ, ω, etc.)
-- **LaTeX Greek commands** (\alpha, \beta, \pi, \tau, etc.)
-
-### Evidence from vision_extract.py (lines 181-186)
-
-The vision extraction pipeline is **explicitly instructed** to use Unicode Greek letters:
-
+SCPXVBLY_table_3 row 3, col 1 — every agent outputs:
 ```
-Special characters — prefer Unicode
-≤ (U+2264), ≥ (U+2265), ± (U+00B1), × (U+00D7), − (U+2212 for minus sign),
-… (U+2026 for ellipsis), α (U+03B1), β (U+03B2), γ (U+03B3), δ (U+03B4),
-ε (U+03B5), θ (U+03B8), λ (U+03BB), μ (U+03BC), σ (U+03C3), χ (U+03C7),
-ω (U+03C9), Δ (U+0394), Σ (U+03A3), ρ (U+03C1), τ (U+03C4), π (U+03C0),
-φ (U+03C6), ψ (U+03C8).
+MDP.Fa is the negative free energy of parameter 'a' (if learning A matrix)
+```
+GT has:
+```
+MDP.Fa is the negative free energy of parameter \u2018a\u2019 (if learning A matrix)
 ```
 
-But the **ground truth database** may have been entered with:
-- Raw Unicode from the PDF (which varies by PDF encoding)
-- LaTeX notation from manual entry
-- Corrupted/encoded forms due to PDF font issues
-- ASCII approximations from legacy entry methods
+- GT: `'` (U+2018 LEFT SINGLE QUOTATION MARK) and `'` (U+2019 RIGHT SINGLE)
+- Vision: `'` (U+0027 APOSTROPHE)
 
----
+The existing normalizer does not handle this. The `\s+` regex handles newlines
+but there is no quote unification.
 
-## The SCPXVBLY_table_3, Row 1 Case
+### Fix
 
-From the database dump, row 1 contains:
-```
-"MDP.P" | "Probability of emitting an action." | ...
-"... inverse temperature parameter α, which by default is
-extremely large (α = 512)..."
-```
-
-**What likely happened**:
-1. PDF contains `α` (U+03B1, GREEK SMALL LETTER ALPHA)
-2. Vision pipeline transcribes it correctly as Unicode: `α`
-3. Ground truth was entered as one of:
-   - LaTeX: `\alpha` or `\textit{α}`
-   - Different Unicode encoding due to PDF font layer issues
-   - ASCII approximation: `a` or some variant
-   - Different Greek letter entirely (encoding corruption)
-
-When `_normalize_cell()` compares them, Unicode `α` ≠ LaTeX `\alpha` because there's no conversion between them.
-
----
-
-## The Exact Normalization Code Missing
-
-### Current `_LATEX_SUPER_RE` and `_LATEX_SUB_RE` (lines 228-229)
+Add after the dash normalization (line 309):
 
 ```python
-_LATEX_SUPER_RE = re.compile(r"\^{([^}]*)}")
-_LATEX_SUB_RE = re.compile(r"_{([^}]*)}")
+# Normalize smart/curly quotes to ASCII
+for ch in "\u2018\u2019\u201a\u0060":  # ' ' ‚ `
+    text = text.replace(ch, "'")
+for ch in "\u201c\u201d\u201e":         # " " „
+    text = text.replace(ch, '"')
 ```
 
-These handle `^{π,τ}` by extracting the content `π,τ`. But they do NOT handle LaTeX commands **inside** those braces (e.g., `^{\pi,\tau}`).
+---
 
-### What's Needed
+## Gap 2: Greek Letters
 
-**Add Greek letter normalization map** (after line 226):
+### Evidence
+
+The vision pipeline is explicitly instructed (vision_extract.py lines 181-186) to
+output Unicode Greek: `α β γ δ ε θ λ μ σ χ ω Δ Σ ρ τ π φ ψ`. GT may have been
+entered with LaTeX commands (`\pi`, `\alpha`) or with different Unicode encodings
+from PDF font mapping.
+
+No specific mismatch was found in the current 10-paper corpus (SCPXVBLY_table_3's
+mismatches are newline and smart-quote, not Greek). However, equation-heavy tables
+in future papers will hit this: statistical tables with `α = 0.05`, physics tables
+with `ω`, `σ`, `μ`, etc.
+
+### Fix — Lowercase Greek Only
+
+Add a map for **lowercase Greek only**. Uppercase Greek letters that are visually
+identical to Latin must be excluded to avoid corrupting normal text.
 
 ```python
 _GREEK_LETTER_MAP = {
-    # Lowercase Greek (Unicode) → ASCII name
-    "α": "alpha",      # U+03B1
-    "β": "beta",       # U+03B2
-    "γ": "gamma",      # U+03B3
-    "δ": "delta",      # U+03B4
-    "ε": "epsilon",    # U+03B5
-    "ζ": "zeta",       # U+03B6
-    "η": "eta",        # U+03B7
-    "θ": "theta",      # U+03B8
-    "ι": "iota",       # U+03B9
-    "κ": "kappa",      # U+03BA
-    "λ": "lambda",     # U+03BB
-    "μ": "mu",         # U+03BC
-    "ν": "nu",         # U+03BD
-    "ξ": "xi",         # U+03BE
-    "ο": "omicron",    # U+03BF
-    "π": "pi",         # U+03C0
-    "ρ": "rho",        # U+03C1
-    "σ": "sigma",      # U+03C3
-    "ς": "final_sigma",# U+03C2
-    "τ": "tau",        # U+03C4
-    "υ": "upsilon",    # U+03C5
-    "φ": "phi",        # U+03C6
-    "χ": "chi",        # U+03C7
-    "ψ": "psi",        # U+03C8
-    "ω": "omega",      # U+03C9
-
-    # Uppercase Greek (Unicode)
-    "Α": "Alpha",      # U+0391
-    "Β": "Beta",       # U+0392
-    "Γ": "Gamma",      # U+0393
-    "Δ": "Delta",      # U+0394
-    "Ε": "Epsilon",    # U+0395
-    "Ζ": "Zeta",       # U+0396
-    "Η": "Eta",        # U+0397
-    "Θ": "Theta",      # U+0398
-    "Ι": "Iota",       # U+0399
-    "Κ": "Kappa",      # U+039A
-    "Λ": "Lambda",     # U+039B
-    "Μ": "Mu",         # U+039C
-    "Ν": "Nu",         # U+039D
-    "Ξ": "Xi",         # U+039E
-    "Ο": "Omicron",    # U+039F
-    "Π": "Pi",         # U+03A0
-    "Ρ": "Rho",        # U+03A1
-    "Σ": "Sigma",      # U+03A3
-    "Τ": "Tau",        # U+03A4
-    "Υ": "Upsilon",    # U+03A5
-    "Φ": "Phi",        # U+03A6
-    "Χ": "Chi",        # U+03A7
-    "Ψ": "Psi",        # U+03A8
-    "Ω": "Omega",      # U+03A9
+    # Lowercase — all visually distinct from Latin
+    "α": "alpha", "β": "beta",   "γ": "gamma",   "δ": "delta",
+    "ε": "epsilon", "ζ": "zeta", "η": "eta",     "θ": "theta",
+    "ι": "iota",  "κ": "kappa",  "λ": "lambda",  "μ": "mu",
+    "ν": "nu",    "ξ": "xi",     "π": "pi",       "ρ": "rho",
+    "σ": "sigma", "ς": "sigma",  "τ": "tau",      "υ": "upsilon",
+    "φ": "phi",   "χ": "chi",    "ψ": "psi",      "ω": "omega",
+    # Uppercase — ONLY visually distinct from Latin
+    # EXCLUDED (identical to Latin): Α/A, Β/B, Ε/E, Ζ/Z, Η/H, Ι/I,
+    #   Κ/K, Μ/M, Ν/N, Ο/O, Ρ/P, Τ/T, Χ/X
+    "Γ": "Gamma", "Δ": "Delta",  "Θ": "Theta",   "Λ": "Lambda",
+    "Ξ": "Xi",    "Π": "Pi",     "Σ": "Sigma",    "Φ": "Phi",
+    "Ψ": "Psi",   "Ω": "Omega",
 }
 
 _LATEX_GREEK_RE = re.compile(
     r"\\(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|"
-    r"lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|"
-    r"Alpha|Beta|Gamma|Delta|Epsilon|Zeta|Eta|Theta|Iota|Kappa|"
-    r"Lambda|Mu|Nu|Xi|Omicron|Pi|Rho|Sigma|Tau|Upsilon|Phi|Chi|Psi|Omega)"
+    r"lambda|mu|nu|xi|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|"
+    r"Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega)"
 )
 ```
 
-**Modify `_normalize_cell()` to add normalization** (after ligature handling, line 311):
+**Why exclude uppercase Greek/Latin homoglyphs**: `Α` (U+0391 Greek Capital Alpha)
+is visually identical to `A` (U+0041 Latin Capital A). If we mapped `Α` → `Alpha`,
+any cell containing a regular "A" that happens to be encoded as Greek Alpha (common
+in PDFs with Symbol fonts) would be silently corrupted. The risk is not theoretical
+— PDF font encoding frequently maps Latin characters through Greek code points.
+
+Add to `_normalize_cell()` after ligature handling:
 
 ```python
     # Normalize LaTeX Greek commands: \pi → pi, \alpha → alpha
     text = _LATEX_GREEK_RE.sub(lambda m: m.group(1).lower(), text)
-
     # Normalize Unicode Greek letters to ASCII names
     for greek_char, ascii_name in _GREEK_LETTER_MAP.items():
-        text = text.replace(greek_char, ascii_name)
+        text = text.replace(greek_char, ascii_name.lower())
 ```
 
 ---
 
-## Why This Matters: Concrete Example
+## Gap 3 (not in current normalizer, but relevant): Newline-as-separator
 
-### Current Behavior (INCONSISTENT)
+### Non-issue for accuracy
 
-If GT was manually entered with LaTeX and vision uses Unicode:
-```
-GT (from manual entry):    "ln(B^{\\pi,\\tau})"
-Vision (from PDF image):   "ln(B^{π,τ})"
+The `\s+` → single space normalization already handles GT newlines vs vision spaces.
+SCPXVBLY_table_3 col 2 has `\n` in GT ("Rows = policies.\nColumns = time points.")
+that normalizes to match the vision's space-separated version.
 
-After _normalize_cell():
-  GT:     "ln(B^{\\pi,\\tau})"    [unchanged — no LaTeX Greek handling]
-  Vision: "ln(B^{π,τ})"           [unchanged — no Unicode Greek handling]
-
-Result: MISMATCH ✗
-Expected: ln(B^{pi,tau}) for both
-```
-
-### Fixed Behavior (CORRECT)
-
-After adding Greek normalization:
-```
-GT (from manual entry):    "ln(B^{\\pi,\\tau})"
-Vision (from PDF image):   "ln(B^{π,τ})"
-
-After _normalize_cell() with fix:
-  GT:     "ln(B^{pi,tau})"       [LaTeX \pi → pi, \tau → tau, content extracted]
-  Vision: "ln(B^{pi,tau})"       [Unicode π → pi, τ → tau, content extracted]
-
-Result: MATCH ✓
-```
+However, the **y_verifier's slash insertion** on row 3 col 0 (`MDP.Fa\nMDP.Fd` →
+`MDP.Fa / MDP.Fd / MDP.Fb / ...`) is a real content change (adding ` / ` characters),
+not a normalization issue. This correctly registers as a diff.
 
 ---
 
-## Full Updated `_normalize_cell()` Function
+## Updated `_normalize_cell()` — Full Function
 
 ```python
 def _normalize_cell(text: str) -> str:
@@ -238,86 +155,95 @@ def _normalize_cell(text: str) -> str:
     1. Strip leading/trailing whitespace
     2. Collapse internal whitespace to single space
     3. Dash/hyphen normalization (unicode minus, en-dash, em-dash, etc.)
-    4. Ligature normalization
-    5. LaTeX Greek commands → ASCII names (\pi → pi)
-    6. Unicode Greek letters → ASCII names (π → pi)
-    7. LaTeX super/subscript extraction (^{...} → ..., _{...} → ...)
-    8. Unicode super/subscript → ASCII
+    4. Smart/curly quote normalization
+    5. Ligature normalization
+    6. LaTeX Greek commands → ASCII names (\\pi → pi)
+    7. Unicode Greek letters → ASCII names (π → pi)
+    8. LaTeX super/subscript extraction (^{...} → ..., _{...} → ...)
+    9. Unicode super/subscript → ASCII
     """
     text = text.strip()
     text = re.sub(r"\s+", " ", text)
-
-    # Normalize all dash-like characters to ASCII hyphen
+    # Dashes
     for ch in "\u2212\u2013\u2014\u2010\u2011\ufe63\uff0d":
         text = text.replace(ch, "-")
-
-    # Normalize ligatures
+    # Smart quotes
+    for ch in "\u2018\u2019\u201a\u0060":
+        text = text.replace(ch, "'")
+    for ch in "\u201c\u201d\u201e":
+        text = text.replace(ch, '"')
+    # Ligatures
     for lig, replacement in _LIGATURE_MAP.items():
         text = text.replace(lig, replacement)
-
-    # Normalize LaTeX Greek commands: \pi → pi, \alpha → alpha, etc.
+    # LaTeX Greek → ASCII name
     text = _LATEX_GREEK_RE.sub(lambda m: m.group(1).lower(), text)
-
-    # Normalize Unicode Greek letters to ASCII names
+    # Unicode Greek → ASCII name
     for greek_char, ascii_name in _GREEK_LETTER_MAP.items():
-        text = text.replace(greek_char, ascii_name)
-
-    # Strip LaTeX super/subscript notation: x^{2} → x2, x_{i} → xi
+        text = text.replace(greek_char, ascii_name.lower())
+    # LaTeX super/subscript
     text = _LATEX_SUPER_RE.sub(r"\1", text)
     text = _LATEX_SUB_RE.sub(r"\1", text)
-
-    # Unicode super/subscript characters → ASCII equivalents
+    # Unicode super/subscript
     text = text.translate(_SUPER_SUB_MAP)
-
     return text
 ```
 
 ---
 
-## Impact Analysis
+## Implementation Checklist
 
-### Affected Table Cases
+### In `ground_truth.py`
 
-From SCPXVBLY_table_3 (continued), row 6 (MDP.P):
-- Contains `α` (inverse temperature parameter)
-- Currently: If GT has `\alpha`, comparison fails
-- After fix: Both normalize to `alpha`, comparison succeeds
+1. Add `_GREEK_LETTER_MAP` dict after line 226 (after `_SUPER_SUB_MAP`)
+2. Add `_LATEX_GREEK_RE` regex after the map
+3. Add smart quote normalization to `_normalize_cell()` after dash handling (line 309)
+4. Add Greek normalization to `_normalize_cell()` after ligature handling (line 311)
+5. Update the docstring to list all 9 normalization steps
 
-From any equation-heavy table:
-- `π`, `τ`, `σ`, `μ`, `λ`, `ω` in formulas
-- `β` in statistical coefficients
-- `α` in significance levels (α = 0.05)
+### In `tools/vision_viewer.py`
 
-### Testing the Fix
+6. Add `_GREEK_LETTER_MAP` and `_LATEX_GREEK_RE` to the viewer's local copy
+7. Add smart quote normalization to the viewer's `_normalize_cell()`
+8. Add Greek normalization to the viewer's `_normalize_cell()`
+
+### Tests
+
+9. Add to `tests/test_feature_extraction/test_ground_truth.py`:
 
 ```python
-def test_normalize_cell_greek_letters():
-    """Test that Greek letters normalize consistently."""
-    # Unicode π should match "pi"
+def test_normalize_cell_smart_quotes():
+    assert _normalize_cell("\u2018a\u2019") == _normalize_cell("'a'")
+    assert _normalize_cell("\u201chi\u201d") == _normalize_cell('"hi"')
+
+def test_normalize_cell_greek_lowercase():
     assert _normalize_cell("π") == "pi"
-
-    # LaTeX \pi should also be "pi"
     assert _normalize_cell("\\pi") == "pi"
+    assert _normalize_cell("α = 0.05") == "alpha = 0.05"
+    assert _normalize_cell("\\alpha = 0.05") == "alpha = 0.05"
 
-    # In context: LaTeX \pi,\tau matches Unicode π,τ
-    assert _normalize_cell("ln(B^{\\pi,\\tau})") == _normalize_cell("ln(B^{π,τ})")
+def test_normalize_cell_greek_uppercase_safe():
+    # Visually distinct uppercase should normalize
+    assert _normalize_cell("Δ") == "delta"
+    assert _normalize_cell("Σ") == "sigma"
+    # Latin-identical uppercase should NOT be normalized
+    # (these are Latin A, B, E — not Greek Alpha, Beta, Epsilon)
+    assert _normalize_cell("A") == "A"
+    assert _normalize_cell("B") == "B"
+    assert _normalize_cell("E") == "E"
 
-    # Full table row comparison
-    gt_row = ["ln(B^{\\pi,\\tau})", "α = 0.512"]
-    vis_row = ["ln(B^{π,τ})", "α = 0.512"]
-    assert all(_normalize_cell(g) == _normalize_cell(v) for g, v in zip(gt_row, vis_row))
+def test_normalize_cell_greek_in_context():
+    gt = "ln(B^{\\pi,\\tau})"
+    vis = "ln(B^{π,τ})"
+    assert _normalize_cell(gt) == _normalize_cell(vis)
 ```
 
 ---
 
-## Recommendation
+## What This Does NOT Affect
 
-**Add both maps and the normalization code to `ground_truth.py`**:
-
-1. Add `_GREEK_LETTER_MAP` dict after line 226
-2. Add `_LATEX_GREEK_RE` regex after the map
-3. Insert Greek normalization in `_normalize_cell()` after ligature handling (line 311)
-4. Update the docstring to list the 8 normalization steps
-5. Add unit tests in `tests/test_feature_extraction/test_ground_truth.py`
-
-This is a **one-time fix** that will eliminate Greek letter encoding mismatches across all 44 ground truth tables and all future comparisons.
+- **Semantic search / indexing**: Normalization is test-time only, not part of the
+  ChromaDB indexing pipeline. Embeddings handle encoding variants naturally.
+- **Vision pipeline output**: Agents are instructed to use Unicode Greek. This does
+  not change that. The normalization only affects accuracy *measurement*.
+- **Existing passing tests**: All existing normalization (dashes, ligatures, super/sub)
+  is preserved. New steps are additive.

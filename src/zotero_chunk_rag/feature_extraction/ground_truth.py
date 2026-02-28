@@ -579,6 +579,19 @@ def _align_columns(
         used_gt.add(gidx)
         used_ext.add(eidx)
 
+    # Pass 4: positional fallback for remaining unmatched columns.
+    # When a GT column index also exists as an unmatched ext column index,
+    # match them by position.  This ensures data cells are compared even
+    # when headers differ textually — the mismatch appears as a header_diff
+    # and counts against accuracy rather than zeroing out the entire column.
+    pos_missing_gt = sorted(i for i in range(len(gt_norm)) if i not in used_gt)
+    pos_extra_ext_set = {i for i in range(len(ext_norm)) if i not in used_ext}
+    for gi in pos_missing_gt:
+        if gi in pos_extra_ext_set:
+            matched.append((gi, gi))
+            used_gt.add(gi)
+            used_ext.add(gi)
+
     extra_columns = sorted(i for i in range(len(ext_norm)) if i not in used_ext)
     missing_columns = sorted(i for i in range(len(gt_norm)) if i not in used_gt)
 
@@ -844,14 +857,30 @@ def compare_extraction(
             merge_gt_rows.add(gi)
     affected_gt_rows = split_gt_rows | merge_gt_rows | set(missing_rows)
 
-    # --- Cell comparison ---
-    total_gt_cells = len(gt_rows) * len(gt_headers) if gt_headers else 0
+    # --- Cell comparison (headers count as cells) ---
+    # Total GT cells = headers + data rows.  Headers are one "row" of cells.
+    total_gt_cells = (len(gt_headers) + len(gt_rows) * len(gt_headers)) if gt_headers else 0
     comparable_cols = {gc for gc in col_map if gc not in affected_gt_cols}
     comparable_rows = {gr for gr, _ in matched_rows if gr not in affected_gt_rows}
-    comparable_cells = len(comparable_rows) * len(comparable_cols)
+    comparable_header_cells = len(comparable_cols)
+    comparable_data_cells = len(comparable_rows) * len(comparable_cols)
+    comparable_cells = comparable_header_cells + comparable_data_cells
     correct_cells = 0
     cell_diffs: list[CellDiff] = []
 
+    # Header cells count toward accuracy (mismatches penalise proportionally,
+    # not catastrophically via lost column alignment).
+    for gt_ci, ext_ci in col_map.items():
+        if gt_ci in affected_gt_cols:
+            continue
+        gt_h = _normalize_cell(gt_headers[gt_ci])
+        ext_h = _normalize_cell(headers[ext_ci])
+        if gt_h == ext_h:
+            correct_cells += 1
+        # Header mismatches are reported separately in header_diffs below;
+        # they are NOT duplicated into cell_diffs.
+
+    # Data cells
     for gt_ri, ext_ri in matched_rows:
         if gt_ri in affected_gt_rows:
             continue
@@ -865,7 +894,7 @@ def compare_extraction(
             else:
                 cell_diffs.append(CellDiff(row=gt_ri, col=gt_ci, expected=gt_val, actual=ext_val))
 
-    # Accuracy over comparable cells only (not penalized for structural issues)
+    # Accuracy over comparable cells (headers + data), not penalized for structural issues
     cell_accuracy_pct = (correct_cells / comparable_cells * 100.0) if comparable_cells > 0 else 0.0
     structural_coverage_pct = (comparable_cells / total_gt_cells * 100.0) if total_gt_cells > 0 else 100.0
 

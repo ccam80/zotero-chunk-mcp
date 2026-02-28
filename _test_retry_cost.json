@@ -1,0 +1,14 @@
+[
+  {
+    "timestamp": "2026-02-28T01:18:03.318119+00:00",
+    "session_id": "2026-02-28T01:14:52.540623+00:00",
+    "table_id": "Z9X4JVZ5_table_6",
+    "agent_role": "transcriber",
+    "model": "claude-haiku-4-5-20251001",
+    "input_tokens": 45,
+    "output_tokens": 208,
+    "cache_write_tokens": 7371,
+    "cache_read_tokens": 0,
+    "cost_usd": 0.01029875
+  }
+]

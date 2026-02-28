@@ -126,8 +126,11 @@ table_label
 "Table S2").  Set to null if there is no visible label.
 
 is_incomplete
-  true if any edge of the table is cut off at the image boundary or cells are \
-visibly truncated.  false if the complete table is visible.
+  true if any edge of the table is cut off at the image boundary, cells are \
+visibly truncated, OR the image does not contain the table matching the \
+provided caption (e.g. only the caption is visible without the table body, or \
+the image shows a different table).  false if the complete table is visible \
+and matches the caption.
 
 incomplete_reason
   Which edge(s) are cut off ("bottom edge missing", "right column cut off", …). \
@@ -234,6 +237,25 @@ columnar PDF layout)
 • An optional table caption
 
 Procedure:
+
+Phase 0 — Caption verification (BEFORE transcribing)
+  If a caption was provided in the context, look at the image for any visible \
+caption text.  Often only the last line or two of a caption is visible at the \
+top of the image — that is enough to verify.  Compare whatever caption text \
+you can see in the image against the FULL caption provided in the context.
+
+  Set is_incomplete = true and STOP (output empty headers and rows) if:
+  • Visible caption text does NOT match the provided caption — even a partial \
+mismatch means the image shows the WRONG table.  For example, the image shows \
+"...filter implementations at a 48 MHz clock" but the provided caption says \
+"Comparison of sampling rates at various frequencies".
+  • The image contains only caption text with no table body visible.
+  In all these cases, set incomplete_reason to describe the mismatch (e.g. \
+"visible caption fragment '...filter implementations at a 48 MHz clock' does \
+not match the provided caption").
+
+  If you CANNOT see any caption text at all in the image (the crop starts \
+below the caption), that is normal for tight crops — proceed to Phase 1.
 
 Phase 1 — Transcribe from image
   Read the table directly from the image.  Transcribe all visible text exactly, \

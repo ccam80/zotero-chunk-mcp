@@ -19,7 +19,7 @@ import base64
 import json
 import logging
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -390,6 +390,11 @@ class VisionAPI:
         After the transcriber batch, any table whose result is incomplete or
         empty is re-rendered at full page resolution and re-submitted as a
         batch.  Returns the (possibly updated) prep and results lists.
+
+        Fixes applied:
+        - Re-extracts raw_text from the full page (not the original tiny bbox)
+        - Adds caption disambiguation so the model knows which table to find
+        - Only merges back retries that actually produced data
         """
         import pymupdf
 
@@ -414,13 +419,17 @@ class VisionAPI:
         retry_specs: list[TableVisionSpec] = []
         retry_prep: list[tuple[str, str, tuple]] = []
         retry_map: list[int] = []  # maps retry index -> original index
+        retry_role_texts: list[str] = []
 
         for idx in retry_indices:
             spec = specs[idx]
             try:
                 doc = pymupdf.open(str(spec.pdf_path))
-                page_rect = doc[spec.page_num - 1].rect
+                page = doc[spec.page_num - 1]
+                page_rect = page.rect
                 page_w, page_h = page_rect.width, page_rect.height
+                # Re-extract raw_text from the full page, not original bbox
+                full_raw_text = page.get_text("text")
                 doc.close()
             except Exception:
                 continue
@@ -435,9 +444,21 @@ class VisionAPI:
                     dpi=self._dpi, padding_px=self._padding_px,
                 )
                 b64 = base64.b64encode(png).decode("ascii")
-                retry_specs.append(spec)
+                # Create updated spec with full-page raw_text
+                retry_spec = replace(spec, raw_text=full_raw_text)
+                retry_specs.append(retry_spec)
                 retry_prep.append((b64, mt, full_bbox))
                 retry_map.append(idx)
+
+                # Caption disambiguation for full-page retries
+                caption_hint = spec.caption or spec.table_id
+                retry_role_texts.append(
+                    f"IMPORTANT: This is a FULL-PAGE image because the "
+                    f"original cropped image was too small. The page may "
+                    f"contain multiple tables. Find and transcribe ONLY the "
+                    f"table whose caption is: \"{caption_hint}\"\n"
+                    f"Ignore all other tables on this page."
+                )
             except Exception:
                 logger.warning(
                     "Full-page render failed for %s", spec.table_id,
@@ -446,24 +467,29 @@ class VisionAPI:
         if not retry_specs:
             return prep, transcriber_results
 
-        # Submit retries as a batch
+        # Submit retries as a batch (with disambiguation role texts)
         retry_results = await self._submit_batch_stage(
             "transcriber", retry_specs, retry_prep,
+            role_texts=retry_role_texts,
         )
 
-        # Merge successful retries back
+        # Merge back only retries that actually produced data
         for ri, (idx, result) in enumerate(zip(retry_map, retry_results)):
-            if result.parse_success:
+            if not self._needs_retry(result):
                 transcriber_results[idx] = result
                 prep[idx] = retry_prep[ri]
                 logger.info(
-                    "Retry succeeded (full page) for %s",
+                    "Retry succeeded (full page) for %s: %dx%d",
                     specs[idx].table_id,
+                    result.raw_shape[0], result.raw_shape[1],
                 )
             else:
                 logger.warning(
-                    "Retry failed for %s — still incomplete/empty",
+                    "Retry still incomplete for %s (parse=%s, incomplete=%s, "
+                    "headers=%d, rows=%d)",
                     specs[idx].table_id,
+                    result.parse_success, result.is_incomplete,
+                    len(result.headers), len(result.rows),
                 )
 
         return prep, transcriber_results
@@ -473,13 +499,20 @@ class VisionAPI:
         role: str,
         specs: list[TableVisionSpec],
         prep: list[tuple[str, str, tuple]],
+        role_texts: list[str] | None = None,
     ) -> list[AgentResponse]:
-        """Submit a batch of requests for a single role, poll, collect."""
+        """Submit a batch of requests for a single role, poll, collect.
+
+        Args:
+            role_texts: Optional per-request role text appended after the role
+                preamble. Used by retry to inject disambiguation context.
+        """
         requests = []
         for i, (spec, (image_b64, media_type, _bbox)) in enumerate(zip(specs, prep)):
+            extra = role_texts[i] if role_texts else ""
             requests.append(self._build_batch_request(
                 f"{spec.table_id}__{role}",
-                role, image_b64, media_type, "",
+                role, image_b64, media_type, extra,
                 raw_text=spec.raw_text, caption=spec.caption, garbled=spec.garbled,
             ))
 
@@ -634,6 +667,14 @@ class VisionAPI:
         results: dict[str, str] = {}
         for result in self._sync_client.messages.batches.results(batch_id):
             cid = result.custom_id
+            rtype = getattr(result.result, "type", "unknown")
+            if rtype != "succeeded":
+                logger.error(
+                    "Batch result %s: type=%s (not succeeded) — "
+                    "this table will have no data for this stage",
+                    cid, rtype,
+                )
+                continue
             try:
                 text = result.result.message.content[0].text
                 results[cid] = text
@@ -660,6 +701,14 @@ class VisionAPI:
                 await _append_cost_entry(self._cost_log_path, entry)
             except (AttributeError, IndexError) as exc:
                 logger.warning("Could not parse batch result %s: %s", cid, exc)
+
+        if len(results) < len(requests):
+            logger.error(
+                "Batch %s: received %d/%d results — %d missing. "
+                "Missing tables will have no data for this stage.",
+                batch_id, len(results), len(requests),
+                len(requests) - len(results),
+            )
 
         return results
 
