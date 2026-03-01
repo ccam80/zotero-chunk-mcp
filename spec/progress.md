@@ -46,3 +46,17 @@
   - `src/zotero_chunk_rag/feature_extraction/paddle_engines/__init__.py` — added re-exports for `PPStructureEngine` and `PaddleOCRVLEngine`
 - **Tests**: 18/18 assertions verified via Python REPL (all spec cases: simple table, alignment row stripping, escaped pipes, whitespace trimming, empty string, no-separator fallback, multirow)
 - **Notes**: `_parse_markdown_table` is a module-level function (not a method) as specified. Env var `PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True` set via `os.environ.setdefault` before paddleocr import. `restructure_pages` imported from `paddleocr.utils.visual`. `block_content` key used for markdown string from each table block.
+
+## Task B3-1.1: Add MatchedPaddleTable dataclass
+- **Status**: complete
+- **Agent**: implementer
+- **Files created**: none
+- **Files modified**: src/zotero_chunk_rag/feature_extraction/paddle_extract.py, src/zotero_chunk_rag/feature_extraction/__init__.py
+- **Tests**: 2/2 passing (TestMatchedPaddleTable::test_fields, TestMatchedPaddleTable::test_orphan_defaults)
+
+## Task B3-1.2: Implement match_tables_to_captions()
+- **Status**: complete
+- **Agent**: implementer
+- **Files created**: tests/test_paddle_extract.py
+- **Files modified**: src/zotero_chunk_rag/feature_extraction/paddle_extract.py, src/zotero_chunk_rag/feature_extraction/__init__.py
+- **Tests**: 6/6 passing (TestCaptionMatching::test_single_match, test_multiple_tables, test_orphan, test_no_double_match, test_multi_page, test_empty_inputs)
