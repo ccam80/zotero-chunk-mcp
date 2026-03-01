@@ -29,6 +29,7 @@ from .section_classifier import categorize_heading
 from .feature_extraction.vision_extract import compute_all_crops, compute_recrop_bbox
 from .feature_extraction.postprocessors.cell_cleaning import clean_cells
 from .feature_extraction.captions import find_all_captions
+from .orphan_recovery import run_recovery
 
 if TYPE_CHECKING:
     from .feature_extraction.vision_api import VisionAPI, TableVisionSpec
@@ -368,6 +369,10 @@ def extract_document(
     # --- Figure post-processing (independent of tables) ---
     for f in figures:
         f.caption = _normalize_ligatures(f.caption)
+
+    # Orphan recovery: match floating captions to captionless figures
+    run_recovery(doc, figures, tables, page_chunks)
+
     figures = [f for f in figures if f.caption is not None]
 
     # Compute stats (needs open doc, but not tables)
@@ -571,6 +576,87 @@ def resolve_pending_vision(
             n_recovered, len(retry_all_specs),
         )
 
+    # --- Fourth batch: full-page retry for degenerate tables ---
+    fullpage_all_specs: list[TableVisionSpec] = []
+    fullpage_mapping: list[tuple[str, int]] = []  # (doc_key, local_index)
+
+    for doc_key, ext in extractions.items():
+        pending = ext.pending_vision  # type: ignore[assignment]
+        if pending is None or not pending.specs:
+            continue
+        responses = per_doc_responses.get(doc_key, [])
+        if not responses:
+            continue
+
+        recrop_for_doc = per_doc_recrop.get(doc_key, {})
+        retry_for_doc = per_doc_retry.get(doc_key, {})
+        needs_fullpage: list[int] = []
+
+        for local_idx, orig_resp in enumerate(responses):
+            # Determine the effective response after recrop/retry overrides
+            eff_resp = orig_resp
+            if local_idx in recrop_for_doc:
+                rc = recrop_for_doc[local_idx]
+                if not rc.is_incomplete and rc.parse_success:
+                    eff_resp = rc
+            if local_idx in retry_for_doc:
+                rt = retry_for_doc[local_idx]
+                if rt.parse_success:
+                    eff_resp = rt
+
+            # Trigger 1: incomplete but no recrop coordinates
+            if eff_resp.is_incomplete and not orig_resp.recrop_needed:
+                needs_fullpage.append(local_idx)
+                continue
+            # Trigger 2: parsed successfully but empty (degenerate crop)
+            if eff_resp.parse_success and not eff_resp.headers and not eff_resp.rows:
+                needs_fullpage.append(local_idx)
+                continue
+            # Trigger 3: double parse failure (initial + retry both failed)
+            if not eff_resp.parse_success:
+                needs_fullpage.append(local_idx)
+                continue
+
+        if not needs_fullpage:
+            continue
+
+        doc = pymupdf.open(str(pending.pdf_path))
+        try:
+            for local_idx in needs_fullpage:
+                crop_info = pending.crop_infos[local_idx]
+                page = doc[crop_info.page_num - 1]
+                full_rect = page.rect
+                full_bbox = (full_rect.x0, full_rect.y0, full_rect.x1, full_rect.y1)
+                raw_text = page.get_text("text")
+                fullpage_all_specs.append(TableVisionSpec(
+                    table_id=f"{doc_key}__fullpage_p{crop_info.page_num}_t{local_idx}",
+                    pdf_path=pending.pdf_path,
+                    page_num=crop_info.page_num,
+                    bbox=full_bbox,
+                    raw_text=raw_text,
+                    caption=crop_info.caption_text,
+                    garbled=False,
+                ))
+                fullpage_mapping.append((doc_key, local_idx))
+        finally:
+            doc.close()
+
+    per_doc_fullpage: dict[str, dict[int, object]] = defaultdict(dict)
+    if fullpage_all_specs:
+        logger.info(
+            "Vision full-page retry batch: %d tables", len(fullpage_all_specs),
+        )
+        fullpage_batch_responses = vision_api.extract_tables_batch(fullpage_all_specs)
+        n_recovered = 0
+        for (doc_key, local_idx), resp in zip(fullpage_mapping, fullpage_batch_responses):
+            per_doc_fullpage[doc_key][local_idx] = resp
+            if resp.parse_success and (resp.headers or resp.rows):
+                n_recovered += 1
+        logger.info(
+            "Vision full-page retry recovered %d / %d degenerate tables",
+            n_recovered, len(fullpage_all_specs),
+        )
+
     # --- Build tables and finalize each document ---
     for doc_key, ext in extractions.items():
         pending = ext.pending_vision  # type: ignore[assignment]
@@ -585,10 +671,12 @@ def resolve_pending_vision(
 
         retry_for_doc = per_doc_retry.get(doc_key, {})
         failures_for_doc = parse_failure_raws.get(doc_key, {})
+        fullpage_for_doc = per_doc_fullpage.get(doc_key, {})
         tables, vision_details = _build_tables_from_responses(
             responses, pending.crop_infos, recrop_for_doc,
             retry_responses=retry_for_doc,
             initial_failure_raws=failures_for_doc,
+            fullpage_responses=fullpage_for_doc,
         )
 
         # --- Post-process tables (needs doc re-opened) ---
@@ -610,8 +698,12 @@ def resolve_pending_vision(
                 # Figure-table overlap detection
                 _tag_figure_data_tables(tables, ext.figures)
 
-
                 tables = [t for t in tables if not t.artifact_type]
+
+            # Orphan recovery for figures (cross-page caption matching)
+            # page_chunks not available here; pass empty list — recovery
+            # still works via caption scanning on the open doc.
+            run_recovery(doc, ext.figures, tables, [])
 
             completeness = _compute_completeness(
                 doc, ext.pages, ext.sections, tables, ext.figures, ext.stats,
@@ -661,6 +753,7 @@ def _build_tables_from_responses(
     recrop_responses: dict[int, object],
     retry_responses: dict[int, object] | None = None,
     initial_failure_raws: dict[int, str] | None = None,
+    fullpage_responses: dict[int, object] | None = None,
 ) -> tuple[list[ExtractedTable], list[dict]]:
     """Convert vision API responses into ExtractedTable objects and detail dicts.
 
@@ -671,18 +764,23 @@ def _build_tables_from_responses(
         initial_failure_raws: Raw response text from the initial parse failure,
             keyed by local index. Stored in ``initial_raw_response`` for
             debugging.
+        fullpage_responses: Full-page retry results keyed by local index.
+            Populated when the effective response was degenerate (empty,
+            incomplete without recrop coords, or double parse failure).
     """
     tables: list[ExtractedTable] = []
     vision_details: list[dict] = []
     table_idx_per_page: dict[int, int] = {}
     _retry = retry_responses or {}
     _failure_raws = initial_failure_raws or {}
+    _fullpage = fullpage_responses or {}
 
     for i, (orig_resp, crop_info) in enumerate(zip(responses, crop_infos)):
-        resp = orig_resp  # may be overridden by recrop or retry
+        resp = orig_resp  # may be overridden by recrop, retry, or fullpage
         recropped = False
         recrop_bbox_pct_used: list[float] | None = None
         retried = i in _retry
+        fullpage_attempted = i in _fullpage
 
         if i in recrop_responses:
             recrop_resp = recrop_responses[i]
@@ -693,11 +791,19 @@ def _build_tables_from_responses(
                 resp = recrop_resp
                 recropped = True
 
-        # Retry override: applied last, only for initial parse failures
+        # Retry override: applied after recrop, only for initial parse failures
         if retried:
             retry_resp = _retry[i]
             if retry_resp.parse_success:
                 resp = retry_resp
+
+        # Full-page override: applied last, only if the result has content
+        fullpage_parse_success: bool | None = None
+        if fullpage_attempted:
+            fp_resp = _fullpage[i]
+            fullpage_parse_success = fp_resp.parse_success
+            if fp_resp.parse_success and (fp_resp.headers or fp_resp.rows):
+                resp = fp_resp
 
         detail = {
             "text_layer_caption": crop_info.caption_text,
@@ -718,6 +824,8 @@ def _build_tables_from_responses(
             "retry_attempted": retried,
             "retry_parse_success": _retry[i].parse_success if retried else None,
             "initial_raw_response": _failure_raws.get(i),
+            "fullpage_attempted": fullpage_attempted,
+            "fullpage_parse_success": fullpage_parse_success,
         }
         vision_details.append(detail)
 

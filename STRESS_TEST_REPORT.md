@@ -1,14 +1,14 @@
 # Stress Test Report: zotero-chunk-rag
 
-**Date**: 2026-03-01 22:45
+**Date**: 2026-03-02 09:55
 **Corpus**: 20 papers from live Zotero library
 
 ## Executive Summary
 
-- **Total tests**: 562
-- **Passed**: 507 (90%)
-- **Failed**: 55
-- **Major failures**: 28
+- **Total tests**: 563
+- **Passed**: 511 (91%)
+- **Failed**: 52
+- **Major failures**: 25
 
 > **VERDICT**: This tool is NOT reliable for production research use.
 > A researcher depending on this tool WILL miss important results.
@@ -17,7 +17,7 @@
 
 | Operation | Time |
 |-----------|------|
-| Total indexing | 1397.2s |
+| Total indexing | 1930.0s |
 
 ## Extraction Quality per Paper
 
@@ -33,7 +33,7 @@
 | yang-ppv-meta | 13 | 18 | 3 | 6 | A | 5 unknown sections |
 | fortune-impedance | 11 | 10 | 6 | 7 | A | 3 unknown sections; no abstract detected |
 | reyes-lf-hrv | 11 | 12 | 5 | 2 | A | 8 unknown sections |
-| osterrieder-ach-kinetics- | 9 | 22 | 0 | 7 | D | 1 tabs missing; 16 unknown sections |
+| osterrieder-ach-kinetics- | 9 | 22 | 1 | 7 | A | 16 unknown sections |
 | linssen-emg-fatigue-1993 | 8 | 7 | 3 | 1 | B | 1 figs missing; 3 unknown sections; no abstract detected |
 | berntson-hrv-origins-1997 | 27 | 36 | 0 | 0 | A | 31 unknown sections |
 | ats-ers-respiratory-muscl | 107 | 313 | 18 | 55 | A | 271 unknown sections; no abstract detected |
@@ -94,29 +94,17 @@ Abstract NOT detected
 
 Abstract NOT detected
 
+### !!! [MAJOR] content-readability — friston-life
+
+1 tables with readability issues: table 0: garbled=0, interleaved=4
+
 ### ! [MINOR] abstract-detection — fortune-impedance
 
 Abstract NOT detected
 
-### !!! [MAJOR] table-dimensions-sanity — fortune-impedance
-
-1 tables are 1x1 (degenerate)
-
 ### ! [MINOR] section-detection — reyes-lf-hrv
 
 Expected section 'introduction' — MISSING. Got: ['abstract', 'conclusion', 'methods', 'references', 'unknown']
-
-### !!! [MAJOR] completeness-grade — osterrieder-ach-kinetics-1980
-
-Grade: D | Figs: 7 found / 7 captioned / 0 missing | Tables: 0 found / 1 captioned / 1 missing
-
-### !!! [MAJOR] missing-tables — osterrieder-ach-kinetics-1980
-
-1 table(s) have captions but no extracted content. Captions found: 1, tables extracted: 0
-
-### !!! [MAJOR] unmatched-captions — osterrieder-ach-kinetics-1980
-
-Caption numbers found on pages but not matched to any extracted object: figures=none, tables=['1']
 
 ### !!! [MAJOR] caption-number-continuity — osterrieder-ach-kinetics-1980
 
@@ -178,13 +166,13 @@ Expected figures — found 0
 
 Caption numbers found on pages but not matched to any extracted object: figures=['2', '3', '5', '8'], tables=none
 
-### !!! [MAJOR] table-dimensions-sanity — raez-emg-techniques-2006
-
-1 tables are 1x1 (degenerate)
-
 ### !!! [MAJOR] caption-number-continuity — raez-emg-techniques-2006
 
 Figure gaps: none, Table gaps: ['1']
+
+### !!! [MAJOR] duplicate-captions — raez-emg-techniques-2006
+
+1 duplicate caption(s) found
 
 ### ! [MINOR] abstract-detection — daly-hodgkin-huxley-bayesian-2015
 
@@ -275,9 +263,9 @@ Query: 'posterior distribution action potential' — NOT FOUND in top 10. Got: [
 | table-extraction | active-inference-tutorial | Expected tables — found 6 |
 | table-content-quality | active-inference-tutorial/table-0 | Table 0: 18/18 cells non-empty (100%). Caption: 'Table 1 Model variables.' |
 | table-content-quality | active-inference-tutorial/table-1 | Table 1: 6/6 cells non-empty (100%). Caption: 'Table 1 (continued).' |
-| table-content-quality | active-inference-tutorial/table-2 | Table 2: 12/12 cells non-empty (100%). Caption: 'Table 2. Matrix formulation of  |
-| table-content-quality | active-inference-tutorial/table-3 | Table 3: 8/8 cells non-empty (100%). Caption: 'Table 2 (continued).' |
-| table-content-quality | active-inference-tutorial/table-4 | Table 4: 4/4 cells non-empty (100%). Caption: 'Table 2 (continued).' |
+| table-content-quality | active-inference-tutorial/table-2 | Table 2: 12/12 cells non-empty (100%). Caption: 'Table 2 Matrix formulation of e |
+| table-content-quality | active-inference-tutorial/table-3 | Table 3: 8/8 cells non-empty (100%). Caption: 'Table 2 (continued). Model update |
+| table-content-quality | active-inference-tutorial/table-4 | Table 4: 44/44 cells non-empty (100%). Caption: 'Table 3. Output fields for spm_ |
 | table-content-quality | active-inference-tutorial/table-5 | Table 5: 16/16 cells non-empty (100%). Caption: 'Table 3 (continued).' |
 | figure-extraction | active-inference-tutorial | Expected figures — found 17 |
 | figure-caption-rate | active-inference-tutorial | 17/17 figures have captions (100%) |
@@ -351,7 +339,7 @@ Query: 'posterior distribution action potential' — NOT FOUND in top 10. Got: [
 | table-content-quality | roland-emg-filter/table-0 | Table 0: 81/81 cells non-empty (100%). Caption: 'Table 1. Floating-point comb fi |
 | table-content-quality | roland-emg-filter/table-1 | Table 1: 126/126 cells non-empty (100%). Caption: 'Table 2. Floating-point highp |
 | table-content-quality | roland-emg-filter/table-2 | Table 2: 10/10 cells non-empty (100%). Caption: 'Table 3. Poles of comb filters  |
-| table-content-quality | roland-emg-filter/table-3 | Table 3: 27/30 cells non-empty (90%). Caption: 'Table 4. Poles of highpass filte |
+| table-content-quality | roland-emg-filter/table-3 | Table 3: 27/35 cells non-empty (77%). Caption: 'Table 4. Poles of highpass filte |
 | table-content-quality | roland-emg-filter/table-4 | Table 4: 10/10 cells non-empty (100%). Caption: 'Table 5. Runtime per sample of  |
 | table-content-quality | roland-emg-filter/table-5 | Table 5: 10/10 cells non-empty (100%). Caption: 'Table 6. Comparison of runtime  |
 | table-content-quality | roland-emg-filter/table-6 | Table 6: 20/20 cells non-empty (100%). Caption: 'Table 7. Effect of reducing sam |
@@ -370,7 +358,6 @@ Query: 'posterior distribution action potential' — NOT FOUND in top 10. Got: [
 | figure-extraction | friston-life | Expected figures — found 5 |
 | figure-caption-rate | friston-life | 5/5 figures have captions (100%) |
 | completeness-grade | friston-life | Grade: A / Figs: 5 found / 5 captioned / 0 missing / Tables: 1 found / 1 caption |
-| content-readability | friston-life | 0 tables with readability issues |
 | table-dimensions-sanity | friston-life | 0 tables are 1x1 (degenerate) |
 | caption-encoding-quality | friston-life | 0 captions with encoding artifacts |
 | caption-number-continuity | friston-life | Figure gaps: none, Table gaps: none |
@@ -401,14 +388,16 @@ Query: 'posterior distribution action potential' — NOT FOUND in top 10. Got: [
 | section-detection | fortune-impedance | Expected section 'results' — FOUND |
 | table-extraction | fortune-impedance | Expected tables — found 6 |
 | table-content-quality | fortune-impedance/table-0 | Table 0: 21/21 cells non-empty (100%). Caption: 'Table 1 Component values used f |
+| table-content-quality | fortune-impedance/table-1 | Table 1: 20/20 cells non-empty (100%). Caption: 'Table 2 Error between the custo |
 | table-content-quality | fortune-impedance/table-2 | Table 2: 55/55 cells non-empty (100%). Caption: 'Table 3. Error between the cust |
-| table-content-quality | fortune-impedance/table-3 | Table 3: 233/245 cells non-empty (95%). Caption: 'Table 4. Electrode–skin impeda |
+| table-content-quality | fortune-impedance/table-3 | Table 3: 264/264 cells non-empty (100%). Caption: 'Table 4. Electrode–skin imped |
 | table-content-quality | fortune-impedance/table-4 | Table 4: 15/15 cells non-empty (100%). Caption: 'Table 5 Mean electrode–skin imp |
 | table-content-quality | fortune-impedance/table-5 | Table 5: 15/15 cells non-empty (100%). Caption: 'Table 6 Mean and standard devia |
 | figure-extraction | fortune-impedance | Expected figures — found 7 |
 | figure-caption-rate | fortune-impedance | 7/7 figures have captions (100%) |
 | completeness-grade | fortune-impedance | Grade: A / Figs: 7 found / 7 captioned / 0 missing / Tables: 6 found / 6 caption |
 | content-readability | fortune-impedance | 0 tables with readability issues |
+| table-dimensions-sanity | fortune-impedance | 0 tables are 1x1 (degenerate) |
 | caption-encoding-quality | fortune-impedance | 0 captions with encoding artifacts |
 | caption-number-continuity | fortune-impedance | Figure gaps: none, Table gaps: none |
 | duplicate-captions | fortune-impedance | 0 duplicate caption(s) found |
@@ -435,7 +424,9 @@ Query: 'posterior distribution action potential' — NOT FOUND in top 10. Got: [
 | section-detection | osterrieder-ach-kinetics-1980 | Expected section 'introduction' — FOUND |
 | figure-extraction | osterrieder-ach-kinetics-1980 | Expected figures — found 7 |
 | figure-caption-rate | osterrieder-ach-kinetics-1980 | 7/7 figures have captions (100%) |
+| completeness-grade | osterrieder-ach-kinetics-1980 | Grade: A / Figs: 7 found / 7 captioned / 0 missing / Tables: 1 found / 1 caption |
 | abstract-detection | osterrieder-ach-kinetics-1980 | Abstract detected |
+| content-readability | osterrieder-ach-kinetics-1980 | 0 tables with readability issues |
 | table-dimensions-sanity | osterrieder-ach-kinetics-1980 | 0 tables are 1x1 (degenerate) |
 | caption-encoding-quality | osterrieder-ach-kinetics-1980 | 0 captions with encoding artifacts |
 | duplicate-captions | osterrieder-ach-kinetics-1980 | 0 duplicate caption(s) found |
@@ -465,10 +456,10 @@ Query: 'posterior distribution action potential' — NOT FOUND in top 10. Got: [
 | chunk-count-sanity | berntson-hrv-origins-1997 | 150 chunks for 27 pages (expected >= 54) |
 | section-detection | ats-ers-respiratory-muscle-2002 | Expected section 'introduction' — FOUND |
 | table-extraction | ats-ers-respiratory-muscle-2002 | Expected tables — found 18 |
-| table-content-quality | ats-ers-respiratory-muscle-2002/table-0 | Table 0: 25/44 cells non-empty (57%). Caption: 'TABLE 1. PRESSURES FOR BASIC RES |
-| table-content-quality | ats-ers-respiratory-muscle-2002/table-1 | Table 1: 62/84 cells non-empty (74%). Caption: 'TABLE 2. REFERENCE NORMAL RANGES |
+| table-content-quality | ats-ers-respiratory-muscle-2002/table-0 | Table 0: 47/54 cells non-empty (87%). Caption: 'TABLE 1. PRESSURES FOR BASIC RES |
+| table-content-quality | ats-ers-respiratory-muscle-2002/table-1 | Table 1: 62/70 cells non-empty (89%). Caption: 'TABLE 2. REFERENCE NORMAL RANGES |
 | table-content-quality | ats-ers-respiratory-muscle-2002/table-2 | Table 2: 24/24 cells non-empty (100%). Caption: 'TABLE 3. TRANSDIAPHRAGMATIC PRE |
-| table-content-quality | ats-ers-respiratory-muscle-2002/table-3 | Table 3: 75/87 cells non-empty (86%). Caption: 'TABLE 4. TWITCH TRANSDIAPHRAGMAT |
+| table-content-quality | ats-ers-respiratory-muscle-2002/table-3 | Table 3: 75/90 cells non-empty (83%). Caption: 'TABLE 4. TWITCH TRANSDIAPHRAGMAT |
 | table-content-quality | ats-ers-respiratory-muscle-2002/table-4 | Table 4: 10/12 cells non-empty (83%). Caption: 'TABLE 1. TYPES OF RECORDING ELEC |
 | table-content-quality | ats-ers-respiratory-muscle-2002/table-5 | Table 5: 20/27 cells non-empty (74%). Caption: 'TABLE 2. APPLICATIONS FOR RESPIR |
 | table-content-quality | ats-ers-respiratory-muscle-2002/table-6 | Table 6: 10/12 cells non-empty (83%). Caption: 'TABLE 3. TYPES OF RESPIRATORY MU |
@@ -478,9 +469,9 @@ Query: 'posterior distribution action potential' — NOT FOUND in top 10. Got: [
 | table-content-quality | ats-ers-respiratory-muscle-2002/table-10 | Table 10: 12/12 cells non-empty (100%). Caption: 'TABLE 1. RADIOGRAPHY' |
 | table-content-quality | ats-ers-respiratory-muscle-2002/table-11 | Table 11: 18/28 cells non-empty (64%). Caption: 'TABLE 2. ULTRASOUND' |
 | table-content-quality | ats-ers-respiratory-muscle-2002/table-12 | Table 12: 60/102 cells non-empty (59%). Caption: 'TABLE 1. NORMAL VALUES OF CHES |
-| table-content-quality | ats-ers-respiratory-muscle-2002/table-13 | Table 13: 76/124 cells non-empty (61%). Caption: 'TABLE 2. NORMAL VALUES OF MAXI |
+| table-content-quality | ats-ers-respiratory-muscle-2002/table-13 | Table 13: 81/156 cells non-empty (52%). Caption: 'TABLE 2. NORMAL VALUES OF MAXI |
 | table-content-quality | ats-ers-respiratory-muscle-2002/table-14 | Table 14: 66/98 cells non-empty (67%). Caption: 'TABLE 3. NORMAL VALUES OF OCCLU |
-| table-content-quality | ats-ers-respiratory-muscle-2002/table-15 | Table 15: 14/15 cells non-empty (93%). Caption: 'TABLE 4. AXIAL DIAPHRAGM DISPLA |
+| table-content-quality | ats-ers-respiratory-muscle-2002/table-15 | Table 15: 17/18 cells non-empty (94%). Caption: 'TABLE 4. AXIAL DIAPHRAGM DISPLA |
 | table-content-quality | ats-ers-respiratory-muscle-2002/table-16 | Table 16: 60/60 cells non-empty (100%). Caption: 'TABLE 1. ACCURACY OF MAXIMAL I |
 | table-content-quality | ats-ers-respiratory-muscle-2002/table-17 | Table 17: 6/6 cells non-empty (100%). Caption: 'TABLE 2. LIKELIHOOD OF SUCCESSFU |
 | figure-extraction | ats-ers-respiratory-muscle-2002 | Expected figures — found 55 |
@@ -515,14 +506,15 @@ Query: 'posterior distribution action potential' — NOT FOUND in top 10. Got: [
 | table-extraction | raez-emg-techniques-2006 | Expected tables — found 4 |
 | table-content-quality | raez-emg-techniques-2006/table-0 | Table 0: 12/12 cells non-empty (100%). Caption: 'Table 2: Diagnosis performance  |
 | table-content-quality | raez-emg-techniques-2006/table-1 | Table 1: 6/6 cells non-empty (100%). Caption: 'Table 3: Typical EMG classificati |
+| table-content-quality | raez-emg-techniques-2006/table-2 | Table 2: 14/14 cells non-empty (100%). Caption: 'Table 4: Summary of major metho |
 | table-content-quality | raez-emg-techniques-2006/table-3 | Table 3: 14/14 cells non-empty (100%). Caption: 'Table 4: Summary of major metho |
 | figure-extraction | raez-emg-techniques-2006 | Expected figures — found 7 |
 | figure-caption-rate | raez-emg-techniques-2006 | 7/7 figures have captions (100%) |
 | completeness-grade | raez-emg-techniques-2006 | Grade: B / Figs: 7 found / 11 captioned / 4 missing / Tables: 4 found / 3 captio |
 | abstract-detection | raez-emg-techniques-2006 | Abstract detected |
 | content-readability | raez-emg-techniques-2006 | 0 tables with readability issues |
+| table-dimensions-sanity | raez-emg-techniques-2006 | 0 tables are 1x1 (degenerate) |
 | caption-encoding-quality | raez-emg-techniques-2006 | 0 captions with encoding artifacts |
-| duplicate-captions | raez-emg-techniques-2006 | 0 duplicate caption(s) found |
 | chunk-count-sanity | raez-emg-techniques-2006 | 94 chunks for 25 pages (expected >= 50) |
 | figure-images-saved | raez-emg-techniques-2006 | 7/7 figure images saved to disk |
 | section-detection | daly-hodgkin-huxley-bayesian-2015 | Expected section 'introduction' — FOUND |
@@ -545,7 +537,7 @@ Query: 'posterior distribution action potential' — NOT FOUND in top 10. Got: [
 | table-extraction | shaffer-hrv-norms-2017 | Expected tables — found 7 |
 | table-content-quality | shaffer-hrv-norms-2017/table-0 | Table 0: 6/6 cells non-empty (100%). Caption: 'TABLE 1 / HRV time-domain measure |
 | table-content-quality | shaffer-hrv-norms-2017/table-1 | Table 1: 33/33 cells non-empty (100%). Caption: 'TABLE 2 / HRV frequency-domain  |
-| table-content-quality | shaffer-hrv-norms-2017/table-2 | Table 2: 22/27 cells non-empty (81%). Caption: 'Table 3. HRV non-linear measures |
+| table-content-quality | shaffer-hrv-norms-2017/table-2 | Table 2: 22/27 cells non-empty (81%). Caption: 'TABLE 3 / HRV non-linear measure |
 | table-content-quality | shaffer-hrv-norms-2017/table-3 | Table 3: 20/20 cells non-empty (100%). Caption: 'Table 4. Ultra-short-term (UST) |
 | table-content-quality | shaffer-hrv-norms-2017/table-4 | Table 4: 27/28 cells non-empty (96%). Caption: 'TABLE 5 / Short-term ECG norms.' |
 | table-content-quality | shaffer-hrv-norms-2017/table-5 | Table 5: 32/32 cells non-empty (100%). Caption: 'TABLE 6 / Nunan et al. (17) sho |
@@ -559,8 +551,8 @@ Query: 'posterior distribution action potential' — NOT FOUND in top 10. Got: [
 | chunk-count-sanity | shaffer-hrv-norms-2017 | 96 chunks for 17 pages (expected >= 34) |
 | table-extraction | charlton-wearable-ppg-2022 | Expected tables — found 3 |
 | table-content-quality | charlton-wearable-ppg-2022/table-0 | Table 0: 60/72 cells non-empty (83%). Caption: 'Table 1 Further Reading on Photo |
-| table-content-quality | charlton-wearable-ppg-2022/table-1 | Table 1: 166/170 cells non-empty (98%). Caption: 'Table 2 Datasets of PPG Signal |
-| table-content-quality | charlton-wearable-ppg-2022/table-2 | Table 2: 40/40 cells non-empty (100%). Caption: 'Table 3 Selection of Devices Th |
+| table-content-quality | charlton-wearable-ppg-2022/table-1 | Table 1: 168/170 cells non-empty (99%). Caption: 'Table 2 Datasets of PPG Signal |
+| table-content-quality | charlton-wearable-ppg-2022/table-2 | Table 2: 40/40 cells non-empty (100%). Caption: 'Table 3. Selection of Devices T |
 | figure-extraction | charlton-wearable-ppg-2022 | Expected figures — found 4 |
 | figure-caption-rate | charlton-wearable-ppg-2022 | 4/4 figures have captions (100%) |
 | completeness-grade | charlton-wearable-ppg-2022 | Grade: A / Figs: 4 found / 4 captioned / 0 missing / Tables: 3 found / 3 caption |
@@ -624,24 +616,24 @@ Query: 'posterior distribution action potential' — NOT FOUND in top 10. Got: [
 | semantic-search-ranking | charlton-wearable-ppg-2022 | Ranked 1/10 for its own core content query |
 | semantic-search-recall | flett-wearable-hr-accuracy-2025 | Query: 'wrist-worn wearable heart rate accuracy activity' — found at rank 1/10 ( |
 | semantic-search-ranking | flett-wearable-hr-accuracy-2025 | Ranked 1/10 for its own core content query |
-| table-search-recall | active-inference-tutorial | Query: 'algorithm update rules' — found 5 matching table(s), best score 0.251, c |
-| table-markdown-quality | active-inference-tutorial | Table markdown has pipes and 7 lines. Preview: **Table 2 (continued).** /  / / M |
+| table-search-recall | active-inference-tutorial | Query: 'algorithm update rules' — found 5 matching table(s), best score 0.267, c |
+| table-markdown-quality | active-inference-tutorial | Table markdown has pipes and 8 lines. Preview: **Table 2 Matrix formulation of e |
 | table-search-recall | hallett-tms-primer | Query: 'stimulation parameters coil' — found 1 matching table(s), best score 0.3 |
 | table-markdown-quality | hallett-tms-primer | Table markdown has pipes and 7 lines. Preview: **Table 1. Summary of Noninvasive |
 | table-search-recall | laird-fick-polyps | Query: 'polyp location demographics patient' — found 5 matching table(s), best s |
 | table-markdown-quality | laird-fick-polyps | Table markdown has pipes and 15 lines. Preview: **Table 5 Distribution of polyps |
-| table-search-recall | roland-emg-filter | Query: 'power consumption filter' — found 7 matching table(s), best score 0.433, |
+| table-search-recall | roland-emg-filter | Query: 'power consumption filter' — found 7 matching table(s), best score 0.439, |
 | table-markdown-quality | roland-emg-filter | Table markdown has pipes and 8 lines. Preview: **Table 7. Effect of reducing sam |
 | table-search-recall | yang-ppv-meta | Query: 'sensitivity specificity diagnostic' — found 2 matching table(s), best sc |
 | table-markdown-quality | yang-ppv-meta | Table markdown has pipes and 27 lines. Preview: **Table 3 Diagnostic performance |
 | table-search-recall | fortune-impedance | Query: 'impedance measurement electrode' — found 6 matching table(s), best score |
 | table-markdown-quality | fortune-impedance | Table markdown has pipes and 14 lines. Preview: **Table 3. Error between the cus |
-| table-search-recall | reyes-lf-hrv | Query: 'autonomic measures' — found 3 matching table(s), best score 0.444, capti |
+| table-search-recall | reyes-lf-hrv | Query: 'autonomic measures' — found 2 matching table(s), best score 0.438, capti |
 | table-markdown-quality | reyes-lf-hrv | Table markdown has pipes and 21 lines. Preview: **Table 4. Correlations of HRV P |
 | table-search-recall | linssen-emg-fatigue-1993 | Query: 'median frequency conduction velocity' — found 1 matching table(s), best  |
 | table-markdown-quality | linssen-emg-fatigue-1993 | Table markdown has pipes and 19 lines. Preview: **Table 1. Results and reproduci |
 | table-search-recall | ats-ers-respiratory-muscle-2002 | Query: 'respiratory pressure measurement' — found 10 matching table(s), best sco |
-| table-markdown-quality | ats-ers-respiratory-muscle-2002 | Table markdown has pipes and 25 lines. Preview: **TABLE 1. PRESSURES FOR BASIC R |
+| table-markdown-quality | ats-ers-respiratory-muscle-2002 | Table markdown has pipes and 34 lines. Preview: **TABLE 2. NORMAL VALUES OF MAXI |
 | table-search-recall | schroeder-hrv-repeatability-2004 | Query: 'variance reproducibility heart rate' — found 5 matching table(s), best s |
 | table-markdown-quality | schroeder-hrv-repeatability-2004 | Table markdown has pipes and 17 lines. Preview: **Table 5. Correlation Coefficie |
 | table-search-recall | raez-emg-techniques-2006 | Query: 'EMG classification features' — found 2 matching table(s), best score 0.6 |
@@ -736,7 +728,7 @@ Query: 'posterior distribution action potential' — NOT FOUND in top 10. Got: [
 | boundary-chunk-last | active-inference-tutorial | Adjacent chunks for last chunk (idx=336): got 3 |
 | boundary-chunk-first | huang-emd-1998 | Adjacent chunks for first chunk: got 3 (expected >=1) |
 | boundary-chunk-last | huang-emd-1998 | Adjacent chunks for last chunk (idx=184): got 3 |
-| section-weight-effect | all | Default top-3 sections: ['table', 'methods', 'unknown'], methods-boosted top-3:  |
+| section-weight-effect | all | Default top-3 sections: ['table', 'methods', 'table'], methods-boosted top-3: [' |
 | section-labels-valid | active-inference-tutorial | All 17 section labels are valid |
 | section-coverage | active-inference-tutorial | Section spans cover 100% of document (first: 0, last: 371254, total: 371254) |
 | section-labels-valid | huang-emd-1998 | All 29 section labels are valid |
@@ -787,10 +779,10 @@ _(See OCR test results in the test output above)_
 
 | Paper | Table ID | Fuzzy Accuracy | Precision | Recall | Splits | Merges | Cell Diffs |
 |-------|----------|----------------|-----------|--------|--------|--------|------------|
-| laird-fick-polyps | 5SIZVS65_table_1 | 98.7% | 98.7% | 98.7% | 0 | 0 | 0 |
-| laird-fick-polyps | 5SIZVS65_table_2 | 97.6% | 97.6% | 97.6% | 0 | 0 | 0 |
-| laird-fick-polyps | 5SIZVS65_table_3 | 95.8% | 95.8% | 95.8% | 0 | 0 | 0 |
-| laird-fick-polyps | 5SIZVS65_table_4 | 78.9% | 84.5% | 73.9% | 0 | 0 | 11 |
+| laird-fick-polyps | 5SIZVS65_table_1 | 96.6% | 96.6% | 96.6% | 0 | 0 | 0 |
+| laird-fick-polyps | 5SIZVS65_table_2 | 96.6% | 96.6% | 96.6% | 0 | 0 | 5 |
+| laird-fick-polyps | 5SIZVS65_table_3 | 96.0% | 96.0% | 96.0% | 0 | 0 | 0 |
+| laird-fick-polyps | 5SIZVS65_table_4 | 79.8% | 85.5% | 74.8% | 0 | 0 | 9 |
 | laird-fick-polyps | 5SIZVS65_table_5 | 98.0% | 98.0% | 98.0% | 0 | 0 | 0 |
 | helm-coregulation | 9GKLLJH9_table_1 | 100.0% | 100.0% | 100.0% | 0 | 0 | 0 |
 | helm-coregulation | 9GKLLJH9_table_2 | 67.6% | 67.6% | 67.6% | 0 | 0 | 56 |
@@ -803,28 +795,28 @@ _(See OCR test results in the test output above)_
 | yang-ppv-meta | DPYRZTFI_table_1 | 99.8% | 99.8% | 99.8% | 0 | 0 | 1 |
 | yang-ppv-meta | DPYRZTFI_table_2 | 99.9% | 99.9% | 99.9% | 0 | 0 | 1 |
 | yang-ppv-meta | DPYRZTFI_table_3 | 100.0% | 100.0% | 100.0% | 0 | 0 | 0 |
-| active-inference-tutorial | SCPXVBLY_table_1 | 89.6% | 89.6% | 89.6% | 0 | 0 | 5 |
+| active-inference-tutorial | SCPXVBLY_table_1 | 85.3% | 85.3% | 85.3% | 0 | 0 | 7 |
 | active-inference-tutorial | SCPXVBLY_table_1_p16 | 98.7% | 98.7% | 98.7% | 0 | 0 | 1 |
-| active-inference-tutorial | SCPXVBLY_table_2 | 73.8% | 73.8% | 73.8% | 0 | 0 | 7 |
+| active-inference-tutorial | SCPXVBLY_table_2 | 78.7% | 78.7% | 78.7% | 0 | 0 | 7 |
 | active-inference-tutorial | SCPXVBLY_table_2_p19 | 67.4% | 67.4% | 67.4% | 0 | 0 | 5 |
-| active-inference-tutorial | SCPXVBLY_table_2_p20 | 90.7% | 90.7% | 90.7% | 0 | 0 | 3 |
+| active-inference-tutorial | SCPXVBLY_table_3 | 99.5% | 99.5% | 99.5% | 0 | 0 | 1 |
 | active-inference-tutorial | SCPXVBLY_table_3_p31 | 100.0% | 100.0% | 100.0% | 0 | 0 | 0 |
-| fortune-impedance | VP3NJ74M_table_1 | 84.8% | 84.8% | 84.8% | 0 | 0 | 0 |
-| fortune-impedance | VP3NJ74M_table_2 | 0.0% | 0.0% | 0.0% | 0 | 0 | 0 |
+| fortune-impedance | VP3NJ74M_table_1 | 90.6% | 90.6% | 90.6% | 0 | 0 | 0 |
+| fortune-impedance | VP3NJ74M_table_2 | 28.8% | 49.0% | 20.4% | 0 | 0 | 17 |
 | fortune-impedance | VP3NJ74M_table_3 | 27.2% | 19.3% | 46.2% | 0 | 0 | 17 |
-| fortune-impedance | VP3NJ74M_table_4 | 97.6% | 97.8% | 97.4% | 0 | 0 | 2 |
-| fortune-impedance | VP3NJ74M_table_5 | 81.9% | 81.9% | 81.9% | 0 | 0 | 2 |
+| fortune-impedance | VP3NJ74M_table_4 | 92.0% | 86.7% | 97.9% | 0 | 0 | 230 |
+| fortune-impedance | VP3NJ74M_table_5 | 85.2% | 85.2% | 85.2% | 0 | 0 | 0 |
 | fortune-impedance | VP3NJ74M_table_6 | 100.0% | 100.0% | 100.0% | 0 | 0 | 0 |
-| friston-life | YMWV46JA_table_1 | 75.0% | 70.3% | 80.3% | 0 | 0 | 5 |
+| friston-life | YMWV46JA_table_1 | 50.8% | 38.1% | 76.3% | 0 | 0 | 6 |
 | roland-emg-filter | Z9X4JVZ5_table_1 | 100.0% | 100.0% | 100.0% | 0 | 0 | 0 |
 | roland-emg-filter | Z9X4JVZ5_table_2 | 100.0% | 100.0% | 100.0% | 0 | 0 | 0 |
 | roland-emg-filter | Z9X4JVZ5_table_3 | 95.6% | 95.6% | 95.6% | 0 | 0 | 0 |
-| roland-emg-filter | Z9X4JVZ5_table_4 | 100.0% | 100.0% | 100.0% | 0 | 0 | 0 |
+| roland-emg-filter | Z9X4JVZ5_table_4 | 100.0% | 100.0% | 100.0% | 0 | 0 | 4 |
 | roland-emg-filter | Z9X4JVZ5_table_5 | 89.9% | 86.1% | 93.9% | 0 | 0 | 0 |
 | roland-emg-filter | Z9X4JVZ5_table_6 | 89.9% | 86.1% | 93.9% | 0 | 0 | 0 |
-| roland-emg-filter | Z9X4JVZ5_table_7 | 98.8% | 98.8% | 98.8% | 0 | 0 | 0 |
+| roland-emg-filter | Z9X4JVZ5_table_7 | 98.6% | 98.6% | 98.6% | 0 | 0 | 0 |
 
-**Overall corpus fuzzy accuracy**: 85.1% (36 tables compared)
+**Overall corpus fuzzy accuracy**: 85.5% (36 tables compared)
 
 
 ## Vision Extraction Report
@@ -832,26 +824,27 @@ _(See OCR test results in the test output above)_
 | Metric | Value |
 |--------|-------|
 | Tables attempted | 70 |
-| Parse success | 68 (97.1%) |
-| Re-crops performed | 1 (1.4%) |
-| Incomplete tables | 5 (7.1%) |
+| Parse success | 69 (98.6%) |
+| Re-crops performed | 2 (2.9%) |
+| Incomplete tables | 4 (5.7%) |
 
 ### Per-paper breakdown
 
 | Paper | Tables | Parsed | Re-cropped | Incomplete |
 |-------|--------|--------|------------|------------|
-| (unknown) | 2 | 0 | 0 | 0 |
-| active-inference-tutorial | 6 | 6 | 0 | 2 |
+| (unknown) | 1 | 0 | 0 | 0 |
+| active-inference-tutorial | 6 | 6 | 0 | 3 |
 | ats-ers-respiratory-muscle-2002 | 18 | 18 | 0 | 0 |
 | charlton-wearable-ppg-2022 | 3 | 3 | 0 | 0 |
 | daly-hodgkin-huxley-bayesian-2015 | 3 | 3 | 0 | 0 |
-| flett-wearable-hr-accuracy-2025 | 6 | 6 | 0 | 2 |
-| fortune-impedance | 6 | 6 | 0 | 1 |
+| flett-wearable-hr-accuracy-2025 | 6 | 6 | 2 | 0 |
+| fortune-impedance | 6 | 6 | 0 | 0 |
 | friston-life | 1 | 1 | 0 | 0 |
 | hallett-tms-primer | 1 | 1 | 0 | 0 |
 | helm-coregulation | 2 | 2 | 0 | 0 |
 | laird-fick-polyps | 5 | 5 | 0 | 0 |
 | linssen-emg-fatigue-1993 | 3 | 3 | 0 | 0 |
+| osterrieder-ach-kinetics-1980 | 1 | 1 | 0 | 0 |
 | raez-emg-techniques-2006 | 4 | 4 | 0 | 0 |
 | reyes-lf-hrv | 5 | 5 | 0 | 0 |
 | roland-emg-filter | 7 | 7 | 1 | 0 |
@@ -868,15 +861,15 @@ _(See OCR test results in the test output above)_
 | AQ3D94VC_table_3 | Table 3. Correlations of HRV Parameters Obtained by Fast Fou | Table 3. Correlations of HRV Parameters Obtained by Fast Fou |
 | AQ3D94VC_table_4 | Table 4. Correlations of HRV Parameters Obtained by the Auto | Table 4. Correlations of HRV Parameters Obtained by the Auto |
 | E4WMHZH5_table_1 | Table 1. Results and reproducibility | Table 1. Results and reproducibility. |
-| HGGB64RC_table_3 | TABLE 3 / HRV non-linear measures. | Table 3. HRV non-linear measures. |
 | HGGB64RC_table_4 | TABLE 4 / Ultra-short-term (UST) norms. | Table 4. Ultra-short-term (UST) norms. |
 | HGGB64RC_table_6 | TABLE 6 / Nunan et al. (17) short-term norms. | TABLE 6 / Nunan et al. (17) short-term norms. |
 | QB3J4QTQ_table_2 | Table 2. Intraclass Correlation Coefﬁcients (95% Conﬁdence I | Table 2. Intraclass Correlation Coefficients (95% Confidence |
 | QB3J4QTQ_table_3 | Table 3. Intraclass Correlation Coefﬁcients (95% Conﬁdence I | Table 3. Intraclass Correlation Coefficients (95% Confidence |
 | QB3J4QTQ_table_5 | Table 5. Correlation Coefﬁcients (95% Conﬁdence Intervals) f | Table 5. Correlation Coefficients (95% Confidence Intervals) |
 | RE7X5G2Q_table_2 | Table 2 Datasets of PPG Signals. Deﬁnitions: Resp—Respirator | Table 2 Datasets of PPG Signals. Definitions: Resp—Respirato |
-| RE7X5G2Q_table_3 | Table 3 Selection of Devices That Have Been Used to Acquire  | Table 3 Selection of Devices That Have Been Used to Acquire  |
-| SCPXVBLY_table_2 | Table 2 Matrix formulation of equations used for inference. | Table 2. Matrix formulation of equations used for inference. |
+| RE7X5G2Q_table_3 | Table 3 Selection of Devices That Have Been Used to Acquire  | Table 3. Selection of Devices That Have Been Used to Acquire |
+| SCPXVBLY_table_2_p19 | Table 2 (continued). | Table 2 (continued). Model update components, update equatio |
+| SCPXVBLY_table_3 | Table 3 Output fields for spm_MDP_VB_X_tutorial.m simulation | Table 3. Output fields for spm_MDP_VB_X_tutorial.m simulatio |
 | SWB2E2Q9_table_2 | Table 2: Diagnosis performance of time domain,  frequency do | Table 2: Diagnosis performance of time domain, frequency dom |
 | SWB2E2Q9_table_3 | Table 3: Typical EMG classification accuracy rate.  Method   | Table 3: Typical EMG classification accuracy rate. |
 | SWB2E2Q9_table_4 | Table 4: Summary of major methods.  Method  Advantage/Disadv | Table 4: Summary of major methods. |
