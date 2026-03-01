@@ -298,6 +298,8 @@ absolute PDF coordinates with clamping.
 
 **File**: `feature_extraction/vision_api.py`
 
+**Full spec**: `spec/step-3-api-layer.md`
+
 ### Batch-only, fully synchronous
 
 No async path. All extraction uses the Anthropic Batch API. The entire
@@ -317,57 +319,97 @@ module converts from async to sync.
 - `_poll_batch()` → sync: replace `async def` + `asyncio.sleep` with
   `def` + `time.sleep`. Cost logging and result parsing logic reusable.
 - `_submit_and_poll()` → sync: thin wrapper, mirrors `_poll_batch` change.
-- `_append_cost_entry()` → sync: replace `asyncio.Lock` with
-  `threading.Lock`. Same JSON read-append-write logic.
-- `_LOG_LOCK` → `threading.Lock()` instead of `asyncio.Lock()`.
-- Replace `import asyncio` with `import threading`, `import time`.
+- `_append_cost_entry()` → sync: remove `asyncio.Lock`, run body directly.
+  No lock needed — sync single-threaded, no contention.
+- Delete `_LOG_LOCK` entirely.
+- Replace `import asyncio` with `import time`.
 
 **Rewrite for single-agent + multi-strip**:
 - `_prepare_table()` → call `render_table_region()` instead of
   `render_table_png()`. Return `list[tuple[str, str]]` (multiple
   base64 images for multi-strip tables) instead of single image.
 - `VisionAPI.__init__()` → drop `AsyncAnthropic` client, drop
-  `concurrency` param. Keep `_sync_client`, model, cost paths.
+  `concurrency`, `dpi`, `padding_px` params. Keep `_client` (sync),
+  model, cost paths.
 
 **New**:
+- `_build_request(spec, images) -> dict` — builds one batch request dict
+  from a spec and pre-rendered images.
 - `extract_tables_batch(specs: list[TableVisionSpec]) -> list[AgentResponse]`
-  — main entry point. Builds batch requests with VISION_FIRST_SYSTEM prompt
-  + image(s) + raw_text per table, submits batch, polls, parses responses.
+  — main entry point. Renders tables, builds batch requests with
+  VISION_FIRST_SYSTEM prompt + images + raw_text, submits batch, polls,
+  parses responses. Returns responses in input order. Does NOT handle
+  re-crops — caller orchestrates re-crop flow.
+
+### Message construction
+
+`vision_extract.py` provides building blocks (`VISION_FIRST_SYSTEM`,
+`build_common_ctx()`, `render_table_region()`). `vision_api.py` assembles
+Anthropic API message dicts from those pieces via `_build_request()`.
 
 ### Cache strategy
 
-- BP1 = system prompt (cached across all tables in batch)
-- BP2 = image (per-table, within-table cache for re-crops)
+- BP1 = system prompt (cached across all tables in batch via `cache_control`
+  on system block). All tables share `VISION_FIRST_SYSTEM`.
+- No BP2 on images — each table has unique images, and re-crops send
+  different images, so image caching provides no benefit.
 
 ---
 
 ## Step 4: Integration
 
-**Files**: `pdf_processor.py`, `indexer.py`, `feature_extraction/postprocessors/cell_cleaning.py`,
-`feature_extraction/debug_db.py`
+**Files**: `pdf_processor.py`, `models.py`, `indexer.py`,
+`feature_extraction/postprocessors/cell_cleaning.py`,
+`feature_extraction/debug_db.py`, `stress_test_real_library.py`
+
+**Full spec**: `spec/step-4-integration.md`
+
+### API plumbing
+
+`extract_document()` accepts `vision_api: VisionAPI | None = None`.
+When `None`, tables stay `[]` (graceful degradation). When provided,
+the full vision extraction path runs.
+
+`Indexer.__init__()` reads `ANTHROPIC_API_KEY` from `os.environ`. When
+set, constructs a `VisionAPI` with cost log at
+`{chroma_db_path}/../vision_costs.json`. Passes to all `extract_document()`
+calls.
 
 ### Rewire `extract_document()`
 
 The pipeline extraction loop is already stubbed (Phase 0). Replace the
 `tables: list[ExtractedTable] = []` stub with:
-1. For each page: `find_all_captions()` → collect table captions
-2. For each table caption: compute crop, build `TableVisionSpec`
-3. Send all specs to vision API (batch) via `vision_api.py`
-4. Parse results → `ExtractedTable` objects
-5. Apply cell cleaning (standalone normalization functions)
-6. Figure detection (unchanged — already wired)
-7. Continuation caption detection (cross-page tables)
-8. Artifact classification, completeness, stats (unchanged)
+1. For each page: `find_all_captions()` once → split figure/table captions
+2. For each table caption: `compute_all_crops()` → crop bbox
+3. Build `TableVisionSpec` per crop (raw_text from clipped region)
+4. Batch extract via `vision_api.extract_tables_batch(specs)`
+5. Re-crop pass: max 1 retry per table; keep original if re-crop worsens
+6. Convert `AgentResponse` → `ExtractedTable` with `clean_cells()`
+7. Figure detection (unchanged — uses pre-split figure captions)
+8. Post-processing: continuation captions, artifact classification, etc.
 
-### Refactor `cell_cleaning.py`
+### Caption handling
 
-`cell_cleaning.py` imports `CellGrid` from deleted `models.py`. Refactor to:
-- Extract normalization functions (ligatures, leading-zero recovery,
-  negative-sign reassembly, control-char mapping) as standalone functions
-  that operate on `list[str]` (headers) and `list[list[str]]` (rows).
-- Delete the `CellCleaning` class and its `process(grid: CellGrid)` method.
-- `pdf_processor.py` already imports only `_normalize_ligatures` from this
-  module (line 951) — that path continues to work.
+Vision caption used everywhere. `ExtractedTable.caption` receives the
+vision agent's `caption` field (read from the image), with text-layer
+caption as fallback when vision caption is empty. GT matching uses
+`make_table_id()` which extracts the table number — works identically
+since vision captions still contain "Table N". Text-layer caption stored
+in `vision_details` for auditing.
+
+### Cell cleaning
+
+`clean_cells(headers, rows)` replaces `CellCleaning.process(grid)`.
+Applies: ligatures, negative-sign reassembly, leading-zero recovery,
+whitespace normalization, Unicode minus. Does NOT apply
+`_map_control_chars` (text-layer artifact, irrelevant for vision output).
+
+### Debug info
+
+`DocumentExtraction` gets `vision_details: list[dict] | None` field.
+Each dict carries per-table vision debug info (text-layer caption,
+vision caption, crop bbox, recropped flag, parse_success, raw_response,
+etc.). Consumed by stress test for debug DB writes and vision report.
 
 ### Prune `debug_db.py`
 
@@ -377,14 +419,15 @@ Remove pipeline-specific tables and functions:
 - Delete: `write_vision_consensus` / `vision_consensus` table
 - Keep: `write_ground_truth_diff` / `ground_truth_diffs` table
 - Keep: `write_vision_agent_result` / `vision_agent_results` table
-- Update: `EXTENDED_SCHEMA` and `create_extended_tables` to match
 
 ### Update stress test
 
-`stress_test_real_library.py` needs updating for vision-first:
-- Remove `_test_pipeline_methods()` and its `vision_result_to_cell_grid` import
-- Update GT comparison to use `AgentResponse` output directly
-- Pipeline depth report section → vision extraction report
+- Remove imports of deleted debug_db functions
+- Delete 4-agent vision eval code and pipeline depth report builder
+- Add single-agent vision extraction report: per-table parse success,
+  re-crop rate, incomplete count, caption changes (text-layer → vision)
+- Write vision details to debug DB via `write_vision_agent_result()`
+- GT comparison section unchanged (works with vision tables as-is)
 
 ### Known limitation: uncaptioned continuation tables
 
@@ -416,14 +459,17 @@ Run the existing `tests/stress_test_real_library.py` after integration.
 ```
 Phase 0: Demolition
   ↓
-Step 1 (caption fix) ──┐
-Step 2 (vision extract) ├── Step 4 (integration) ── Step 5 (evaluation)
-Step 3 (API layer) ─────┘
+Step 1 (caption fix) ──────┐
+Step 2 (vision extract) ───┤── Step 4 (integration) ── Step 5 (evaluation)
+  ↓                        │
+Step 3 (API layer) ────────┘
 
 Stream B: [B1 install] ── [B2 HTML parser] ── [B3 caption match] ── [B4 eval] ── [B5 report] ── [B6 conditional integration]
 ```
 
-Steps 1–3 can run in parallel after Phase 0.
+Step 1 and Step 2 can run in parallel after Phase 0.
+Step 3 depends on Step 2 (imports `render_table_region`, `VISION_FIRST_SYSTEM`,
+updated `AgentResponse`, and `parse_agent_response` from `vision_extract.py`).
 Step 4 depends on all of Steps 1–3.
 Step 5 validates the complete system.
 Stream B is mostly independent — B3 (caption matching) uses `find_all_captions()`

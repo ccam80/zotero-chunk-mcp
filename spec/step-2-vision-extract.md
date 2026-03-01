@@ -529,4 +529,4 @@ assertions.
 9. **Recrop**: `compute_recrop_bbox` correctly converts 0–100 percentages to absolute PDF coordinates
 10. **Examples**: all 6 worked examples include `caption` field
 11. **Tests**: all tests in `test_vision_extract.py` pass
-12. **No regressions**: existing tests in `test_feature_extraction/` still pass
+12. **No new regressions**: no test that was passing before this step now fails because of this step's changes. Pre-existing failures (e.g., `test_ground_truth.py`, table-dependent tests) are expected and NOT blockers — report them and move on.

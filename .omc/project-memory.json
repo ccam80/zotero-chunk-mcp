@@ -127,20 +127,32 @@
   "hotPaths": [
     {
       "path": "src\\zotero_chunk_rag\\pdf_processor.py",
-      "accessCount": 73,
-      "lastAccessed": 1772336046706,
+      "accessCount": 80,
+      "lastAccessed": 1772341038826,
       "type": "file"
     },
     {
       "path": "tests\\stress_test_real_library.py",
-      "accessCount": 28,
-      "lastAccessed": 1772336064928,
+      "accessCount": 39,
+      "lastAccessed": 1772339954172,
       "type": "file"
     },
     {
       "path": "spec\\phase-0-demolition.md",
+      "accessCount": 31,
+      "lastAccessed": 1772340998085,
+      "type": "file"
+    },
+    {
+      "path": "spec\\plan.md",
       "accessCount": 24,
-      "lastAccessed": 1772335982754,
+      "lastAccessed": 1772340708460,
+      "type": "file"
+    },
+    {
+      "path": "spec\\step-4-integration.md",
+      "accessCount": 17,
+      "lastAccessed": 1772340685942,
       "type": "file"
     },
     {
@@ -150,45 +162,51 @@
       "type": "directory"
     },
     {
+      "path": "src\\zotero_chunk_rag\\indexer.py",
+      "accessCount": 16,
+      "lastAccessed": 1772340094031,
+      "type": "directory"
+    },
+    {
       "path": "tests\\test_content_quality.py",
       "accessCount": 15,
       "lastAccessed": 1772334733694,
       "type": "file"
     },
     {
-      "path": "spec\\plan.md",
-      "accessCount": 15,
-      "lastAccessed": 1772335972802,
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\vision_extract.py",
+      "accessCount": 14,
+      "lastAccessed": 1772340067150,
       "type": "file"
     },
     {
-      "path": "src\\zotero_chunk_rag\\indexer.py",
-      "accessCount": 15,
-      "lastAccessed": 1772335984333,
-      "type": "directory"
-    },
-    {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\vision_extract.py",
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\postprocessors\\cell_cleaning.py",
       "accessCount": 12,
-      "lastAccessed": 1772335985481,
+      "lastAccessed": 1772340078145,
       "type": "file"
     },
     {
       "path": "",
-      "accessCount": 9,
-      "lastAccessed": 1772334773748,
+      "accessCount": 11,
+      "lastAccessed": 1772340032898,
       "type": "directory"
     },
     {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\postprocessors\\cell_cleaning.py",
-      "accessCount": 9,
-      "lastAccessed": 1772335984956,
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\vision_api.py",
+      "accessCount": 10,
+      "lastAccessed": 1772340078659,
+      "type": "file"
+    },
+    {
+      "path": "spec\\progress.md",
+      "accessCount": 10,
+      "lastAccessed": 1772340537145,
       "type": "file"
     },
     {
       "path": "src\\zotero_chunk_rag",
-      "accessCount": 9,
-      "lastAccessed": 1772336040957,
+      "accessCount": 10,
+      "lastAccessed": 1772341016720,
       "type": "directory"
     },
     {
@@ -198,21 +216,15 @@
       "type": "file"
     },
     {
-      "path": "spec\\progress.md",
-      "accessCount": 8,
-      "lastAccessed": 1772334771901,
-      "type": "file"
-    },
-    {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\vision_api.py",
-      "accessCount": 8,
-      "lastAccessed": 1772335986058,
-      "type": "file"
-    },
-    {
       "path": "src\\zotero_chunk_rag\\feature_extraction\\__init__.py",
       "accessCount": 8,
       "lastAccessed": 1772335998685,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\models.py",
+      "accessCount": 8,
+      "lastAccessed": 1772340078253,
       "type": "file"
     },
     {
@@ -228,9 +240,21 @@
       "type": "file"
     },
     {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\models.py",
+      "path": "spec",
       "accessCount": 7,
-      "lastAccessed": 1772336057895,
+      "lastAccessed": 1772340703775,
+      "type": "directory"
+    },
+    {
+      "path": "spec\\step-2-vision-extract.md",
+      "accessCount": 6,
+      "lastAccessed": 1772340569389,
+      "type": "file"
+    },
+    {
+      "path": "spec\\step-1-caption-detection.md",
+      "accessCount": 6,
+      "lastAccessed": 1772340690283,
       "type": "file"
     },
     {
@@ -238,6 +262,12 @@
       "accessCount": 5,
       "lastAccessed": 1772335082075,
       "type": "directory"
+    },
+    {
+      "path": "spec\\step-3-api-layer.md",
+      "accessCount": 5,
+      "lastAccessed": 1772340571004,
+      "type": "file"
     },
     {
       "path": "src\\zotero_chunk_rag\\feature_extraction\\methods\\figure_detection.py",
@@ -276,6 +306,18 @@
       "type": "file"
     },
     {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\debug_db.py",
+      "accessCount": 3,
+      "lastAccessed": 1772339918455,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\models.py",
+      "accessCount": 3,
+      "lastAccessed": 1772340060273,
+      "type": "file"
+    },
+    {
       "path": "spec\\vision_first_plan.md",
       "accessCount": 2,
       "lastAccessed": 1772332195364,
@@ -294,21 +336,27 @@
       "type": "directory"
     },
     {
-      "path": "src\\zotero_chunk_rag\\models.py",
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\ground_truth.py",
       "accessCount": 2,
-      "lastAccessed": 1772335999341,
+      "lastAccessed": 1772339930265,
       "type": "file"
     },
     {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\debug_db.py",
+      "path": "src\\zotero_chunk_rag\\feature_extraction",
       "accessCount": 2,
-      "lastAccessed": 1772336018170,
+      "lastAccessed": 1772340078129,
+      "type": "directory"
+    },
+    {
+      "path": "tests\\test_feature_extraction\\test_llm_structure.py",
+      "accessCount": 2,
+      "lastAccessed": 1772340461338,
       "type": "file"
     },
     {
-      "path": "spec\\step-2-vision-extract.md",
+      "path": "tests\\test_feature_extraction\\test_cell_methods.py",
       "accessCount": 2,
-      "lastAccessed": 1772336230039,
+      "lastAccessed": 1772340461684,
       "type": "file"
     },
     {
@@ -316,12 +364,6 @@
       "accessCount": 1,
       "lastAccessed": 1772332629498,
       "type": "file"
-    },
-    {
-      "path": "src\\zotero_chunk_rag\\feature_extraction",
-      "accessCount": 1,
-      "lastAccessed": 1772332695952,
-      "type": "directory"
     },
     {
       "path": "src\\zotero_chunk_rag\\feature_extraction\\methods\\__init__.py",
@@ -342,28 +384,10 @@
       "type": "file"
     },
     {
-      "path": "tests\\test_feature_extraction\\test_cell_methods.py",
-      "accessCount": 1,
-      "lastAccessed": 1772332890417,
-      "type": "file"
-    },
-    {
-      "path": "tests\\test_feature_extraction\\test_llm_structure.py",
-      "accessCount": 1,
-      "lastAccessed": 1772332993097,
-      "type": "file"
-    },
-    {
       "path": "tests\\test_feature_extraction\\test_ground_truth.py",
       "accessCount": 1,
       "lastAccessed": 1772333221638,
       "type": "file"
-    },
-    {
-      "path": "spec",
-      "accessCount": 1,
-      "lastAccessed": 1772334750815,
-      "type": "directory"
     },
     {
       "path": "tests\\test_feature_extraction\\test_captions.py",
@@ -372,9 +396,15 @@
       "type": "file"
     },
     {
-      "path": "spec\\step-1-caption-detection.md",
+      "path": "tests\\test_feature_extraction\\test_render.py",
       "accessCount": 1,
-      "lastAccessed": 1772335233248,
+      "lastAccessed": 1772340461069,
+      "type": "file"
+    },
+    {
+      "path": "tests\\test_feature_extraction\\test_agent_qa.py",
+      "accessCount": 1,
+      "lastAccessed": 1772340461249,
       "type": "file"
     }
   ],

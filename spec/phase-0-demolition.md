@@ -1,5 +1,38 @@
 # Phase 0: Demolition
 
+## Prior Partial Execution — READ THIS FIRST
+
+A previous implementation session completed ~85% of this spec but missed 6
+file deletions and reported completion incorrectly. The codebase is in a
+partially-demolished state. Here is what this means for each wave:
+
+| Wave | Prior state | What to do |
+|------|-------------|------------|
+| **1 (delete files)** | 42 of 48 files already deleted | Delete the 6 remaining files (listed below). Already-deleted files will simply not be found — skip them. |
+| **2 (delete types from models.py)** | Pipeline types already removed; only `CellGrid` remains | Delete `models.py` entirely (Wave 1.7 covers this). |
+| **3 (gut vision modules)** | Already stripped — `SHARED_SYSTEM`, consensus, multi-agent code deleted | Verify the kept symbols exist and the deleted symbols are gone. No modifications needed if prior work holds. |
+| **4 (modify pdf_processor.py)** | Already done — pipeline imports removed, prose functions deleted, `extract_document()` stubbed, figure extraction refactored | Verify current state matches spec. No modifications needed if prior work holds. |
+| **5 (modify indexer.py)** | Already done — `enhance_tables_with_vision()` deleted | Verify. No modifications needed. |
+| **6 (clean up imports)** | Mostly done — `__init__` files cleaned, most test files deleted | Delete 4 remaining test files (listed below). Run grep verification. |
+
+**Files still needing deletion** (the 6 that were missed):
+
+| File | Wave |
+|------|------|
+| `src/zotero_chunk_rag/feature_extraction/render.py` | 1.7 |
+| `src/zotero_chunk_rag/feature_extraction/models.py` | 1.7 |
+| `tests/test_feature_extraction/test_render.py` | 1.8 |
+| `tests/test_feature_extraction/test_llm_structure.py` | 1.8 |
+| `tests/test_feature_extraction/test_agent_qa.py` | 1.8 |
+| `tests/test_feature_extraction/test_cell_methods.py` | 1.8 |
+
+**Recommended approach**: Delete the 6 files, then run the Wave 6 grep
+verification (acceptance criterion 6) and the import smoke test. If both
+pass, the phase is complete. Only dig into individual waves if the
+verification fails.
+
+---
+
 ## Goal
 
 Delete the multi-method extraction pipeline, the 4-agent vision pipeline,
@@ -456,7 +489,7 @@ make a failing test pass.
 5. **Functional**: `extract_document(some_pdf)` returns a valid `DocumentExtraction` with `sections`, `figures`, `full_markdown` populated and `tables=[]`
 6. **No dead references**: `grep -r` for all deleted symbols across `src/` returns zero matches (excluding comments)
 7. **No deleted files imported**: No remaining `import` or `from` statement references a deleted module
-8. **Tests clean**: All remaining test files pass or are unrelated to table extraction. No test file imports deleted modules.
+8. **No deleted-module test files**: No test file imports a deleted source module. Some pre-existing test failures are expected (e.g., tests that assert table counts > 0 will fail because tables are stubbed empty; `test_ground_truth.py` has 3 pre-existing failures). These are NOT blockers — agents report them and move on.
 9. **Git status**: Only deletions and modifications, no new files except this spec
 
 ---
@@ -465,17 +498,21 @@ make a failing test pass.
 
 ### Verify kept tests still pass
 
-Run all non-deleted test files. These should still pass because they test
-document-level output (sections, figures, completeness) not pipeline internals:
+Run non-deleted test files that are directly relevant to the changes in this
+phase. Some pre-existing test failures are expected and are NOT blockers:
 
-- `tests/test_pdf_processor.py` — may need adjustment if it asserts table counts > 0
-  (tables will be empty post-demolition). If so, temporarily expect `tables=[]`.
-- `tests/test_extraction_completeness.py` — same: adjust table expectations
-- `tests/test_table_quality.py` — may fail entirely if it requires tables. Mark `xfail`
-  or skip until vision-first is built.
+- `tests/test_pdf_processor.py` — will fail on assertions about table counts > 0
+  (tables are stubbed empty). This is an EXPECTED failure. Report and move on.
+- `tests/test_extraction_completeness.py` — same: table expectations will fail.
+- `tests/test_table_quality.py` — will fail entirely (requires tables). Expected.
 - `tests/test_table_extraction_models.py` — delete entirely (all types deleted,
   including CellGrid).
+- `test_ground_truth.py` — has 3 pre-existing failures unrelated to Phase 0. Expected.
 - All other tests (search, reranker, boolean search, journal ranker, OCR, etc.) — unaffected.
+
+**Do NOT chase pre-existing failures.** The test suite will have broken tests
+until the full vision-first path is wired up in Step 4. Each phase only needs
+to verify that the specific changes it makes are correct.
 
 ### Import smoke test
 

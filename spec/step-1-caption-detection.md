@@ -172,8 +172,17 @@ surrounding text). This step only fixes detection, not text enrichment.
     The user inspects the output to verify caption counts are correct.
 
     **Imports**: `ZoteroClient`, `Config` from `zotero_chunk_rag`;
-    `find_all_captions`, `_TABLE_LABEL_ONLY_RE`, `_FIG_LABEL_ONLY_RE`
-    from `feature_extraction.captions`; `pymupdf`. No external API calls.
+    `find_all_captions`, `_TABLE_LABEL_ONLY_RE` from
+    `feature_extraction.captions`; `pymupdf`. No external API calls.
+
+    **Note**: If a `_FIG_LABEL_ONLY_RE` constant exists in `captions.py`,
+    import and use it for figure label-only detection. If it does not
+    exist (the caption code uses a generic loop with per-type regex
+    variables), detect label-only figures by checking if the caption
+    text matches `_TABLE_LABEL_ONLY_RE`'s figure counterpart pattern
+    (`r"^(?:Figure|Fig\.?)\s+..."`) or by inspecting
+    `DetectedCaption.text` length heuristically. The audit script
+    should report label-only counts for both types regardless.
 
 - **Tests**: None (the audit script IS the verification tool).
 
