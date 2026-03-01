@@ -1,4 +1,4 @@
-"""Table extraction pipeline — composable multi-method extraction with confidence-weighted boundary combination."""
+"""Feature extraction: caption detection, figure detection, cell cleaning, ground truth comparison."""
 
 from .captions import DetectedCaption, find_all_captions
 

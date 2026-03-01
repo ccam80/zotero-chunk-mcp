@@ -6,7 +6,6 @@ ML-based layout detection (tables, figures, headers, footers, OCR).
 from __future__ import annotations
 
 import logging
-import math
 import re
 from pathlib import Path
 
@@ -30,34 +29,12 @@ logger = logging.getLogger(__name__)
 # Pattern for filtering page identifiers from section-header boxes (e.g. "R1356")
 _PAGE_ID_RE = re.compile(r"^R?\d+$")
 
-_NUM_GROUP = r"(\d+|[IVXLCDM]+|[A-Z]\.\d+|S\d+)"
-
-# Pattern for matching table captions
-_TABLE_CAPTION_RE = re.compile(
-    rf"^(?:\*\*)?(?:Table|Tab\.)\s+{_NUM_GROUP}\s*[.:()\u2014\u2013-]",
-    re.IGNORECASE,
+from .feature_extraction.captions import (
+    _TABLE_CAPTION_RE,
+    _TABLE_CAPTION_RE_RELAXED,
+    _TABLE_LABEL_ONLY_RE,
+    _FIG_CAPTION_RE as _FIG_CAPTION_RE_COMP,
 )
-
-# Relaxed table caption regex — no delimiter required after the number.
-# Only used when font-change detection confirms a distinct label font.
-_TABLE_CAPTION_RE_RELAXED = re.compile(
-    rf"^(?:\*\*)?(?:Table|Tab\.)\s+{_NUM_GROUP}\s+\S",
-    re.IGNORECASE,
-)
-
-# Label-only regex — matches "Table N" on its own line (no description).
-_TABLE_LABEL_ONLY_RE = re.compile(
-    rf"^(?:\*\*)?(?:Table|Tab\.?)\s+{_NUM_GROUP}\s*$",
-    re.IGNORECASE,
-)
-
-# Figure caption pattern (used in prose table content collection)
-_FIG_CAPTION_RE_COMP = re.compile(
-    rf"^(?:Figure|Fig\.?)\s+{_NUM_GROUP}\s*[.:()\u2014\u2013-]", re.IGNORECASE,
-)
-_CAPTION_NUM_RE = re.compile(r"(\d+)")
-
-# Module-level caption patterns tuple (shared by artifact detection, native, word, and prose paths)
 _CAP_PATTERNS = (_TABLE_CAPTION_RE, _TABLE_CAPTION_RE_RELAXED, _TABLE_LABEL_ONLY_RE)
 
 
@@ -152,46 +129,36 @@ def _classify_artifact(table: "ExtractedTable") -> str | None:
     return None
 
 
-
-
-# Footnote indicator patterns (anchored to start of cell text)
-
-
-def _result_to_extracted_table(
-    result: "ExtractionResult",
+def _extract_figures_for_page(
+    page: "pymupdf.Page",
     page_num: int,
-    table_index: int,
-) -> ExtractedTable | None:
-    """Convert a pipeline ExtractionResult to an ExtractedTable.
+    page_chunk: dict,
+    write_images: bool,
+    images_dir: "Path | None",
+    doc: "pymupdf.Document",
+) -> "list[ExtractedFigure]":
+    """Detect and optionally render figures on a page."""
+    from .feature_extraction.captions import find_all_captions
+    from .feature_extraction.methods.figure_detection import detect_figures, render_figure
 
-    Returns None if the result has no post-processed grid (extraction
-    produced no usable cell data).
-    """
-    grid = result.post_processed
-    if grid is None:
-        return None
+    figure_captions = [c for c in find_all_captions(page) if c.caption_type == "figure"]
+    figure_results = detect_figures(page, page_chunk, figure_captions) if page_chunk else []
 
-    headers = list(grid.headers)
-    rows = [list(row) for row in grid.rows]
+    figures = []
+    for fi, (fbbox, fcaption) in enumerate(figure_results):
+        image_path = None
+        if write_images and doc is not None and images_dir is not None:
+            img = render_figure(doc, page_num, fbbox, Path(images_dir), fi)
+            image_path = str(img) if img else None
+        figures.append(ExtractedFigure(
+            page_num=page_num,
+            figure_index=fi,
+            bbox=tuple(fbbox),
+            caption=fcaption,
+            image_path=Path(image_path) if image_path else None,
+        ))
+    return figures
 
-    if not rows and not headers:
-        return None
-
-    artifact_type = None
-    if "_artifact" in result.table_id:
-        artifact_type = "figure_data_table"
-
-    return ExtractedTable(
-        page_num=page_num,
-        table_index=table_index,
-        bbox=result.bbox,
-        headers=headers,
-        rows=rows,
-        caption=result.caption,
-        footnotes=result.footnotes,
-        artifact_type=artifact_type,
-        extraction_strategy=grid.method,
-    )
 
 
 def extract_document(
@@ -257,13 +224,8 @@ def extract_document(
         if abstract_span:
             sections = _insert_abstract(sections, abstract_span)
 
-    from .feature_extraction.pipeline import Pipeline, DEFAULT_CONFIG
-
-    pipeline = Pipeline(DEFAULT_CONFIG)
-
     tables: list[ExtractedTable] = []
     figures: list[ExtractedFigure] = []
-    table_idx = 0
     fig_idx = 0
 
     for chunk in page_chunks:
@@ -280,41 +242,13 @@ def extract_document(
             if page_label in ("references", "appendix"):
                 continue
 
-        page_features = pipeline.extract_page(
-            page,
-            pnum,
-            pdf_path=str(pdf_path),
-            page_chunk=chunk,
-            write_images=write_images,
-            images_dir=str(images_dir) if images_dir else None,
-            doc=doc,
+        page_figs = _extract_figures_for_page(
+            page, pnum, chunk, write_images, images_dir, doc,
         )
-
-        for result in page_features.tables:
-            et = _result_to_extracted_table(result, pnum, table_idx)
-            if et is not None:
-                tables.append(et)
-                table_idx += 1
-
-        for fig_dict in page_features.figures:
-            figures.append(ExtractedFigure(
-                page_num=pnum,
-                figure_index=fig_idx,
-                bbox=tuple(fig_dict["bbox"]),
-                caption=fig_dict.get("caption"),
-                image_path=Path(fig_dict["image_path"]) if fig_dict.get("image_path") else None,
-            ))
+        for f in page_figs:
+            f.figure_index = fig_idx
+            figures.append(f)
             fig_idx += 1
-
-    # Prose table extraction: find captions without matched tables
-    tables = _extract_prose_tables(doc, tables, table_idx, sections, pages)
-
-    # Recovery pass: fill orphan captions via proximity matching and gap search
-    from ._gap_fill import run_recovery
-    figures, tables = run_recovery(
-        doc, figures, tables, page_chunks,
-        sections=sections, pages=pages,
-    )
 
     # Heading-based caption fallback for orphan tables (e.g. "Abbreviations")
     _assign_heading_captions(doc, tables)
@@ -324,8 +258,7 @@ def extract_document(
     _assign_continuation_captions(tables)
 
     # --- Normalize ligatures in captions ---
-    # Cell text is already cleaned by the pipeline's CellCleaning post-processor.
-    # Only captions need ligature normalization here.
+    # Captions need ligature normalization.
     for t in tables:
         t.caption = _normalize_ligatures(t.caption)
     for f in figures:
@@ -828,56 +761,6 @@ def _insert_abstract(
     return result
 
 
-def _find_column_gap_threshold(all_gaps: list[float]) -> float:
-    """Find the natural break between intra-word and inter-column gaps.
-
-    Three-tier adaptive approach — no fixed floors, data decides:
-
-    1. **Ratio-based natural break** (primary): first large jump (ratio > 2.0)
-       in sorted unique gaps. Geometric mean of the gap pair at the break.
-       Works well for bimodal distributions (intra-word vs inter-column).
-    2. **IQR-based** (fallback): Q3 + 1.0*IQR. Adapts to actual gap
-       distribution when no clear ratio break exists.
-    3. **Median + 1.5*std_dev** (last resort): when data is too uniform for
-       either of the above.
-    """
-    if not all_gaps:
-        return float("inf")
-    positive_gaps = sorted(g for g in all_gaps if g > 0)
-    if not positive_gaps:
-        return float("inf")
-
-    n = len(positive_gaps)
-
-    # Tier 1: Ratio-based natural break
-    # Deduplicate: group gaps within adaptive tolerance (10% of median)
-    median_gap = positive_gaps[n // 2]
-    dedup_tol = max(median_gap * 0.1, 0.1)
-    unique: list[float] = [positive_gaps[0]]
-    for g in positive_gaps[1:]:
-        if g - unique[-1] > dedup_tol:
-            unique.append(g)
-
-    for i in range(len(unique) - 1):
-        if unique[i] > 0 and unique[i + 1] / unique[i] > 2.0:
-            threshold = math.sqrt(unique[i] * unique[i + 1])
-            return threshold
-
-    # Tier 2: IQR-based
-    q1 = positive_gaps[n // 4] if n >= 4 else positive_gaps[0]
-    q3 = positive_gaps[3 * n // 4] if n >= 4 else positive_gaps[-1]
-    iqr = q3 - q1
-
-    if iqr > 0:
-        threshold = q3 + iqr
-        if threshold > median_gap:
-            return threshold
-
-    # Tier 3: Median + 1.5 * std_dev
-    mean = sum(positive_gaps) / n
-    variance = sum((g - mean) ** 2 for g in positive_gaps) / n
-    std_dev = math.sqrt(variance)
-    return median_gap + 1.5 * std_dev
 
 def _assign_heading_captions(
     doc: pymupdf.Document,
@@ -1024,438 +907,6 @@ def _assign_continuation_captions(tables: list[ExtractedTable]) -> None:
                 break
 
 
-def _adaptive_row_tolerance(words: list) -> float:
-    """Compute row-clustering tolerance from the y-gap distribution.
-
-    Delegates to the canonical implementation in the feature extraction pipeline.
-    """
-    from .feature_extraction.methods._row_clustering import adaptive_row_tolerance
-    return adaptive_row_tolerance(words)
-
-
-def _parse_prose_rows(content: str) -> list[list[str]]:
-    """Try to split prose table content into structured rows.
-
-    If content looks like a definition list (multiple lines, most with
-    colon/dash delimiters), parse into 2-column rows.  Otherwise return
-    as single cell.
-    """
-    lines = [l.strip() for l in content.split("\n") if l.strip()]
-    if len(lines) < 2:
-        return [[content]]
-    delim_lines = sum(1 for l in lines if re.search(r"[:\u2013\u2014]", l))
-    if delim_lines / len(lines) < 0.4:
-        return [[content]]
-    rows: list[list[str]] = []
-    for line in lines:
-        m = re.match(r"^(.+?)\s*[:\u2013\u2014]\s*(.+)$", line)
-        if m:
-            rows.append([m.group(1).strip(), m.group(2).strip()])
-        else:
-            rows.append([line])
-    return rows if rows else [[content]]
-
-
-def _extract_table_from_words(
-    page: pymupdf.Page,
-    caption_y_bottom: float,
-    next_boundary_y: float,
-) -> list[list[str]] | None:
-    """Build a structured table from word positions in a page region.
-
-    Used when ``find_tables()`` merges multiple tables into one grid,
-    swallowing orphan captions.  ``page.get_text("words")`` can still
-    see the individual words with correct positions.
-
-    Returns structured rows (list of lists) or *None* if no columnar
-    structure is found.
-    """
-    clip = pymupdf.Rect(0, caption_y_bottom, page.rect.width, next_boundary_y)
-    words = page.get_text("words", clip=clip)
-    if len(words) < 3:
-        return None
-
-    words.sort(key=lambda w: (w[1], w[0]))
-
-    # --- Cluster words into rows by y-position (adaptive tolerance) ---
-    row_tol = _adaptive_row_tolerance(words)
-    rows_of_words: list[list] = []
-    current_row = [words[0]]
-    for w in words[1:]:
-        if w[1] - current_row[-1][1] > row_tol:
-            rows_of_words.append(current_row)
-            current_row = [w]
-        else:
-            current_row.append(w)
-    rows_of_words.append(current_row)
-
-    if len(rows_of_words) < 2:
-        return None
-
-    # --- Filter out body-text rows (two-pass) ---
-    # Pass 1: use median max-gap from the first few rows as the reference.
-    # Table rows have large x-gaps between columns; body-text rows don't.
-    # Compute reference from first 5 rows to avoid body-text contamination.
-    reference_max_gaps = []
-    for row_words in rows_of_words[:5]:
-        row_words.sort(key=lambda w: w[0])
-        if len(row_words) >= 2:
-            gaps = [row_words[i][0] - row_words[i - 1][2]
-                    for i in range(1, len(row_words))]
-            reference_max_gaps.append(max(gaps))
-
-    if reference_max_gaps:
-        reference_max_gaps.sort()
-        ref_gap = reference_max_gaps[len(reference_max_gaps) // 2]
-    else:
-        ref_gap = 10.0
-
-    # Adaptive gap threshold for body-text filter (50% of reference gap)
-    gap_threshold = ref_gap * 0.5
-
-    table_rows: list[list] = []
-    for row_words in rows_of_words:
-        row_words.sort(key=lambda w: w[0])
-        if len(row_words) < 2:
-            table_rows.append(row_words)
-            continue
-        gaps = [row_words[i][0] - row_words[i - 1][2]
-                for i in range(1, len(row_words))]
-        max_gap = max(gaps)
-        if max_gap > gap_threshold:        # has a significant column gap
-            table_rows.append(row_words)
-        elif len(row_words) <= 8:          # short row, likely table
-            table_rows.append(row_words)
-        else:                              # long dense row = body text
-            break
-
-    if len(table_rows) < 2:
-        return None
-
-    # --- Detect column boundaries from filtered table rows ---
-    all_gaps: list[float] = []
-    for row_words in table_rows:
-        for i in range(1, len(row_words)):
-            all_gaps.append(row_words[i][0] - row_words[i - 1][2])
-    if not all_gaps:
-        return None
-
-    col_threshold = _find_column_gap_threshold(all_gaps)
-
-    # --- Split each row into cells at column gaps ---
-    result_rows: list[list[str]] = []
-    for row_words in table_rows:
-        row_words.sort(key=lambda w: w[0])
-        cells: list[str] = []
-        cell_words = [row_words[0][4]]
-        for i in range(1, len(row_words)):
-            gap = row_words[i][0] - row_words[i - 1][2]
-            if gap > col_threshold:
-                cells.append(" ".join(cell_words))
-                cell_words = [row_words[i][4]]
-            else:
-                cell_words.append(row_words[i][4])
-        cells.append(" ".join(cell_words))
-        result_rows.append(cells)
-
-    max_cols = max(len(r) for r in result_rows)
-    if max_cols < 2:
-        return None
-
-    # --- Trim trailing body-text rows ---
-    # Establish expected column count from the first rows that have
-    # the maximum number of cells.  Rows with fewer cells (before
-    # padding) that also have long text are body text leaking in.
-    # Adaptive cell length limit: derive from region width / column count.
-    region_width = next_boundary_y - caption_y_bottom  # approximate char budget
-    cell_len_limit = max(30, int(region_width / max(max_cols, 1)))
-    trimmed: list[list[str]] = []
-    for r in result_rows:
-        raw_cols = len(r)
-        if raw_cols < max_cols and trimmed:
-            # Fewer columns AND we already have data → body text
-            break
-        max_cell_len = max(len(c) for c in r) if r else 0
-        if raw_cols < max_cols and max_cell_len > cell_len_limit:
-            break
-        trimmed.append(r)
-    if len(trimmed) < 2:
-        return None
-
-    max_cols = max(len(r) for r in trimmed)
-    for r in trimmed:
-        while len(r) < max_cols:
-            r.append("")
-
-    return trimmed
-
-
-def _apply_prose_postprocessors(
-    page: pymupdf.Page,
-    table_bbox: tuple[float, float, float, float],
-    headers: list[str],
-    rows: list[list[str]],
-    pdf_path: Path | None = None,
-) -> tuple[str | None, list[str], list[list[str]]]:
-    """Apply shared post-processors to prose/word-extracted table data.
-
-    Wraps the headers/rows in a CellGrid, runs AbsorbedCaptionStrip and
-    CellCleaning, then unwraps back to lists.
-
-    Returns (absorbed_caption_or_None, cleaned_headers, cleaned_rows).
-    """
-    from .feature_extraction.models import CellGrid, TableContext
-    from .feature_extraction.postprocessors.absorbed_caption import AbsorbedCaptionStrip
-    from .feature_extraction.postprocessors.cell_cleaning import CellCleaning
-
-    grid = CellGrid(
-        headers=tuple(headers),
-        rows=tuple(tuple(r) for r in rows),
-        col_boundaries=(),
-        row_boundaries=(),
-        method="prose",
-    )
-
-    ctx = TableContext(
-        page=page,
-        page_num=page.number + 1,
-        bbox=table_bbox,
-        pdf_path=pdf_path or Path("."),
-    )
-
-    # Step 1: Strip absorbed captions
-    caption_strip = AbsorbedCaptionStrip()
-    pre_strip = grid
-    grid = caption_strip.process(grid, ctx)
-
-    # Determine if a caption was absorbed by comparing row counts
-    absorbed_caption = None
-    if len(grid.rows) < len(pre_strip.rows):
-        removed = pre_strip.rows[:len(pre_strip.rows) - len(grid.rows)]
-        for row in removed:
-            non_empty = [c.strip() for c in row if c.strip()]
-            if non_empty:
-                absorbed_caption = " ".join(non_empty)
-                break
-    elif len(grid.headers) < len(pre_strip.headers) or (
-        pre_strip.headers and grid.headers != pre_strip.headers
-    ):
-        removed_h = [h for h in pre_strip.headers if h.strip() and h not in grid.headers]
-        if removed_h:
-            absorbed_caption = removed_h[0]
-
-    # Step 2: Apply cell cleaning
-    cell_cleaning = CellCleaning()
-    grid = cell_cleaning.process(grid, ctx)
-
-    return absorbed_caption, list(grid.headers), [list(r) for r in grid.rows]
-
-
-def _extract_prose_tables(
-    doc: pymupdf.Document,
-    tables: list[ExtractedTable],
-    table_idx: int,
-    sections: list[SectionSpan] | None,
-    pages: list[PageExtraction] | None,
-) -> list[ExtractedTable]:
-    """Find table captions with no extracted table and capture prose content."""
-    from .feature_extraction.captions import find_all_captions, is_in_references
-
-    # Collect caption numbers already matched to tables
-    matched_nums: set[str] = set()
-    for t in tables:
-        if t.caption:
-            m = _CAPTION_NUM_RE.search(t.caption)
-            if m:
-                matched_nums.add(m.group(1))
-
-    for page_num_0, page in enumerate(doc):
-        page_num = page_num_0 + 1
-
-        # Skip references/appendix
-        if sections and pages:
-            if is_in_references(page_num, sections, pages):
-                continue
-
-        detected_captions = find_all_captions(
-            page, include_figures=False, include_tables=True,
-        )
-        caption_hits = [
-            (cap.y_center, cap.text, cap.bbox)
-            for cap in detected_captions
-        ]
-
-        for cap_idx, (y_center, caption_text, bbox) in enumerate(caption_hits):
-            m = _CAPTION_NUM_RE.search(caption_text)
-            if not m:
-                continue
-            num = m.group(1)
-            if num in matched_nums:
-                continue  # already have a table for this caption
-
-            # --- Try word-based extraction first ---
-            # When a caption falls inside a detected table's bbox,
-            # find_tables() merged multiple tables into one grid.
-            # page.get_text("words") can still recover the data.
-            inside_table = any(
-                t.page_num == page_num
-                and t.bbox[1] < y_center < t.bbox[3]
-                for t in tables
-            )
-            if inside_table:
-                cap_bottom = bbox[3] if bbox else y_center + 10
-                # Next boundary: next caption on this page, or page bottom
-                next_y = page.rect.height
-                for future_y, _, _ in caption_hits[cap_idx + 1:]:
-                    next_y = future_y - 5
-                    break
-                word_rows = _extract_table_from_words(
-                    page, cap_bottom, next_y,
-                )
-                if word_rows and len(word_rows) >= 2:
-                    # Compute actual table bbox from word positions
-                    clip = pymupdf.Rect(0, cap_bottom, page.rect.width, next_y)
-                    words = page.get_text("words", clip=clip)
-                    if words:
-                        t_x0 = min(w[0] for w in words)
-                        t_y0 = min(w[1] for w in words)
-                        t_x1 = max(w[2] for w in words)
-                        t_y1 = max(w[3] for w in words)
-                        table_bbox = (t_x0, t_y0, t_x1, t_y1)
-                    else:
-                        table_bbox = bbox
-
-                    # Apply shared post-processors (absorbed caption + cell cleaning)
-                    absorbed_cap, _, word_rows = _apply_prose_postprocessors(
-                        page, table_bbox, [], word_rows,
-                    )
-                    if absorbed_cap and not caption_text:
-                        caption_text = absorbed_cap
-
-                    tables.append(ExtractedTable(
-                        page_num=page_num,
-                        table_index=table_idx,
-                        bbox=table_bbox,
-                        headers=[],
-                        rows=word_rows,
-                        caption=caption_text,
-                    ))
-                    matched_nums.add(num)
-                    table_idx += 1
-                    logger.debug(
-                        "Word-based table '%s' on page %d (%d rows)",
-                        caption_text[:60], page_num, len(word_rows),
-                    )
-                    continue
-
-            # --- Fall back to prose extraction ---
-            content = _collect_prose_table_content(page, y_center, bbox)
-            if not content:
-                continue
-
-            parsed_rows = _parse_prose_rows(content)
-            # Apply shared post-processors (absorbed caption + cell cleaning)
-            absorbed_cap, _, parsed_rows = _apply_prose_postprocessors(
-                page, bbox, [], parsed_rows,
-            )
-            if absorbed_cap and not caption_text:
-                caption_text = absorbed_cap
-            tables.append(ExtractedTable(
-                page_num=page_num,
-                table_index=table_idx,
-                bbox=bbox,
-                headers=[],
-                rows=parsed_rows,
-                caption=caption_text,
-            ))
-            matched_nums.add(num)
-            table_idx += 1
-            logger.debug(
-                "Prose table '%s' extracted on page %d (%d chars)",
-                caption_text[:60], page_num, len(content),
-            )
-
-    return tables
-
-
-def _collect_prose_table_content(
-    page: pymupdf.Page,
-    caption_y: float,
-    caption_bbox: tuple[float, float, float, float] | None = None,
-) -> str:
-    """Collect text blocks below a caption until body text resumes.
-
-    Heuristic: collect blocks whose top edge is below the caption y-center,
-    stopping when we encounter a block that looks like body text (long
-    paragraph without definition-list structure) or another caption.
-
-    When *caption_bbox* is provided, only blocks with meaningful horizontal
-    overlap (>30 pt) with the caption are considered.  This prevents
-    collecting body-text from the wrong column in multi-column layouts.
-    """
-    _MIN_X_OVERLAP = 30  # pts
-
-    text_dict = page.get_text("dict")
-    candidates: list[tuple[float, str]] = []
-
-    for block in text_dict.get("blocks", []):
-        if block.get("type") != 0:
-            continue
-        block_bbox = block.get("bbox", (0, 0, 0, 0))
-        block_top = block_bbox[1]
-
-        # Only consider blocks below the caption
-        if block_top < caption_y + 5:
-            continue
-
-        # x-overlap filter: reject blocks from a different column
-        if caption_bbox is not None:
-            x_overlap = min(caption_bbox[2], block_bbox[2]) - max(caption_bbox[0], block_bbox[0])
-            if x_overlap < _MIN_X_OVERLAP:
-                continue
-
-        block_text = ""
-        for line in block.get("lines", []):
-            for span in line.get("spans", []):
-                block_text += span.get("text", "")
-            block_text += " "
-        block_text = block_text.strip()
-
-        if not block_text:
-            continue
-
-        candidates.append((block_top, block_text))
-
-    # Sort by y-position (pymupdf block order is not guaranteed visual order)
-    candidates.sort(key=lambda t: t[0])
-
-    blocks_below: list[tuple[float, str]] = []
-    for block_top, block_text in candidates:
-        # Stop at another caption or section heading
-        if _TABLE_CAPTION_RE.match(block_text) or _FIG_CAPTION_RE_COMP.match(block_text):
-            break
-
-        # Stop at long body-text paragraphs (>500 chars without
-        # definition-list markers like ":", "=", ";")
-        if len(block_text) > 500:
-            def_markers = block_text.count(":") + block_text.count("=") + block_text.count(";")
-            if def_markers < 3:
-                break  # looks like body text, not a table
-
-        # After the first block, reject body-text bleed: >300 chars, no
-        # definition markers, starts with a lowercase letter
-        if blocks_below and len(block_text) > 300:
-            def_markers = block_text.count(":") + block_text.count("=") + block_text.count(";")
-            if def_markers < 2 and block_text[0].islower():
-                break
-
-        blocks_below.append((block_top, block_text))
-
-    if not blocks_below:
-        return ""
-
-    blocks_below = blocks_below[:20]
-    return "\n".join(text for _, text in blocks_below)
 
 
 # ---------------------------------------------------------------------------

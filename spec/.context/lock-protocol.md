@@ -4,6 +4,8 @@
 
 `mkdir` is atomic on all platforms. Directory existence = lock held.
 
+> **Windows note**: All bash commands in this file assume Git Bash. Always double-quote paths and use forward slashes. See the Shell Compatibility section in `rules.md`.
+
 ## Directory Structure
 
 ```
@@ -72,5 +74,5 @@ The orchestrator cleans locks after implementer Tasks return. No timeout-based e
 If an implementer cannot acquire a file lock after a brief retry:
 1. Skip the task
 2. Note the conflict in the completion report
-3. Release any locks acquired so far for that task
+3. Release any locks already acquired for that task
 4. Move on to the next available task

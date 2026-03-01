@@ -1,7 +1,7 @@
 """Figure detection — detecting and rendering figures on PDF pages.
 
-Consumes DetectedCaption objects from captions.py. NOT a StructureMethod
-(figures have no grid structure); called by Pipeline.extract_page().
+Consumes DetectedCaption objects from captions.py.
+Called by _extract_figures_for_page() in pdf_processor.py.
 """
 from __future__ import annotations
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-from ..models import CellGrid, TableContext
+from ..models import CellGrid
 
 # ---------------------------------------------------------------------------
 # Ligature map
@@ -162,14 +162,13 @@ class CellCleaning:
     def name(self) -> str:
         return "cell_cleaning"
 
-    def process(self, grid: CellGrid, ctx: TableContext) -> CellGrid:
+    def process(self, grid: CellGrid, dict_blocks: list[dict] | None = None) -> CellGrid:
         try:
-            return self._process(grid, ctx)
+            return self._process(grid, dict_blocks or [])
         except Exception:
             return grid
 
-    def _process(self, grid: CellGrid, ctx: TableContext) -> CellGrid:
-        dict_blocks = ctx.dict_blocks
+    def _process(self, grid: CellGrid, dict_blocks: list[dict]) -> CellGrid:
 
         def clean(text: str, bbox: tuple[float, float, float, float] | None = None) -> str:
             if not text:

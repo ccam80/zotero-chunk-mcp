@@ -1,6 +1,4 @@
 """Unit tests for content quality detection functions."""
-import pytest
-
 from zotero_chunk_rag.pdf_processor import (
     _detect_garbled_spacing,
     _detect_interleaved_chars,
@@ -8,15 +6,10 @@ from zotero_chunk_rag.pdf_processor import (
     _check_content_readability,
     _normalize_ligatures,
     _classify_artifact,
-    _parse_prose_rows,
-    _find_column_gap_threshold,
     SYNTHETIC_CAPTION_PREFIX,
 )
 from zotero_chunk_rag.feature_extraction.postprocessors.cell_cleaning import (
     _looks_numeric,
-)
-from zotero_chunk_rag.feature_extraction.methods._row_clustering import (
-    adaptive_row_tolerance as _adaptive_row_tolerance,
 )
 from zotero_chunk_rag.models import ExtractedTable
 
@@ -248,7 +241,6 @@ class TestClassifyArtifact:
             ],
             caption="",
         )
-        assert _classify_artifact(table) is not None
         assert _classify_artifact(table) == "article_info_box"
 
     def test_elsevier_uppercase_variant(self):
@@ -260,7 +252,6 @@ class TestClassifyArtifact:
             rows=[["Article history:", "Received 2020", "We present..."]],
             caption="",
         )
-        assert _classify_artifact(table) is not None
         assert _classify_artifact(table) == "article_info_box"
 
     def test_table_of_contents(self):
@@ -278,7 +269,6 @@ class TestClassifyArtifact:
             ],
             caption="",
         )
-        assert _classify_artifact(table) is not None
         assert _classify_artifact(table) == "table_of_contents"
 
     def test_toc_packed_single_cell(self):
@@ -326,7 +316,6 @@ class TestClassifyArtifact:
             ],
             caption="",  # no caption -> uncaptioned
         )
-        assert _classify_artifact(table) is not None
         assert _classify_artifact(table) == "diagram_as_table"
 
     def test_real_data_table_not_filtered(self):
@@ -342,7 +331,6 @@ class TestClassifyArtifact:
             ],
             caption="Table 1. Patient demographics.",
         )
-        assert _classify_artifact(table) is None
         assert _classify_artifact(table) is None
 
     def test_sparse_table_with_caption_not_filtered(self):
@@ -388,7 +376,6 @@ class TestClassifyArtifact:
             caption="",
         )
         assert _classify_artifact(table) is None
-        assert _classify_artifact(table) is None
 
     def test_captioned_table_with_article_info_header_not_filtered(self):
         """A captioned table with 'article' in header is NOT an artifact."""
@@ -411,50 +398,6 @@ class TestSyntheticCaptionPrefix:
     def test_prefix_value(self):
         """Ensure the prefix is stable for downstream checks."""
         assert SYNTHETIC_CAPTION_PREFIX == "Uncaptioned "
-class TestParseProseRows:
-
-    def test_definition_list_parsed(self):
-        content = "ACC: Accuracy\nAUC: Area Under Curve\nPPV: Positive Predictive Value"
-        rows = _parse_prose_rows(content)
-        assert len(rows) == 3
-        assert rows[0] == ["ACC", "Accuracy"]
-        assert rows[1] == ["AUC", "Area Under Curve"]
-
-    def test_em_dash_delimiter(self):
-        content = "Term1 \u2014 Definition1\nTerm2 \u2014 Definition2"
-        rows = _parse_prose_rows(content)
-        assert len(rows) == 2
-        assert rows[0] == ["Term1", "Definition1"]
-
-    def test_plain_paragraph_single_cell(self):
-        content = "This is a regular paragraph with no definition structure at all."
-        rows = _parse_prose_rows(content)
-        assert len(rows) == 1
-        assert rows[0] == [content]
-
-    def test_single_line_single_cell(self):
-        content = "Just one line"
-        rows = _parse_prose_rows(content)
-        assert len(rows) == 1
-        assert rows[0] == [content]
-
-    def test_mixed_content_handled(self):
-        content = "Section header\nTerm1: Def1\nTerm2: Def2\nTerm3: Def3"
-        rows = _parse_prose_rows(content)
-        # 3/4 lines have colons = 75% > 40% threshold
-        assert len(rows) == 4
-        # First line has no delimiter, stays as single-cell
-        assert rows[0] == ["Section header"]
-        assert rows[1] == ["Term1", "Def1"]
-
-    def test_below_threshold_stays_single_cell(self):
-        content = "Line one\nLine two\nLine three\nTerm: Definition"
-        rows = _parse_prose_rows(content)
-        # Only 1/4 = 25% have delimiters, below 40% threshold
-        assert len(rows) == 1
-        assert rows[0] == [content]
-
-
 # ---- _looks_numeric ----
 
 class TestLooksNumeric:
@@ -488,55 +431,3 @@ class TestLooksNumeric:
 
     def test_empty(self):
         assert _looks_numeric("") is False
-class TestAdaptiveRowTolerance:
-
-    def test_12pt_font(self):
-        """12pt font (~12pt height) → tolerance ~3.6pt."""
-        # Simulate words with ~12pt height: y0=0, y1=12
-        words = [(0, 0, 50, 12, "word")] * 10
-        tol = _adaptive_row_tolerance(words)
-        assert 3.0 <= tol <= 4.5
-
-    def test_24pt_font(self):
-        """24pt font → tolerance ~7.2pt."""
-        words = [(0, 0, 50, 24, "word")] * 10
-        tol = _adaptive_row_tolerance(words)
-        assert 6.0 <= tol <= 9.0
-
-    def test_8pt_font(self):
-        """8pt font → tolerance ~2.4pt."""
-        words = [(0, 0, 50, 8, "word")] * 10
-        tol = _adaptive_row_tolerance(words)
-        assert 1.5 <= tol <= 3.5
-
-    def test_empty_words_fallback(self):
-        """Empty word list returns fallback derived from assumed 12pt height."""
-        assert _adaptive_row_tolerance([]) == pytest.approx(12.0 * 0.3)
-
-
-# ---- _find_column_gap_threshold ----
-
-class TestFindColumnGapThreshold:
-
-    def test_bimodal_gaps_separated(self):
-        """Bimodal distribution: intra-word (1-3pt) vs inter-column (20-30pt)."""
-        gaps = [1, 1.5, 2, 2.5, 3, 20, 22, 25, 28, 30]
-        threshold = _find_column_gap_threshold(gaps)
-        # Should separate 3pt cluster from 20pt cluster
-        assert 3 < threshold < 20
-
-    def test_uniform_gaps_fallthrough(self):
-        """Uniform distribution with no clear break."""
-        gaps = [5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5]
-        threshold = _find_column_gap_threshold(gaps)
-        # Should return a value derived from the data
-        assert threshold > 0
-
-    def test_empty_returns_inf(self):
-        """Empty gap list returns infinity (no column splits possible)."""
-        assert _find_column_gap_threshold([]) == float("inf")
-
-    def test_single_gap(self):
-        """Single gap value doesn't crash."""
-        threshold = _find_column_gap_threshold([10.0])
-        assert threshold > 0

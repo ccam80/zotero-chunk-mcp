@@ -1,11 +1,9 @@
 """Tests for CellCleaning post-processor."""
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 import pytest
 
-from zotero_chunk_rag.feature_extraction.models import CellGrid, TableContext
+from zotero_chunk_rag.feature_extraction.models import CellGrid
 from zotero_chunk_rag.feature_extraction.postprocessors.cell_cleaning import (
     CellCleaning,
     _map_control_chars,
@@ -13,13 +11,6 @@ from zotero_chunk_rag.feature_extraction.postprocessors.cell_cleaning import (
     _reassemble_negative_signs,
     _recover_leading_zeros,
 )
-from zotero_chunk_rag.feature_extraction.protocols import PostProcessor
-
-
-def _make_ctx(dict_blocks: list[dict] | None = None) -> MagicMock:
-    ctx = MagicMock(spec=TableContext)
-    ctx.dict_blocks = dict_blocks or []
-    return ctx
 
 
 def _make_grid(
@@ -43,7 +34,7 @@ class TestCellCleaning:
             headers=("e\ufb03ciency", "Col B"),
         )
         pp = CellCleaning()
-        result = pp.process(grid, _make_ctx())
+        result = pp.process(grid)
 
         assert result.headers[0] == "efficiency"
         assert result.rows[0][0] == "fficient"
@@ -55,7 +46,7 @@ class TestCellCleaning:
             rows=((".047", ".95"),),
         )
         pp = CellCleaning()
-        result = pp.process(grid, _make_ctx())
+        result = pp.process(grid)
 
         assert result.rows[0][0] == "0.047"
         assert result.rows[0][1] == "0.95"
@@ -66,7 +57,7 @@ class TestCellCleaning:
             rows=((".txt", "normal"),),
         )
         pp = CellCleaning()
-        result = pp.process(grid, _make_ctx())
+        result = pp.process(grid)
 
         assert result.rows[0][0] == ".txt"
 
@@ -76,7 +67,7 @@ class TestCellCleaning:
             rows=(("\u2212 0.45", "1234 \u2212 .56"),),
         )
         pp = CellCleaning()
-        result = pp.process(grid, _make_ctx())
+        result = pp.process(grid)
 
         assert result.rows[0][0] == "-0.45"
 
@@ -86,7 +77,7 @@ class TestCellCleaning:
             rows=(("  hello   world  ", "a\nb\nc"),),
         )
         pp = CellCleaning()
-        result = pp.process(grid, _make_ctx())
+        result = pp.process(grid)
 
         assert result.rows[0][0] == "hello world"
         assert result.rows[0][1] == "a b c"
@@ -108,9 +99,8 @@ class TestCellCleaning:
         grid = _make_grid(
             rows=(("alpha\x06beta", "normal"),),
         )
-        ctx = _make_ctx(dict_blocks)
         pp = CellCleaning()
-        result = pp.process(grid, ctx)
+        result = pp.process(grid, dict_blocks)
 
         # Control char preserved in Symbol font
         assert "\x06" in result.rows[0][0]
@@ -132,16 +122,14 @@ class TestCellCleaning:
         grid = _make_grid(
             rows=(("alpha\x06beta", "normal"),),
         )
-        ctx = _make_ctx(dict_blocks)
         pp = CellCleaning()
-        result = pp.process(grid, ctx)
+        result = pp.process(grid, dict_blocks)
 
         # Control char stripped in text font
         assert "\x06" not in result.rows[0][0]
         assert "alphabeta" in result.rows[0][0]
 
-    def test_protocol_conformance(self) -> None:
-        """CellCleaning satisfies PostProcessor protocol."""
+    def test_name(self) -> None:
+        """CellCleaning has expected name."""
         pp = CellCleaning()
-        assert isinstance(pp, PostProcessor)
         assert pp.name == "cell_cleaning"
