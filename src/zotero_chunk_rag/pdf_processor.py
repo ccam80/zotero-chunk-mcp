@@ -427,7 +427,8 @@ def resolve_pending_vision(
 
     Call this after extracting all documents with ``extract_document(...,
     vision_api=api)`` so that every table across every paper is submitted in
-    one Anthropic Batch API request (plus one re-crop batch if needed).
+    one Anthropic Batch API request (plus one re-crop batch if needed, plus
+    one retry batch for any JSON parse failures).
 
     Args:
         extractions: Mapping of doc_key -> DocumentExtraction with
@@ -522,6 +523,54 @@ def resolve_pending_vision(
         for (doc_key, local_idx), resp in zip(recrop_mapping, recrop_responses):
             per_doc_recrop[doc_key][local_idx] = resp
 
+    # --- Collect initial parse-failure specs for retry batch ---
+    retry_all_specs: list[TableVisionSpec] = []
+    retry_mapping: list[tuple[str, int]] = []  # (doc_key, local_index)
+    parse_failure_raws: dict[str, dict[int, str]] = defaultdict(dict)
+
+    for doc_key, ext in extractions.items():
+        pending = ext.pending_vision  # type: ignore[assignment]
+        if pending is None or not pending.specs:
+            continue
+        responses = per_doc_responses.get(doc_key, [])
+        if not responses:
+            continue
+
+        for local_idx, resp in enumerate(responses):
+            if resp.parse_success:
+                continue
+            # Initial response failed to parse — queue for retry
+            spec = pending.specs[local_idx]
+            parse_failure_raws[doc_key][local_idx] = resp.raw_response
+            retry_all_specs.append(TableVisionSpec(
+                table_id=f"{spec.table_id}__retry",
+                pdf_path=spec.pdf_path,
+                page_num=spec.page_num,
+                bbox=spec.bbox,
+                raw_text=spec.raw_text,
+                caption=spec.caption,
+                garbled=spec.garbled,
+            ))
+            retry_mapping.append((doc_key, local_idx))
+
+    # --- Third batch for parse-failure retries ---
+    per_doc_retry: dict[str, dict[int, object]] = defaultdict(dict)
+    if retry_all_specs:
+        logger.info(
+            "Vision retry batch: %d tables with parse failures",
+            len(retry_all_specs),
+        )
+        retry_batch_responses = vision_api.extract_tables_batch(retry_all_specs)
+        n_recovered = 0
+        for (doc_key, local_idx), resp in zip(retry_mapping, retry_batch_responses):
+            per_doc_retry[doc_key][local_idx] = resp
+            if resp.parse_success:
+                n_recovered += 1
+        logger.info(
+            "Vision retry recovered %d / %d parse failures",
+            n_recovered, len(retry_all_specs),
+        )
+
     # --- Build tables and finalize each document ---
     for doc_key, ext in extractions.items():
         pending = ext.pending_vision  # type: ignore[assignment]
@@ -534,8 +583,12 @@ def resolve_pending_vision(
         responses = per_doc_responses.get(doc_key, [])
         recrop_for_doc = per_doc_recrop.get(doc_key, {})
 
+        retry_for_doc = per_doc_retry.get(doc_key, {})
+        failures_for_doc = parse_failure_raws.get(doc_key, {})
         tables, vision_details = _build_tables_from_responses(
             responses, pending.crop_infos, recrop_for_doc,
+            retry_responses=retry_for_doc,
+            initial_failure_raws=failures_for_doc,
         )
 
         # --- Post-process tables (needs doc re-opened) ---
@@ -606,23 +659,45 @@ def _build_tables_from_responses(
     responses: list,
     crop_infos: list[_CropInfo],
     recrop_responses: dict[int, object],
+    retry_responses: dict[int, object] | None = None,
+    initial_failure_raws: dict[int, str] | None = None,
 ) -> tuple[list[ExtractedTable], list[dict]]:
-    """Convert vision API responses into ExtractedTable objects and detail dicts."""
+    """Convert vision API responses into ExtractedTable objects and detail dicts.
+
+    Args:
+        retry_responses: Retry batch results keyed by local index. Populated
+            when the initial response had ``parse_success=False`` and was
+            resubmitted.
+        initial_failure_raws: Raw response text from the initial parse failure,
+            keyed by local index. Stored in ``initial_raw_response`` for
+            debugging.
+    """
     tables: list[ExtractedTable] = []
     vision_details: list[dict] = []
     table_idx_per_page: dict[int, int] = {}
+    _retry = retry_responses or {}
+    _failure_raws = initial_failure_raws or {}
 
     for i, (orig_resp, crop_info) in enumerate(zip(responses, crop_infos)):
-        resp = orig_resp  # may be overridden by recrop
+        resp = orig_resp  # may be overridden by recrop or retry
         recropped = False
         recrop_bbox_pct_used: list[float] | None = None
+        retried = i in _retry
 
         if i in recrop_responses:
             recrop_resp = recrop_responses[i]
-            if not recrop_resp.is_incomplete:
+            # Only override if the recrop actually parsed — a failed recrop
+            # should fall back to the (valid but incomplete) initial response.
+            if not recrop_resp.is_incomplete and recrop_resp.parse_success:
                 recrop_bbox_pct_used = orig_resp.recrop_bbox_pct
                 resp = recrop_resp
                 recropped = True
+
+        # Retry override: applied last, only for initial parse failures
+        if retried:
+            retry_resp = _retry[i]
+            if retry_resp.parse_success:
+                resp = retry_resp
 
         detail = {
             "text_layer_caption": crop_info.caption_text,
@@ -640,6 +715,9 @@ def _build_tables_from_responses(
             "rows": resp.rows,
             "footnotes": resp.footnotes,
             "table_label": resp.table_label,
+            "retry_attempted": retried,
+            "retry_parse_success": _retry[i].parse_success if retried else None,
+            "initial_raw_response": _failure_raws.get(i),
         }
         vision_details.append(detail)
 

@@ -1,7 +1,7 @@
 {
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"tail -20 \\\"C:/Users/cca79/AppData/Local/Temp/claude/C--local-working-projects-zotero-citation-mcp/tasks/bfht204s1.output\\\"\",\"description\":\"Check stress test progress\"}",
-  "error": "Exit code 1\ntail: cannot open 'C:/Users/cca79/AppData/Local/Temp/claude/C--local-working-projects-zotero-citation-mcp/tasks/bfht204s1.output' for reading: No such file or directory\n\ntail: cannot open 'C:/Users/cca79/AppData/Local/Temp/claude/C--local-working-projects-zotero-citation-mcp/tasks/bfht204s1.output' for reading: No such file or directory",
-  "timestamp": "2026-03-01T07:38:46.382Z",
+  "tool_name": "Read",
+  "tool_input_preview": "{\"file_path\":\"C:\\\\local_working_projects\\\\zotero_citation_mcp\\\\STRESS_TEST_REPORT.md\"}",
+  "error": "File content (26281 tokens) exceeds maximum allowed tokens (25000). Please use offset and limit parameters to read specific portions of the file, or use the GrepTool to search for specific content.",
+  "timestamp": "2026-03-01T10:12:01.184Z",
   "retry_count": 1
 }
