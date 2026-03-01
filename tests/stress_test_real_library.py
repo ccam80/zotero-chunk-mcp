@@ -27,14 +27,18 @@ import shutil
 import sqlite3
 import sys
 import tempfile
+import threading
 import time
 import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from zotero_chunk_rag.feature_extraction.captions import find_all_captions
 from zotero_chunk_rag.feature_extraction.debug_db import (
     create_extended_tables,
     write_ground_truth_diff,
+    write_paddle_gt_diff,
+    write_paddle_result,
     write_vision_agent_result,
     write_vision_run_detail,
 )
@@ -42,6 +46,11 @@ from zotero_chunk_rag.feature_extraction.ground_truth import (
     GROUND_TRUTH_DB_PATH,
     compare_extraction,
     make_table_id,
+)
+from zotero_chunk_rag.feature_extraction.paddle_extract import (
+    MatchedPaddleTable,
+    get_engine,
+    match_tables_to_captions,
 )
 # ---------------------------------------------------------------------------
 # Corpus selection: 10 papers chosen for maximum diversity
@@ -519,6 +528,63 @@ class StressTestReport:
 
 
 # ---------------------------------------------------------------------------
+# PaddleOCR extraction helper
+# ---------------------------------------------------------------------------
+
+
+def _extract_with_paddle(
+    corpus_items: list,
+    engine_name: str = "pp_structure_v3",
+) -> dict[str, list[MatchedPaddleTable]]:
+    """Extract tables from all corpus PDFs using PaddleOCR.
+
+    Initialises the requested engine once, then iterates over each paper in
+    corpus_items, running find_all_captions() per page and
+    match_tables_to_captions() to assign captions before returning results.
+
+    Args:
+        corpus_items: List of (item, short_name, gt) tuples as built by
+            run_stress_test() after filtering missing items.
+        engine_name: Engine identifier passed to get_engine().
+
+    Returns:
+        Dict keyed by item_key, each value being the list of
+        MatchedPaddleTable objects for that paper (possibly empty).
+
+    Raises:
+        Any exception from get_engine() or engine.extract_tables() is
+        propagated to the caller without suppression.
+    """
+    import pymupdf
+
+    engine = get_engine(engine_name)
+    results: dict[str, list[MatchedPaddleTable]] = {}
+
+    for item, short_name, _gt in corpus_items:
+        item_key = item.item_key
+        pdf_path = item.pdf_path
+
+        doc = pymupdf.open(str(pdf_path))
+        try:
+            captions_by_page: dict[int, list] = {}
+            page_rects: dict[int, tuple[float, float, float, float]] = {}
+            for page_idx in range(len(doc)):
+                page = doc[page_idx]
+                page_num = page_idx + 1
+                captions_by_page[page_num] = find_all_captions(page)
+                r = page.rect
+                page_rects[page_num] = (r.x0, r.y0, r.x1, r.y1)
+        finally:
+            doc.close()
+
+        raw_tables = engine.extract_tables(pdf_path)
+        matched = match_tables_to_captions(raw_tables, captions_by_page, page_rects)
+        results[item_key] = matched
+
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Main stress test runner
 # ---------------------------------------------------------------------------
 
@@ -534,6 +600,7 @@ def run_stress_test():
 
     report = StressTestReport()
     extractions: dict[str, tuple] = {}
+    paddle_results: dict[str, list[MatchedPaddleTable]] = {}
 
     # Temp dir for ephemeral data (chroma index, OCR scratch).
     # Figures go to a persistent directory alongside the report/audit.
@@ -659,7 +726,21 @@ def run_stress_test():
             )
             doc_data[item.item_key] = (extraction, item, short_name, gt, t_extract)
 
-        # --- Phase 2b: Resolve vision batch (one API call for ALL papers) ---
+        # --- Phase 2b: Start PaddleOCR extraction in background thread ---
+        paddle_exception: list[BaseException] = []
+
+        def _paddle_worker() -> None:
+            try:
+                result = _extract_with_paddle(corpus_items)
+                paddle_results.update(result)
+            except BaseException as exc:
+                paddle_exception.append(exc)
+
+        paddle_thread = threading.Thread(target=_paddle_worker, daemon=True)
+        paddle_thread.start()
+        print("\n  PaddleOCR extraction thread started.")
+
+        # --- Phase 2c: Resolve vision batch (one API call for ALL papers) ---
         if vision_api:
             from zotero_chunk_rag.pdf_processor import resolve_pending_vision
             total_specs = sum(
@@ -676,7 +757,18 @@ def run_stress_test():
             t_vision = time.perf_counter() - t_vision
             print(f"  Vision batch resolved in {t_vision:.1f}s")
 
-        # --- Phase 2c: Index each document (chunk, store, report) ---
+        # --- Phase 2d: Wait for PaddleOCR thread ---
+        print("\n  Waiting for PaddleOCR extraction thread...")
+        paddle_thread.join()
+        if paddle_exception:
+            raise RuntimeError(
+                "PaddleOCR extraction thread failed"
+            ) from paddle_exception[0]
+        print(f"  PaddleOCR extraction complete: "
+              f"{sum(len(v) for v in paddle_results.values())} tables across "
+              f"{len(paddle_results)} papers.")
+
+        # --- Phase 2e: Index each document (chunk, store, report) ---
         from zotero_chunk_rag._reference_matcher import match_references, get_reference_context
         from zotero_chunk_rag.pdf_processor import SYNTHETIC_CAPTION_PREFIX
         _TAB_NUM_RE = re.compile(r"(?:Table|Tab\.?)\s+(\d+)", re.IGNORECASE)
@@ -1511,7 +1603,184 @@ def run_stress_test():
     finally:
         shutil.rmtree(test_dir, ignore_errors=True)
 
-    return report, extractions
+    return report, extractions, paddle_results
+
+
+# ---------------------------------------------------------------------------
+# Paddle GT comparison and DB writer
+# ---------------------------------------------------------------------------
+
+
+def _test_paddle_extraction(
+    paddle_results: dict[str, list[MatchedPaddleTable]],
+    db_path: Path,
+    engine_name: str = "pp_structure_v3",
+) -> list:
+    """Compare PaddleOCR extractions against ground truth and write to debug DB.
+
+    For each matched (non-orphan) table in paddle_results, generates a
+    table_id via make_table_id(), attempts a GT comparison via
+    compare_extraction(), and writes both the raw extraction record and the
+    GT diff record to the debug DB.  Returns a list of TestResult objects
+    describing MAJOR and MINOR assertions for inclusion in the stress test
+    report.
+
+    Args:
+        paddle_results: Dict keyed by item_key from _extract_with_paddle().
+        db_path: Path to the stress test debug SQLite database.
+        engine_name: Engine name stored in the DB rows.
+
+    Returns:
+        List of TestResult instances to append to the StressTestReport.
+    """
+    import dataclasses as _dc
+
+    test_results_out: list[TestResult] = []
+
+    if not Path(GROUND_TRUTH_DB_PATH).exists():
+        return test_results_out
+
+    gt_table_ids: set[str] = set()
+    conn = sqlite3.connect(str(GROUND_TRUTH_DB_PATH))
+    try:
+        rows = conn.execute(
+            "SELECT table_id FROM ground_truth_tables"
+        ).fetchall()
+        gt_table_ids = {r[0] for r in rows}
+    finally:
+        conn.close()
+
+    for item_key, matched_tables in paddle_results.items():
+        orphan_count = sum(1 for t in matched_tables if t.is_orphan)
+
+        test_results_out.append(TestResult(
+            test_name="paddle-orphan-count",
+            paper=item_key,
+            passed=True,
+            detail=f"{orphan_count} orphan table(s) out of {len(matched_tables)} extracted",
+            severity="MINOR",
+        ))
+
+        for table_idx, matched in enumerate(matched_tables):
+            result_dict = {
+                "table_id": None,
+                "page_num": matched.page_num,
+                "engine_name": engine_name,
+                "caption": matched.caption,
+                "is_orphan": matched.is_orphan,
+                "headers_json": json.dumps(matched.headers),
+                "rows_json": json.dumps(matched.rows),
+                "bbox": json.dumps(list(matched.bbox)),
+                "page_size": json.dumps(list(matched.page_size)),
+                "raw_output": matched.raw_output,
+                "item_key": item_key,
+            }
+
+            if not matched.is_orphan:
+                table_id = make_table_id(
+                    item_key,
+                    matched.caption,
+                    matched.page_num,
+                    table_idx,
+                )
+                result_dict["table_id"] = table_id
+            else:
+                table_id = make_table_id(
+                    item_key,
+                    None,
+                    matched.page_num,
+                    table_idx,
+                )
+                result_dict["table_id"] = table_id
+
+            write_paddle_result(str(db_path), result_dict)
+
+            if table_id not in gt_table_ids:
+                continue
+
+            try:
+                comparison = compare_extraction(
+                    GROUND_TRUTH_DB_PATH,
+                    table_id,
+                    matched.headers,
+                    matched.rows,
+                )
+            except KeyError:
+                continue
+
+            num_splits = (
+                len(comparison.row_splits) + len(comparison.column_splits)
+            )
+            num_merges = (
+                len(comparison.row_merges) + len(comparison.column_merges)
+            )
+            diff_dict = {
+                "table_id": table_id,
+                "engine_name": engine_name,
+                "cell_accuracy_pct": comparison.cell_accuracy_pct,
+                "fuzzy_accuracy_pct": comparison.fuzzy_accuracy_pct,
+                "num_splits": num_splits,
+                "num_merges": num_merges,
+                "num_cell_diffs": len(comparison.cell_diffs),
+                "gt_shape": json.dumps(list(comparison.gt_shape)),
+                "ext_shape": json.dumps(list(comparison.ext_shape)),
+                "diff_json": json.dumps(_dc.asdict(comparison), ensure_ascii=False),
+            }
+            write_paddle_gt_diff(str(db_path), diff_dict)
+
+            has_content = comparison.cell_accuracy_pct > 0
+            test_results_out.append(TestResult(
+                test_name="paddle-gt-cell-accuracy",
+                paper=item_key,
+                passed=has_content,
+                detail=(
+                    f"{table_id}: cell_accuracy={comparison.cell_accuracy_pct:.1f}%, "
+                    f"fuzzy={comparison.fuzzy_accuracy_pct:.1f}%, "
+                    f"splits={num_splits}, merges={num_merges}, "
+                    f"cell_diffs={len(comparison.cell_diffs)}"
+                ),
+                severity="MAJOR",
+            ))
+
+            test_results_out.append(TestResult(
+                test_name="paddle-gt-accuracy-recorded",
+                paper=item_key,
+                passed=True,
+                detail=(
+                    f"{table_id}: accuracy={comparison.cell_accuracy_pct:.1f}% recorded"
+                ),
+                severity="MINOR",
+            ))
+
+    matched_gt_ids = set()
+    for item_key, matched_tables in paddle_results.items():
+        for table_idx, matched in enumerate(matched_tables):
+            if matched.is_orphan:
+                continue
+            table_id = make_table_id(
+                item_key,
+                matched.caption,
+                matched.page_num,
+                table_idx,
+            )
+            if table_id in gt_table_ids:
+                matched_gt_ids.add(table_id)
+
+    for gt_id in gt_table_ids:
+        item_key = gt_id.split("_table_")[0].split("_orphan_")[0]
+        covered = gt_id in matched_gt_ids
+        test_results_out.append(TestResult(
+            test_name="paddle-gt-coverage",
+            paper=item_key,
+            passed=covered,
+            detail=(
+                f"GT table {gt_id} "
+                + ("matched by paddle extraction" if covered else "NOT matched by paddle extraction")
+            ),
+            severity="MAJOR",
+        ))
+
+    return test_results_out
 
 
 # ---------------------------------------------------------------------------
@@ -2042,7 +2311,7 @@ if __name__ == "__main__":
     print("  Real papers, real searches, real expectations")
     print("=" * 70)
 
-    report, extractions = run_stress_test()
+    report, extractions, paddle_results = run_stress_test()
 
     base_dir = Path(__file__).parent.parent
     report_path = base_dir / "STRESS_TEST_REPORT.md"
@@ -2055,6 +2324,15 @@ if __name__ == "__main__":
         print(f"  Query with: sqlite3 {db_path} \"SELECT short_name, quality_grade FROM papers\"")
         print(f"  Tables: run_metadata, papers, sections, pages, extracted_tables, extracted_figures, chunks, test_results")
         report.db_path = db_path
+
+        # Phase 4 (paddle): compare against GT and record results
+        if paddle_results:
+            print("\n[PHASE 4 - Paddle] Running paddle GT comparisons...")
+            paddle_test_results = _test_paddle_extraction(paddle_results, db_path)
+            for tr in paddle_test_results:
+                report.results.append(tr)
+            paddle_passed = sum(1 for t in paddle_test_results if t.passed)
+            print(f"  Paddle assertions: {paddle_passed}/{len(paddle_test_results)} passed")
 
     # Render report (includes GT + vision sections when db_path is set)
     md = report.to_markdown()

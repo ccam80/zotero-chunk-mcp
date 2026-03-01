@@ -8,6 +8,37 @@ import sqlite3
 from zotero_chunk_rag.feature_extraction.ground_truth import ComparisonResult
 
 
+PADDLE_SCHEMA = """\
+CREATE TABLE IF NOT EXISTS paddle_results (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    table_id    TEXT,
+    page_num    INTEGER,
+    engine_name TEXT,
+    caption     TEXT,
+    is_orphan   INTEGER,
+    headers_json TEXT,
+    rows_json   TEXT,
+    bbox        TEXT,
+    page_size   TEXT,
+    raw_output  TEXT,
+    item_key    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS paddle_gt_diffs (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    table_id          TEXT,
+    engine_name       TEXT,
+    cell_accuracy_pct REAL,
+    fuzzy_accuracy_pct REAL,
+    num_splits        INTEGER,
+    num_merges        INTEGER,
+    num_cell_diffs    INTEGER,
+    gt_shape          TEXT,
+    ext_shape         TEXT,
+    diff_json         TEXT
+);
+"""
+
 EXTENDED_SCHEMA = """\
 CREATE TABLE IF NOT EXISTS ground_truth_diffs (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,6 +108,7 @@ def create_extended_tables(con: sqlite3.Connection) -> None:
     Safe to call multiple times — all statements use CREATE TABLE IF NOT EXISTS.
     """
     con.executescript(EXTENDED_SCHEMA)
+    con.executescript(PADDLE_SCHEMA)
 
 
 def write_ground_truth_diff(
@@ -210,3 +242,60 @@ def write_vision_run_detail(
             int(fullpage_ps) if fullpage_ps is not None else None,
         ),
     )
+
+
+def write_paddle_result(db_path: str, result_dict: dict) -> None:
+    """Insert one row into the paddle_results table.
+
+    Creates the paddle tables if they do not yet exist on the target connection.
+    ``result_dict`` keys correspond directly to the paddle_results column names.
+    """
+    with sqlite3.connect(db_path) as con:
+        con.executescript(PADDLE_SCHEMA)
+        con.execute(
+            "INSERT INTO paddle_results "
+            "(table_id, page_num, engine_name, caption, is_orphan, "
+            "headers_json, rows_json, bbox, page_size, raw_output, item_key) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                result_dict.get("table_id"),
+                result_dict.get("page_num"),
+                result_dict.get("engine_name"),
+                result_dict.get("caption"),
+                int(bool(result_dict.get("is_orphan", False))),
+                result_dict.get("headers_json"),
+                result_dict.get("rows_json"),
+                result_dict.get("bbox"),
+                result_dict.get("page_size"),
+                result_dict.get("raw_output"),
+                result_dict.get("item_key"),
+            ),
+        )
+
+
+def write_paddle_gt_diff(db_path: str, diff_dict: dict) -> None:
+    """Insert one row into the paddle_gt_diffs table.
+
+    Creates the paddle tables if they do not yet exist on the target connection.
+    ``diff_dict`` keys correspond directly to the paddle_gt_diffs column names.
+    """
+    with sqlite3.connect(db_path) as con:
+        con.executescript(PADDLE_SCHEMA)
+        con.execute(
+            "INSERT INTO paddle_gt_diffs "
+            "(table_id, engine_name, cell_accuracy_pct, fuzzy_accuracy_pct, "
+            "num_splits, num_merges, num_cell_diffs, gt_shape, ext_shape, diff_json) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                diff_dict.get("table_id"),
+                diff_dict.get("engine_name"),
+                diff_dict.get("cell_accuracy_pct"),
+                diff_dict.get("fuzzy_accuracy_pct"),
+                diff_dict.get("num_splits"),
+                diff_dict.get("num_merges"),
+                diff_dict.get("num_cell_diffs"),
+                diff_dict.get("gt_shape"),
+                diff_dict.get("ext_shape"),
+                diff_dict.get("diff_json"),
+            ),
+        )
