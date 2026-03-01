@@ -1,4 +1,0 @@
-| Model variable | General definition | Model specification for explore–exploit task (described in detail Section 3) |
-|---|---|---|
-| D vector: p(s_1) | A vector encoding beliefs about (a probability distribution over) initial hidden states. When there is more than one hidden state factor, there is one D vector per state factor. | The agent begins in an initial state of maximal uncertainty about the context state (prior to learning), but complete certainty that it will start in the 'start' choice state. |
-| E vector: p(π) | A distribution encoding beliefs about what policies will be chosen a priori (a prior probability distribution over policies, implemented as a vector assigning one value to each policy), based on the number of times different actions have been chosen in the past. | The agent has no initial habits to choose one slot machine or another (prior to learning). |
