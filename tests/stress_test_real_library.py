@@ -210,6 +210,167 @@ CORPUS = [
             "figure_search_query": "heart rate variability",
         },
     ),
+    # ── additional 10 papers for broader coverage ─────────────────────────
+    (
+        "5746WSRD",
+        "osterrieder-ach-kinetics-1980",
+        "Very old paper (1980), ion channel biophysics, Pflügers Archiv. Tests pre-digital-era PDF.",
+        {
+            "year": 1980,
+            "author_substr": "osterrieder",
+            "collection": "",
+            "expect_tables": False,
+            "expect_figures": True,
+            "expect_sections": ["introduction"],
+            "searchable_content": "acetylcholine potassium channel sinoatrial",
+            "table_search_query": None,
+            "figure_search_query": "potassium current conductance",
+        },
+    ),
+    (
+        "E4WMHZH5",
+        "linssen-emg-fatigue-1993",
+        "EMG fatigue study from 1993, Muscle & Nerve. Tests older experimental physiology format.",
+        {
+            "year": 1993,
+            "author_substr": "linssen",
+            "collection": "",
+            "expect_tables": True,
+            "expect_figures": True,
+            "expect_sections": ["introduction", "methods", "results", "discussion"],
+            "searchable_content": "surface EMG fatigue conduction velocity median frequency",
+            "table_search_query": "median frequency conduction velocity",
+            "figure_search_query": "EMG power spectrum fatigue",
+        },
+    ),
+    (
+        "HISJD5UI",
+        "berntson-hrv-origins-1997",
+        "Classic HRV origins paper (1997), Psychophysiology. Tests older psychophysiology journal format.",
+        {
+            "year": 1997,
+            "author_substr": "berntson",
+            "collection": "",
+            "expect_tables": True,
+            "expect_figures": True,
+            "expect_sections": ["introduction"],
+            "searchable_content": "heart rate variability vagal sympathetic autonomic",
+            "table_search_query": "autonomic heart rate",
+            "figure_search_query": "vagal sympathetic frequency response",
+        },
+    ),
+    (
+        "6KB8FWFN",
+        "ats-ers-respiratory-muscle-2002",
+        "ATS/ERS clinical statement (2002). Very long guideline document, no named first author. Tests clinical guideline format.",
+        {
+            "year": 2002,
+            "author_substr": "",
+            "collection": "",
+            "expect_tables": True,
+            "expect_figures": True,
+            "expect_sections": ["introduction"],
+            "searchable_content": "respiratory muscle testing pressure diaphragm phrenic",
+            "table_search_query": "respiratory pressure measurement",
+            "figure_search_query": "diaphragm pressure stimulation",
+        },
+    ),
+    (
+        "QB3J4QTQ",
+        "schroeder-hrv-repeatability-2004",
+        "HRV repeatability study (2004), J Electrocardiology. Statistical methods, variance components. Tests clinical stats format.",
+        {
+            "year": 2004,
+            "author_substr": "schroeder",
+            "collection": "",
+            "expect_tables": True,
+            "expect_figures": True,
+            "expect_sections": ["introduction", "methods", "results", "discussion"],
+            "searchable_content": "repeatability heart rate variability measurement variance",
+            "table_search_query": "variance reproducibility heart rate",
+            "figure_search_query": "heart rate variability",
+        },
+    ),
+    (
+        "SWB2E2Q9",
+        "raez-emg-techniques-2006",
+        "EMG techniques survey (2006), Biological Procedures Online. Classification tables, signal processing overview.",
+        {
+            "year": 2006,
+            "author_substr": "raez",
+            "collection": "",
+            "expect_tables": True,
+            "expect_figures": True,
+            "expect_sections": ["introduction", "conclusion"],
+            "searchable_content": "EMG signal detection processing classification",
+            "table_search_query": "EMG classification features",
+            "figure_search_query": "EMG signal motor unit",
+        },
+    ),
+    (
+        "W3FYXN62",
+        "daly-hodgkin-huxley-bayesian-2015",
+        "Bayesian reparametrization of Hodgkin-Huxley (2015), Royal Society Open Science. Math-heavy, ABC-SMC. Tests math/stats paper.",
+        {
+            "year": 2015,
+            "author_substr": "daly",
+            "collection": "",
+            "expect_tables": True,
+            "expect_figures": True,
+            "expect_sections": ["introduction", "methods", "results", "discussion"],
+            "searchable_content": "Hodgkin Huxley Bayesian approximate posterior reparametrization",
+            "table_search_query": "parameter prior posterior estimate",
+            "figure_search_query": "posterior distribution action potential",
+        },
+    ),
+    (
+        "HGGB64RC",
+        "shaffer-hrv-norms-2017",
+        "HRV metrics and norms overview (2017), Frontiers. Many norm tables. Tests table-heavy Frontiers format.",
+        {
+            "year": 2017,
+            "author_substr": "shaffer",
+            "collection": "",
+            "expect_tables": True,
+            "expect_figures": True,
+            "expect_sections": ["introduction"],
+            "searchable_content": "heart rate variability SDNN RMSSD norms metrics",
+            "table_search_query": "SDNN RMSSD norms short-term",
+            "figure_search_query": "heart rate variability",
+        },
+    ),
+    (
+        "RE7X5G2Q",
+        "charlton-wearable-ppg-2022",
+        "Wearable PPG review (2022), Proceedings of the IEEE. 2-column format, extensive references. Tests IEEE proceedings.",
+        {
+            "year": 2022,
+            "author_substr": "charlton",
+            "collection": "",
+            "expect_tables": True,
+            "expect_figures": True,
+            "expect_sections": ["introduction", "conclusion"],
+            "searchable_content": "photoplethysmography wearable cardiovascular monitoring",
+            "table_search_query": "PPG wearable heart rate blood pressure",
+            "figure_search_query": "photoplethysmogram waveform pulse",
+        },
+    ),
+    (
+        "ETKMWLI7",
+        "flett-wearable-hr-accuracy-2025",
+        "Wearable HR accuracy preprint (2025). Very recent, SSRN preprint format. Tests preprint/unpublished.",
+        {
+            "year": 2025,
+            "author_substr": "flett",
+            "collection": "",
+            "expect_tables": True,
+            "expect_figures": True,
+            "expect_sections": ["introduction", "methods", "results", "discussion"],
+            "searchable_content": "wrist-worn wearable heart rate accuracy activity",
+            "table_search_query": "heart rate accuracy error wearable",
+            "figure_search_query": "heart rate Bland-Altman agreement",
+        },
+    ),
 ]
 
 
@@ -1622,6 +1783,17 @@ def write_debug_database(
                     vd["page_num"],
                     vi,
                 )
+                # Compute GT accuracy for the raw vision output
+                cell_accuracy_pct = None
+                if Path(GROUND_TRUTH_DB_PATH).exists():
+                    try:
+                        gt_result = compare_extraction(
+                            GROUND_TRUTH_DB_PATH, table_id,
+                            vd["headers"], vd["rows"],
+                        )
+                        cell_accuracy_pct = gt_result.cell_accuracy_pct
+                    except KeyError:
+                        pass
                 write_vision_agent_result(
                     con,
                     table_id=table_id,
@@ -1637,6 +1809,7 @@ def write_debug_database(
                     execution_time_ms=None,
                     agent_role="transcriber",
                     footnotes=vd["footnotes"],
+                    cell_accuracy_pct=cell_accuracy_pct,
                 )
                 write_vision_run_detail(con, table_id=table_id, details_dict=vd)
 

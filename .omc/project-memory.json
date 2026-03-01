@@ -127,26 +127,26 @@
   "hotPaths": [
     {
       "path": "src\\zotero_chunk_rag\\pdf_processor.py",
-      "accessCount": 162,
-      "lastAccessed": 1772352562791,
+      "accessCount": 164,
+      "lastAccessed": 1772354238331,
       "type": "file"
     },
     {
       "path": "tests\\stress_test_real_library.py",
-      "accessCount": 99,
-      "lastAccessed": 1772352769062,
+      "accessCount": 111,
+      "lastAccessed": 1772356568777,
       "type": "file"
     },
     {
       "path": "src\\zotero_chunk_rag\\feature_extraction\\vision_api.py",
-      "accessCount": 51,
-      "lastAccessed": 1772352416046,
+      "accessCount": 52,
+      "lastAccessed": 1772353386121,
       "type": "file"
     },
     {
       "path": "src\\zotero_chunk_rag\\feature_extraction\\vision_extract.py",
-      "accessCount": 47,
-      "lastAccessed": 1772350824650,
+      "accessCount": 48,
+      "lastAccessed": 1772353387384,
       "type": "file"
     },
     {
@@ -163,8 +163,8 @@
     },
     {
       "path": "src\\zotero_chunk_rag\\indexer.py",
-      "accessCount": 33,
-      "lastAccessed": 1772352313940,
+      "accessCount": 34,
+      "lastAccessed": 1772353387547,
       "type": "directory"
     },
     {
@@ -258,15 +258,15 @@
       "type": "directory"
     },
     {
-      "path": "tests\\test_feature_extraction\\test_pp_cell_cleaning.py",
-      "accessCount": 13,
-      "lastAccessed": 1772350142850,
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\debug_db.py",
+      "accessCount": 14,
+      "lastAccessed": 1772354452464,
       "type": "file"
     },
     {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\debug_db.py",
-      "accessCount": 12,
-      "lastAccessed": 1772350129940,
+      "path": "tests\\test_feature_extraction\\test_pp_cell_cleaning.py",
+      "accessCount": 13,
+      "lastAccessed": 1772350142850,
       "type": "file"
     },
     {
@@ -324,6 +324,18 @@
       "type": "directory"
     },
     {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\ground_truth.py",
+      "accessCount": 4,
+      "lastAccessed": 1772354237792,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction",
+      "accessCount": 4,
+      "lastAccessed": 1772354448576,
+      "type": "directory"
+    },
+    {
       "path": "src\\zotero_chunk_rag\\feature_extraction\\protocols.py",
       "accessCount": 3,
       "lastAccessed": 1772332867620,
@@ -340,18 +352,6 @@
       "accessCount": 3,
       "lastAccessed": 1772336058431,
       "type": "file"
-    },
-    {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\ground_truth.py",
-      "accessCount": 3,
-      "lastAccessed": 1772341539472,
-      "type": "file"
-    },
-    {
-      "path": "src\\zotero_chunk_rag\\feature_extraction",
-      "accessCount": 3,
-      "lastAccessed": 1772342908445,
-      "type": "directory"
     },
     {
       "path": "spec\\vision_first_plan.md",
