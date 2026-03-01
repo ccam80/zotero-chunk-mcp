@@ -160,6 +160,22 @@ def _make_mock_page(blocks: list[dict]) -> MagicMock:
     return page
 
 
+def _make_multiline_block(lines: list[str], bbox: tuple = (10, 100, 400, 160), font: str = "Regular") -> dict:
+    """Create a mock text block with multiple lines, each containing one span."""
+    return {
+        "type": 0,
+        "bbox": bbox,
+        "lines": [
+            {
+                "spans": [
+                    {"text": line_text, "font": font, "flags": 0}
+                ]
+            }
+            for line_text in lines
+        ],
+    }
+
+
 # ---------------------------------------------------------------------------
 # TestFindAllCaptions
 # ---------------------------------------------------------------------------
@@ -225,6 +241,83 @@ class TestFindAllCaptions:
         assert len(captions) == 1
         assert captions[0].number == "1"
 
+    def test_label_only_table(self) -> None:
+        """Standalone 'Table 1' block detected as table caption with number '1'."""
+        blocks = [_make_block("Table 1", bbox=(10, 100, 400, 120))]
+        page = _make_mock_page(blocks)
+
+        captions = find_all_captions(page)
+
+        assert len(captions) == 1
+        assert captions[0].caption_type == "table"
+        assert captions[0].number == "1"
+        assert captions[0].text == "Table 1"
+
+    def test_label_only_figure(self) -> None:
+        """Standalone 'Figure 3' block detected as figure caption with number '3'."""
+        blocks = [_make_block("Figure 3", bbox=(10, 200, 400, 220))]
+        page = _make_mock_page(blocks)
+
+        captions = find_all_captions(page)
+
+        assert len(captions) == 1
+        assert captions[0].caption_type == "figure"
+        assert captions[0].number == "3"
+
+    def test_label_only_with_supplementary_prefix(self) -> None:
+        """'Supplementary Table S2' (prefix stripped) detected with number 'S2'."""
+        blocks = [_make_block("Supplementary Table S2", bbox=(10, 100, 400, 120))]
+        page = _make_mock_page(blocks)
+
+        captions = find_all_captions(page)
+
+        assert len(captions) == 1
+        assert captions[0].caption_type == "table"
+        assert captions[0].number == "S2"
+
+    def test_label_only_does_not_match_body_text(self) -> None:
+        """'Table 1 shows the results of our analysis' does NOT match via label-only path."""
+        blocks = [
+            _make_block("Table 1 shows the results of our analysis", bbox=(10, 100, 400, 120), font="Regular")
+        ]
+        page = _make_mock_page(blocks)
+
+        # No font-change signal, no bold — relaxed path requires structural confirmation.
+        # The label-only path requires \s*$ so trailing text prevents it from matching.
+        captions = find_all_captions(page)
+        assert len(captions) == 0
+
+    def test_label_only_line_scan(self) -> None:
+        """'Table 2' on line 1 of a 3-line block is detected; text includes subsequent lines."""
+        block = _make_multiline_block(
+            ["Y-axis label", "Table 2", "Patient demographics by age group"],
+            bbox=(10, 100, 400, 160),
+        )
+        page = _make_mock_page([block])
+
+        captions = find_all_captions(page)
+
+        assert len(captions) == 1
+        assert captions[0].caption_type == "table"
+        assert captions[0].number == "2"
+        assert "Table 2" in captions[0].text
+        assert "Patient demographics" in captions[0].text
+
+    def test_label_only_line_scan_figure(self) -> None:
+        """'Figure 5' on line 1 of a multi-line block is detected as figure caption."""
+        block = _make_multiline_block(
+            ["X-axis label", "Figure 5", "Scatter plot of activation vs response"],
+            bbox=(10, 200, 400, 260),
+        )
+        page = _make_mock_page([block])
+
+        captions = find_all_captions(page)
+
+        assert len(captions) == 1
+        assert captions[0].caption_type == "figure"
+        assert captions[0].number == "5"
+        assert "Figure 5" in captions[0].text
+
 
 # ---------------------------------------------------------------------------
 # TestIsInReferences
@@ -261,11 +354,6 @@ class TestIsInReferences:
         assert is_in_references(1, sections, pages) is False
 
 
-# ---------------------------------------------------------------------------
-# TestBackwardCompat
-# ---------------------------------------------------------------------------
-
-
 class TestCanonicalImports:
     def test_captions_module_exports(self) -> None:
         """Verify all caption functions are importable from the canonical location."""
@@ -282,14 +370,23 @@ class TestCanonicalImports:
             _text_from_line_onward,
             find_all_captions,
         )
-        assert callable(_block_has_label_font_change)
-        assert callable(_block_is_bold)
-        assert callable(_block_label_on_own_line)
-        assert callable(_font_name_is_bold)
-        assert callable(is_in_references)
-        assert callable(find_all_captions)
-        assert callable(_scan_lines_for_caption)
-        assert callable(_text_from_line_onward)
-        assert _FIG_CAPTION_RE is not None
-        assert _FIG_CAPTION_RE_RELAXED is not None
-        assert _FIG_LABEL_ONLY_RE is not None
+        exported = dir(
+            __import__(
+                "zotero_chunk_rag.feature_extraction.captions",
+                fromlist=["captions"],
+            )
+        )
+        for name in [
+            "_FIG_CAPTION_RE",
+            "_FIG_CAPTION_RE_RELAXED",
+            "_FIG_LABEL_ONLY_RE",
+            "_block_has_label_font_change",
+            "_block_is_bold",
+            "_block_label_on_own_line",
+            "_font_name_is_bold",
+            "is_in_references",
+            "_scan_lines_for_caption",
+            "_text_from_line_onward",
+            "find_all_captions",
+        ]:
+            assert name in exported, f"{name!r} missing from captions module"

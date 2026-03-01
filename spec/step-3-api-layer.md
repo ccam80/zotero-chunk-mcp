@@ -83,7 +83,7 @@ must exist in `vision_extract.py`).
   - `VisionAPI.__init__` accepts only `api_key`, `model`, `cost_log_path`, `cache`
   - `_poll_batch` uses `time.sleep` for polling
   - `_append_cost_entry` writes cost entries without any locking mechanism
-  - All tests pass
+
 
 ---
 
@@ -156,7 +156,7 @@ must exist in `vision_extract.py`).
   - `_prepare_table` calls `render_table_region` (not `render_table_png`)
   - Returns `list[tuple[str, str]]` with valid base64 in first element
   - PDF document is always closed (try/finally)
-  - All tests pass
+
 
 ---
 
@@ -271,7 +271,7 @@ must exist in `vision_extract.py`).
   - User content has text context followed by image blocks in order
   - Garbled flag propagates through `build_common_ctx`
   - `max_tokens` set to 4096
-  - All tests pass
+
 
 ---
 
@@ -368,7 +368,7 @@ must exist in `vision_extract.py`).
   - Missing batch results produce `AgentResponse` with `parse_success=False`
   - Uses `_prepare_table` for rendering and `_build_request` for message construction
   - Does NOT handle re-crops (no re-crop logic in this method)
-  - All tests pass
+
 
 ---
 
@@ -400,15 +400,12 @@ assertions.
 
 ## Acceptance Criteria
 
-1. **Clean import**: `from zotero_chunk_rag.feature_extraction.vision_api import VisionAPI, TableVisionSpec, CostEntry` succeeds
-2. **No async**: Module contains no `async def`, no `await`, no `import asyncio`
-3. **No lock**: Module contains no `Lock` (no asyncio.Lock, no threading.Lock)
-4. **Init simplified**: `VisionAPI.__init__` accepts only `api_key`, `model`, `cost_log_path`, `cache`
-5. **Rendering**: `_prepare_table` uses `render_table_region`, returns `list[tuple[str, str]]`
-6. **Request format**: `_build_request` produces correctly structured batch request dicts with system prompt cache breakpoint
-7. **Entry point**: `extract_tables_batch(specs)` returns `list[AgentResponse]` in input order
-8. **Failed handling**: Missing/failed batch results produce `AgentResponse(parse_success=False)`
-9. **No re-crop**: `extract_tables_batch` does not contain re-crop logic
-10. **Cost logging**: `_poll_batch` logs cost entries via `_append_cost_entry` for each successful result
-11. **Tests**: All tests in `test_vision_api.py` pass
-12. **No new regressions**: no test that was passing before this step now fails because of this step's changes. Pre-existing failures (e.g., `test_ground_truth.py`, table-dependent tests) are expected and NOT blockers — report them and move on.
+1. **No async**: Module contains no `async def`, no `await`, no `import asyncio`
+2. **No lock**: Module contains no `Lock` (no asyncio.Lock, no threading.Lock)
+3. **Init simplified**: `VisionAPI.__init__` accepts only `api_key`, `model`, `cost_log_path`, `cache`
+4. **Rendering**: `_prepare_table` uses `render_table_region`, returns `list[tuple[str, str]]`
+5. **Request format**: `_build_request` produces correctly structured batch request dicts with system prompt cache breakpoint
+6. **Entry point**: `extract_tables_batch(specs)` returns `list[AgentResponse]` in input order
+7. **Failed handling**: Missing/failed batch results produce `AgentResponse(parse_success=False)`
+8. **No re-crop**: `extract_tables_batch` does not contain re-crop logic
+9. **Cost logging**: `_poll_batch` logs cost entries via `_append_cost_entry` for each successful result

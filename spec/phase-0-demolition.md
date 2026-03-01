@@ -27,9 +27,9 @@ partially-demolished state. Here is what this means for each wave:
 | `tests/test_feature_extraction/test_cell_methods.py` | 1.8 |
 
 **Recommended approach**: Delete the 6 files, then run the Wave 6 grep
-verification (acceptance criterion 6) and the import smoke test. If both
-pass, the phase is complete. Only dig into individual waves if the
-verification fails.
+verification (acceptance criterion 1) to confirm no remaining references
+to deleted symbols. If it passes, the phase is complete. Only dig into
+individual waves if the verification fails.
 
 ---
 
@@ -158,8 +158,6 @@ until Steps 1–4 restore it via vision.
 **Status**: DONE (pipeline types deleted). `models.py` now contains only `CellGrid`.
 
 `CellGrid` is also deleted (Wave 1.7) — `models.py` is fully removed.
-`cell_cleaning.py` will break at import until refactored in Step 4; this
-is acceptable since it's not called in the stubbed extraction path.
 
 ---
 
@@ -468,70 +466,15 @@ Tests are run at most TWICE per implementation session:
 4. **Report**: Surface ALL remaining failures to the user for review.
    Do not attempt further fixes. Do not loop.
 
-If a test fails because it expects tables (which are stubbed empty), that
-is an EXPECTED failure — note it as such, do not try to fix it.
-
 ### No test modification to make tests pass
 
-Tests assert expected behavior. If a test fails, the implementation may be
-wrong — or the test may need updating for the new architecture. Either way,
-the agent reports the failure. The agent NEVER modifies test assertions to
-make a failing test pass.
+If a test fails, the agent reports the failure. The agent NEVER modifies
+test assertions to make a failing test pass.
 
 ---
 
 ## Acceptance Criteria
 
-1. **Clean imports**: `python -c "from zotero_chunk_rag.pdf_processor import extract_document"` succeeds
-2. **Clean imports**: `python -c "from zotero_chunk_rag.indexer import Indexer"` succeeds
-3. **Clean imports**: `python -c "from zotero_chunk_rag.feature_extraction.vision_api import TableVisionSpec"` succeeds
-4. **Clean imports**: `python -c "from zotero_chunk_rag.feature_extraction.vision_extract import AgentResponse"` succeeds
-5. **Functional**: `extract_document(some_pdf)` returns a valid `DocumentExtraction` with `sections`, `figures`, `full_markdown` populated and `tables=[]`
-6. **No dead references**: `grep -r` for all deleted symbols across `src/` returns zero matches (excluding comments)
-7. **No deleted files imported**: No remaining `import` or `from` statement references a deleted module
-8. **No deleted-module test files**: No test file imports a deleted source module. Some pre-existing test failures are expected (e.g., tests that assert table counts > 0 will fail because tables are stubbed empty; `test_ground_truth.py` has 3 pre-existing failures). These are NOT blockers — agents report them and move on.
-9. **Git status**: Only deletions and modifications, no new files except this spec
-
----
-
-## Test Plan
-
-### Verify kept tests still pass
-
-Run non-deleted test files that are directly relevant to the changes in this
-phase. Some pre-existing test failures are expected and are NOT blockers:
-
-- `tests/test_pdf_processor.py` — will fail on assertions about table counts > 0
-  (tables are stubbed empty). This is an EXPECTED failure. Report and move on.
-- `tests/test_extraction_completeness.py` — same: table expectations will fail.
-- `tests/test_table_quality.py` — will fail entirely (requires tables). Expected.
-- `tests/test_table_extraction_models.py` — delete entirely (all types deleted,
-  including CellGrid).
-- `test_ground_truth.py` — has 3 pre-existing failures unrelated to Phase 0. Expected.
-- All other tests (search, reranker, boolean search, journal ranker, OCR, etc.) — unaffected.
-
-**Do NOT chase pre-existing failures.** The test suite will have broken tests
-until the full vision-first path is wired up in Step 4. Each phase only needs
-to verify that the specific changes it makes are correct.
-
-### Import smoke test
-
-```bash
-"./.venv/Scripts/python.exe" -c "
-from zotero_chunk_rag.pdf_processor import extract_document
-from zotero_chunk_rag.indexer import Indexer
-from zotero_chunk_rag.feature_extraction.vision_api import TableVisionSpec
-from zotero_chunk_rag.feature_extraction.vision_extract import AgentResponse, parse_agent_response
-from zotero_chunk_rag.feature_extraction.captions import find_all_captions
-from zotero_chunk_rag.feature_extraction.methods.figure_detection import detect_figures
-from zotero_chunk_rag.feature_extraction.ground_truth import compare_extraction
-from zotero_chunk_rag.feature_extraction.debug_db import write_ground_truth_diff
-print('All imports clean')
-"
-```
-
-This must print "All imports clean" with no errors.
-
-Note: `cell_cleaning.py` is expected to break at import (imports deleted `CellGrid`
-from `models.py`). This is acceptable — it is not imported by any production code
-path in the stubbed state. It gets refactored in Step 4.
+1. **No dead references**: `grep -r` for all deleted symbols across `src/` returns zero matches (excluding comments)
+2. **No deleted files imported**: No remaining `import` or `from` statement references a deleted module
+3. **Git status**: Only deletions and modifications, no new files except this spec

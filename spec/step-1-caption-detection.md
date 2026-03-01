@@ -225,8 +225,5 @@ not modify existing test assertions.
 1. `find_all_captions()` detects standalone "Table N" and "Figure N" blocks
 2. `_scan_lines_for_caption()` detects "Table N" and "Figure N" lines within
    multi-line blocks
-3. All existing `test_captions.py` tests pass (no regressions)
-4. All new tests pass
-5. Caption audit script runs successfully on the 20-paper corpus and prints
-   per-paper caption counts
-6. No code changes outside `captions.py` and test files
+3. Caption audit script created at `tests/audit_captions.py`
+4. No code changes outside `captions.py` and test files

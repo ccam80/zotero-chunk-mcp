@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import logging
 import re
+from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pymupdf.layout  # noqa: F401 — activates layout engine, MUST be before pymupdf4llm
 import pymupdf4llm
@@ -23,6 +26,12 @@ from .models import (
     CONFIDENCE_GAP_FILL,
 )
 from .section_classifier import categorize_heading
+from .feature_extraction.vision_extract import compute_all_crops, compute_recrop_bbox
+from .feature_extraction.postprocessors.cell_cleaning import clean_cells
+from .feature_extraction.captions import find_all_captions
+
+if TYPE_CHECKING:
+    from .feature_extraction.vision_api import VisionAPI, TableVisionSpec
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +49,30 @@ _CAP_PATTERNS = (_TABLE_CAPTION_RE, _TABLE_CAPTION_RE_RELAXED, _TABLE_LABEL_ONLY
 
 # Prefix for synthetic captions assigned to orphan tables/figures
 SYNTHETIC_CAPTION_PREFIX = "Uncaptioned "
+
+
+# ---------------------------------------------------------------------------
+# Deferred vision work dataclasses
+# ---------------------------------------------------------------------------
+
+@dataclass
+class _CropInfo:
+    """Per-table crop metadata for deferred vision resolution."""
+    page_num: int
+    caption_text: str
+    crop_bbox: tuple[float, float, float, float]
+
+
+@dataclass
+class PendingVisionWork:
+    """Collected vision specs awaiting batch API submission.
+
+    Stored on DocumentExtraction.pending_vision by extract_document()
+    when a VisionAPI is provided.  Consumed by resolve_pending_vision().
+    """
+    specs: list          # list[TableVisionSpec]
+    crop_infos: list     # list[_CropInfo]
+    pdf_path: Path
 
 # --- Layout-artifact table detection ---
 # Spaced-out header words from Elsevier article-info boxes.
@@ -63,6 +96,50 @@ _FIG_REF_IN_CELL_RE = re.compile(
     r"(?:Figure|Fig\.?)\s+\d+\b.*(?:diagram|block|schematic|overview|flowchart)",
     re.IGNORECASE,
 )
+
+
+def _tag_figure_data_tables(
+    tables: "list[ExtractedTable]",
+    figures: "list[ExtractedFigure]",
+    *,
+    overlap_threshold: float = 0.5,
+) -> None:
+    """Tag orphan tables that overlap significantly with a figure.
+
+    Tables without a real caption whose bounding box overlaps a figure
+    by more than ``overlap_threshold`` (fraction of table area) are
+    tagged as ``"figure_data_table"`` artifacts.
+
+    Args:
+        tables: Tables to check (modified in place).
+        figures: Figures to compare against.
+        overlap_threshold: Minimum overlap ratio (table area fraction)
+            to trigger tagging.
+    """
+    for t in tables:
+        if t.artifact_type:
+            continue
+        if t.caption and not t.caption.startswith(SYNTHETIC_CAPTION_PREFIX):
+            continue
+        t_rect = pymupdf.Rect(t.bbox)
+        t_area = t_rect.get_area()
+        if t_area <= 0:
+            continue
+        for f in figures:
+            if f.page_num != t.page_num:
+                continue
+            f_rect = pymupdf.Rect(f.bbox)
+            overlap = t_rect & f_rect
+            if not overlap.is_empty:
+                overlap_ratio = overlap.get_area() / t_area
+                if overlap_ratio > overlap_threshold:
+                    t.artifact_type = "figure_data_table"
+                    logger.info(
+                        "Tagged table on page %d as figure_data_table "
+                        "(%.0f%% overlap with figure)",
+                        t.page_num, overlap_ratio * 100,
+                    )
+                    break
 
 
 def _classify_artifact(table: "ExtractedTable") -> str | None:
@@ -136,12 +213,12 @@ def _extract_figures_for_page(
     write_images: bool,
     images_dir: "Path | None",
     doc: "pymupdf.Document",
+    all_captions: list,
 ) -> "list[ExtractedFigure]":
     """Detect and optionally render figures on a page."""
-    from .feature_extraction.captions import find_all_captions
     from .feature_extraction.methods.figure_detection import detect_figures, render_figure
 
-    figure_captions = [c for c in find_all_captions(page) if c.caption_type == "figure"]
+    figure_captions = [c for c in all_captions if c.caption_type == "figure"]
     figure_results = detect_figures(page, page_chunk, figure_captions) if page_chunk else []
 
     figures = []
@@ -167,6 +244,7 @@ def extract_document(
     write_images: bool = False,
     images_dir: Path | str | None = None,
     ocr_language: str = "eng",
+    vision_api: "VisionAPI | None" = None,
 ) -> DocumentExtraction:
     """Extract a PDF document using pymupdf4llm with layout detection."""
     pdf_path = Path(pdf_path)
@@ -224,9 +302,12 @@ def extract_document(
         if abstract_span:
             sections = _insert_abstract(sections, abstract_span)
 
-    tables: list[ExtractedTable] = []
     figures: list[ExtractedFigure] = []
     fig_idx = 0
+
+    # Per-page data collected for batch vision extraction
+    # Each entry: (page_num, page, detected_caption, crop_bbox)
+    _table_crops: list[tuple[int, "pymupdf.Page", object, tuple]] = []
 
     for chunk in page_chunks:
         pnum = chunk.get("metadata", {}).get("page_number", 1)
@@ -242,82 +323,77 @@ def extract_document(
             if page_label in ("references", "appendix"):
                 continue
 
+        all_captions_on_page = find_all_captions(page)
+
         page_figs = _extract_figures_for_page(
             page, pnum, chunk, write_images, images_dir, doc,
+            all_captions=all_captions_on_page,
         )
         for f in page_figs:
             f.figure_index = fig_idx
             figures.append(f)
             fig_idx += 1
 
-    # Heading-based caption fallback for orphan tables (e.g. "Abbreviations")
-    _assign_heading_captions(doc, tables)
+        if vision_api is not None:
+            for cap, crop_bbox in compute_all_crops(page, all_captions_on_page, caption_type="table"):
+                _table_crops.append((pnum, page, cap, crop_bbox))
 
-    # Continuation table detection — orphan tables with same headers
-    # as a captioned table on a nearby page get "Caption (continued)".
-    _assign_continuation_captions(tables)
+    # --- Vision spec collection (deferred — actual API call in resolve_pending_vision) ---
+    tables: list[ExtractedTable] = []
+    pending: PendingVisionWork | None = None
 
-    # --- Normalize ligatures in captions ---
-    # Captions need ligature normalization.
-    for t in tables:
-        t.caption = _normalize_ligatures(t.caption)
+    if vision_api is not None and _table_crops:
+        from .feature_extraction.vision_api import TableVisionSpec
+
+        specs: list[TableVisionSpec] = []
+        crop_infos: list[_CropInfo] = []
+        for seq_idx, (pnum, page, cap, crop_bbox) in enumerate(_table_crops):
+            raw_text = page.get_text("text", clip=pymupdf.Rect(crop_bbox))
+            specs.append(TableVisionSpec(
+                table_id=f"p{pnum}_t{seq_idx}",
+                pdf_path=pdf_path,
+                page_num=pnum,
+                bbox=crop_bbox,
+                raw_text=raw_text,
+                caption=cap.text,
+                garbled=False,
+            ))
+            crop_infos.append(_CropInfo(
+                page_num=pnum,
+                caption_text=cap.text,
+                crop_bbox=crop_bbox,
+            ))
+        pending = PendingVisionWork(specs=specs, crop_infos=crop_infos, pdf_path=pdf_path)
+
+    # --- Figure post-processing (independent of tables) ---
     for f in figures:
         f.caption = _normalize_ligatures(f.caption)
-
-    # --- Tag layout artifacts (before completeness scoring) ---
-    for t in tables:
-        t.artifact_type = _classify_artifact(t)
-        if t.artifact_type:
-            logger.info(
-                "Tagged table on page %d as artifact: %s",
-                t.page_num, t.artifact_type,
-            )
-
-    # Tag uncaptioned tables that overlap with figures as artifacts (e.g. forest
-    # plot data tables where find_tables() extracts text from within a figure).
-    for t in tables:
-        if t.artifact_type:
-            continue
-        if t.caption and not t.caption.startswith(SYNTHETIC_CAPTION_PREFIX):
-            continue  # has a real caption — not a figure sub-component
-        t_rect = pymupdf.Rect(t.bbox)
-        t_area = t_rect.get_area()
-        if t_area <= 0:
-            continue
-        for f in figures:
-            if f.page_num != t.page_num:
-                continue
-            f_rect = pymupdf.Rect(f.bbox)
-            overlap = t_rect & f_rect
-            if not overlap.is_empty:
-                overlap_ratio = overlap.get_area() / t_area
-                if overlap_ratio > 0.5:
-                    t.artifact_type = "figure_data_table"
-                    logger.info(
-                        "Tagged table on page %d as figure_data_table (%.0f%% overlap with figure)",
-                        t.page_num, overlap_ratio * 100,
-                    )
-                    break
-
-    # Remove false-positive figures: after all recovery passes (gap-fill,
-    # heading fallback, continuation), figures still without captions are
-    # layout engine misclassifications (logos, decorative elements, headers).
     figures = [f for f in figures if f.caption is not None]
 
-    # Remove artifact tables (TOC, article-info boxes, diagram-as-table,
-    # figure-data overlaps) from the returned list.
-    tables = [t for t in tables if not t.artifact_type]
-
-    # Compute extraction stats (needs open doc for OCR detection)
+    # Compute stats (needs open doc, but not tables)
     stats = _compute_stats(pages, page_chunks, doc)
+
+    if pending is not None:
+        # Vision requested: defer table construction, post-processing,
+        # completeness, and synthetic captions to resolve_pending_vision().
+        doc.close()
+        return DocumentExtraction(
+            pages=pages,
+            full_markdown=full_markdown,
+            sections=sections,
+            tables=[],
+            figures=figures,
+            stats=stats,
+            quality_grade="",
+            completeness=None,
+            vision_details=None,
+            pending_vision=pending,
+        )
+
+    # No vision: compute completeness with empty tables and finalize.
     completeness = _compute_completeness(doc, pages, sections, tables, figures, stats)
     doc.close()
 
-    # Assign synthetic captions to orphan tables/figures AFTER completeness
-    # (so completeness counts reflect reality, but returned data is usable)
-    for t in tables:
-        if not t.caption:
-            t.caption = f"{SYNTHETIC_CAPTION_PREFIX}table on page {t.page_num}"
     for f in figures:
         if not f.caption:
             f.caption = f"{SYNTHETIC_CAPTION_PREFIX}figure on page {f.page_num}"
@@ -331,7 +407,265 @@ def extract_document(
         stats=stats,
         quality_grade=completeness.grade,
         completeness=completeness,
+        vision_details=None,
     )
+
+
+# ---------------------------------------------------------------------------
+# Batch vision resolution
+# ---------------------------------------------------------------------------
+
+
+def resolve_pending_vision(
+    extractions: dict[str, DocumentExtraction],
+    vision_api: "VisionAPI",
+) -> None:
+    """Batch all pending vision specs across documents into a single API call.
+
+    Mutates each DocumentExtraction in-place: populates tables, vision_details,
+    completeness, and quality_grade.
+
+    Call this after extracting all documents with ``extract_document(...,
+    vision_api=api)`` so that every table across every paper is submitted in
+    one Anthropic Batch API request (plus one re-crop batch if needed).
+
+    Args:
+        extractions: Mapping of doc_key -> DocumentExtraction with
+            ``pending_vision`` set by ``extract_document()``.
+        vision_api: VisionAPI instance.
+    """
+    from .feature_extraction.vision_api import TableVisionSpec
+
+    # --- Collect all specs across all documents ---
+    all_specs: list[TableVisionSpec] = []
+    mapping: list[tuple[str, int]] = []  # (doc_key, local_index)
+
+    for doc_key, ext in extractions.items():
+        pending: PendingVisionWork | None = ext.pending_vision  # type: ignore[assignment]
+        if pending is None or not pending.specs:
+            continue
+        for i, spec in enumerate(pending.specs):
+            # Make table_id globally unique for the batch
+            spec.table_id = f"{doc_key}__{spec.table_id}"
+            all_specs.append(spec)
+            mapping.append((doc_key, i))
+
+    if not all_specs:
+        # No tables anywhere — still finalize each document
+        for _doc_key, ext in extractions.items():
+            if ext.pending_vision is not None:
+                _finalize_document_no_tables(ext)
+        return
+
+    n_docs = len({dk for dk, _ in mapping})
+    logger.info(
+        "Vision batch: %d tables across %d documents", len(all_specs), n_docs,
+    )
+
+    # --- Single batch call for all tables ---
+    all_responses = vision_api.extract_tables_batch(all_specs)
+
+    # Distribute responses back to per-document lists
+    per_doc_responses: dict[str, list] = defaultdict(list)
+    for (doc_key, _local_idx), resp in zip(mapping, all_responses):
+        per_doc_responses[doc_key].append(resp)
+
+    # --- Collect re-crop specs across all documents ---
+    recrop_all_specs: list[TableVisionSpec] = []
+    recrop_mapping: list[tuple[str, int]] = []  # (doc_key, local_index)
+
+    for doc_key, ext in extractions.items():
+        pending = ext.pending_vision  # type: ignore[assignment]
+        if pending is None or not pending.specs:
+            continue
+        responses = per_doc_responses.get(doc_key, [])
+        if not responses:
+            continue
+
+        needs_recrop = [
+            (i, resp)
+            for i, resp in enumerate(responses)
+            if resp.recrop_needed and resp.recrop_bbox_pct is not None
+        ]
+        if not needs_recrop:
+            continue
+
+        doc = pymupdf.open(str(pending.pdf_path))
+        try:
+            for local_idx, resp in needs_recrop:
+                crop_info = pending.crop_infos[local_idx]
+                new_bbox = compute_recrop_bbox(
+                    crop_info.crop_bbox, resp.recrop_bbox_pct,
+                )
+                page = doc[crop_info.page_num - 1]
+                new_raw_text = page.get_text(
+                    "text", clip=pymupdf.Rect(new_bbox),
+                )
+                recrop_all_specs.append(TableVisionSpec(
+                    table_id=f"{doc_key}__recrop_p{crop_info.page_num}_t{local_idx}",
+                    pdf_path=pending.pdf_path,
+                    page_num=crop_info.page_num,
+                    bbox=new_bbox,
+                    raw_text=new_raw_text,
+                    caption=crop_info.caption_text,
+                    garbled=False,
+                ))
+                recrop_mapping.append((doc_key, local_idx))
+        finally:
+            doc.close()
+
+    # --- Second batch for all re-crops ---
+    per_doc_recrop: dict[str, dict[int, object]] = defaultdict(dict)
+    if recrop_all_specs:
+        logger.info("Vision re-crop batch: %d tables", len(recrop_all_specs))
+        recrop_responses = vision_api.extract_tables_batch(recrop_all_specs)
+        for (doc_key, local_idx), resp in zip(recrop_mapping, recrop_responses):
+            per_doc_recrop[doc_key][local_idx] = resp
+
+    # --- Build tables and finalize each document ---
+    for doc_key, ext in extractions.items():
+        pending = ext.pending_vision  # type: ignore[assignment]
+        if pending is None:
+            continue
+        if not pending.specs:
+            _finalize_document_no_tables(ext)
+            continue
+
+        responses = per_doc_responses.get(doc_key, [])
+        recrop_for_doc = per_doc_recrop.get(doc_key, {})
+
+        tables, vision_details = _build_tables_from_responses(
+            responses, pending.crop_infos, recrop_for_doc,
+        )
+
+        # --- Post-process tables (needs doc re-opened) ---
+        doc = pymupdf.open(str(pending.pdf_path))
+        try:
+            if tables:
+                _assign_heading_captions(doc, tables)
+                _assign_continuation_captions(tables)
+                for t in tables:
+                    t.caption = _normalize_ligatures(t.caption)
+                for t in tables:
+                    t.artifact_type = _classify_artifact(t)
+                    if t.artifact_type:
+                        logger.info(
+                            "Tagged table on page %d as artifact: %s",
+                            t.page_num, t.artifact_type,
+                        )
+
+                # Figure-table overlap detection
+                _tag_figure_data_tables(tables, ext.figures)
+
+
+                tables = [t for t in tables if not t.artifact_type]
+
+            completeness = _compute_completeness(
+                doc, ext.pages, ext.sections, tables, ext.figures, ext.stats,
+            )
+        finally:
+            doc.close()
+
+        # Synthetic captions
+        for t in tables:
+            if not t.caption:
+                t.caption = f"{SYNTHETIC_CAPTION_PREFIX}table on page {t.page_num}"
+        for f in ext.figures:
+            if not f.caption:
+                f.caption = f"{SYNTHETIC_CAPTION_PREFIX}figure on page {f.page_num}"
+
+        # Update extraction in-place
+        ext.tables = tables
+        ext.vision_details = vision_details if vision_details else None
+        ext.completeness = completeness
+        ext.quality_grade = completeness.grade
+        ext.pending_vision = None
+
+
+def _finalize_document_no_tables(ext: DocumentExtraction) -> None:
+    """Finalize a document that had vision requested but no table specs."""
+    pending: PendingVisionWork = ext.pending_vision  # type: ignore[assignment]
+    doc = pymupdf.open(str(pending.pdf_path))
+    try:
+        completeness = _compute_completeness(
+            doc, ext.pages, ext.sections, ext.tables, ext.figures, ext.stats,
+        )
+    finally:
+        doc.close()
+
+    for f in ext.figures:
+        if not f.caption:
+            f.caption = f"{SYNTHETIC_CAPTION_PREFIX}figure on page {f.page_num}"
+
+    ext.completeness = completeness
+    ext.quality_grade = completeness.grade
+    ext.pending_vision = None
+
+
+def _build_tables_from_responses(
+    responses: list,
+    crop_infos: list[_CropInfo],
+    recrop_responses: dict[int, object],
+) -> tuple[list[ExtractedTable], list[dict]]:
+    """Convert vision API responses into ExtractedTable objects and detail dicts."""
+    tables: list[ExtractedTable] = []
+    vision_details: list[dict] = []
+    table_idx_per_page: dict[int, int] = {}
+
+    for i, (orig_resp, crop_info) in enumerate(zip(responses, crop_infos)):
+        resp = orig_resp  # may be overridden by recrop
+        recropped = False
+        recrop_bbox_pct_used: list[float] | None = None
+
+        if i in recrop_responses:
+            recrop_resp = recrop_responses[i]
+            if not recrop_resp.is_incomplete:
+                recrop_bbox_pct_used = orig_resp.recrop_bbox_pct
+                resp = recrop_resp
+                recropped = True
+
+        detail = {
+            "text_layer_caption": crop_info.caption_text,
+            "vision_caption": resp.caption,
+            "page_num": crop_info.page_num,
+            "crop_bbox": list(crop_info.crop_bbox),
+            "recropped": recropped,
+            "recrop_bbox_pct": recrop_bbox_pct_used,
+            "parse_success": resp.parse_success,
+            "is_incomplete": resp.is_incomplete,
+            "incomplete_reason": resp.incomplete_reason,
+            "recrop_needed": orig_resp.recrop_needed,
+            "raw_response": resp.raw_response,
+            "headers": resp.headers,
+            "rows": resp.rows,
+            "footnotes": resp.footnotes,
+            "table_label": resp.table_label,
+        }
+        vision_details.append(detail)
+
+        if not resp.parse_success:
+            continue
+
+        cleaned_headers, cleaned_rows = clean_cells(resp.headers, resp.rows)
+        caption_text = resp.caption if resp.caption else crop_info.caption_text
+
+        pnum = crop_info.page_num
+        page_table_idx = table_idx_per_page.get(pnum, 0)
+        table_idx_per_page[pnum] = page_table_idx + 1
+
+        tables.append(ExtractedTable(
+            page_num=pnum,
+            table_index=page_table_idx,
+            bbox=tuple(crop_info.crop_bbox),
+            headers=cleaned_headers,
+            rows=cleaned_rows,
+            caption=caption_text,
+            caption_position="above",
+            footnotes=resp.footnotes,
+            extraction_strategy="vision",
+        ))
+
+    return tables, vision_details
 
 
 # ---------------------------------------------------------------------------
@@ -816,7 +1150,7 @@ def _assign_heading_captions(
                 median_height = 12
             scan_distance = (median_spacing + median_height) * 4
         else:
-            scan_distance = 60  # fallback
+            scan_distance = 60
 
         scan_top = max(0, table_top - scan_distance)
 
@@ -951,13 +1285,22 @@ def _normalize_ligatures(text: str | None) -> str | None:
     return _impl(text)
 
 
-def _detect_interleaved_chars(text: str) -> tuple[bool, str]:
-    """Flag text where >40% of tokens are single alphabetic characters.
+def _detect_interleaved_chars(
+    text: str,
+    *,
+    threshold: float = 0.4,
+) -> tuple[bool, str]:
+    """Flag text where single-char alphabetic tokens exceed a threshold ratio.
 
     Only counts alphabetic single-char tokens.  Digits, punctuation,
     and decimal numbers (e.g. ".906", ",") are not interleaving signals.
 
     Min token count scales with cell size: max(5, len(text)//10).
+
+    Args:
+        text: Cell text to analyze.
+        threshold: Ratio of single-alpha tokens above which text is
+            flagged as interleaved.
 
     Returns (is_interleaved, reason).
     """
@@ -969,7 +1312,7 @@ def _detect_interleaved_chars(text: str) -> tuple[bool, str]:
         return False, ""
     single_chars = sum(1 for t in tokens if len(t) == 1 and t.isalpha())
     ratio = single_chars / len(tokens)
-    if ratio > 0.4:
+    if ratio > threshold:
         return True, f"{ratio:.0%} of tokens are single alpha chars (likely interleaved columns)"
     return False, ""
 

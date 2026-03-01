@@ -106,7 +106,7 @@ Independent of Steps 1–3. Removes the `CellGrid` dependency so
   - `clean_cells()` is importable and applies all 5 normalization steps
   - `_map_control_chars` is NOT called by `clean_cells()`
   - `_normalize_ligatures` is still independently importable (used by `pdf_processor.py`)
-  - All tests pass
+
 
 ---
 
@@ -130,8 +130,7 @@ Independent of Steps 1–3. Removes the `CellGrid` dependency so
 - **Acceptance criteria**:
   - No `CellGrid` import in the test file
   - No `CellCleaning` import in the test file
-  - All new `TestCleanCells` tests pass
-  - File imports cleanly
+  - `TestCleanCells` class with tests from Task 4.1.1 present
 
 ---
 
@@ -178,7 +177,7 @@ functions that reference deleted extraction methods.
   - `EXTENDED_SCHEMA` contains only `ground_truth_diffs` and `vision_agent_results`
   - Three write functions deleted; two kept
   - `create_extended_tables()` still works on a fresh DB
-  - All tests pass
+
 
 ---
 
@@ -230,7 +229,7 @@ functions that reference deleted extraction methods.
 - **Acceptance criteria**:
   - `vision_run_details` table created by `create_extended_tables()`
   - `write_vision_run_detail()` is importable and writes correctly
-  - All tests pass
+
 
 ---
 
@@ -295,7 +294,7 @@ and Wave 4.1 (cell cleaning refactor).
   - `DocumentExtraction` has `vision_details` field defaulting to `None`
   - Existing code that constructs `DocumentExtraction` without the field
     continues to work (default None)
-  - All tests pass
+
 
 ---
 
@@ -438,7 +437,7 @@ and Wave 4.1 (cell cleaning refactor).
   - `vision_details` populated with per-table debug info
   - `find_all_captions` called once per page (not duplicated)
   - Existing post-processing runs on vision tables
-  - All tests pass
+
 
 ---
 
@@ -489,7 +488,7 @@ and Wave 4.1 (cell cleaning refactor).
   - When set: `VisionAPI` constructed with cost log in the chroma db parent dir
   - When unset: `_vision_api is None`, tables not extracted (graceful degradation)
   - `extract_document()` receives `vision_api` in all call sites
-  - All tests pass
+
 
 ---
 
@@ -670,16 +669,11 @@ assertions.
 
 ## Acceptance Criteria (Step-level)
 
-1. **Clean import**: `from zotero_chunk_rag.pdf_processor import extract_document` succeeds
-2. **Clean import**: `from zotero_chunk_rag.indexer import Indexer` succeeds
-3. **Clean import**: `from zotero_chunk_rag.feature_extraction.postprocessors.cell_cleaning import clean_cells` succeeds
-4. **Vision path**: `extract_document(pdf, vision_api=mock)` returns tables with headers, rows, and `extraction_strategy="vision"`
-5. **No vision**: `extract_document(pdf, vision_api=None)` returns `tables=[]`
-6. **Caption**: Vision caption used for `ExtractedTable.caption`, text-layer caption as fallback
-7. **Re-crop**: Max 1 retry; original kept if re-crop has `is_incomplete=True`
-8. **Cell cleaning**: Ligatures, leading zeros, negative signs normalized in vision output
-9. **Debug DB**: Only `ground_truth_diffs` and `vision_agent_results` tables remain
-10. **Indexer**: Creates `VisionAPI` from `ANTHROPIC_API_KEY` env var; passes to `extract_document()`
-11. **Stress test**: Imports cleanly; no references to deleted functions; vision report section present
-12. **Tests**: All tests in modified test files pass
-13. **No new regressions**: no test that was passing before this step now fails because of this step's changes. Pre-existing failures (e.g., `test_ground_truth.py`, any table-dependent tests still expecting old pipeline output) are expected and NOT blockers — report them and move on.
+1. **Vision path**: `extract_document(pdf, vision_api=mock)` returns tables with headers, rows, and `extraction_strategy="vision"`
+2. **No vision**: `extract_document(pdf, vision_api=None)` returns `tables=[]`
+3. **Caption**: Vision caption used for `ExtractedTable.caption`, text-layer caption as fallback
+4. **Re-crop**: Max 1 retry; original kept if re-crop has `is_incomplete=True`
+5. **Cell cleaning**: Ligatures, leading zeros, negative signs normalized in vision output
+6. **Debug DB**: `ground_truth_diffs`, `vision_agent_results`, and `vision_run_details` tables present
+7. **Indexer**: Creates `VisionAPI` from `ANTHROPIC_API_KEY` env var; passes to `extract_document()`
+8. **Stress test**: No references to deleted functions; vision report section present

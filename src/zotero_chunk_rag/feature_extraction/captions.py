@@ -213,6 +213,8 @@ def _scan_lines_for_caption(
         check_line = _SUPP_PREFIX_RE.sub("", line_text)
         if prefix_re.match(check_line):
             return _text_from_line_onward(block, line_idx)
+        if label_only_re and label_only_re.match(check_line):
+            return _text_from_line_onward(block, line_idx)
         if relaxed_re and relaxed_re.match(check_line):
             sub_block = {"lines": lines[line_idx:]}
             if _block_has_label_font_change(sub_block) or _block_is_bold(sub_block):
@@ -280,6 +282,8 @@ def find_all_captions(
 
             if prefix_re.match(check_text):
                 matched = True
+            elif label_only_re and label_only_re.match(check_text):
+                matched = True
             elif relaxed_re and relaxed_re.match(check_text):
                 if (
                     _block_has_label_font_change(block)
@@ -288,7 +292,6 @@ def find_all_captions(
                 ):
                     matched = True
 
-            # Line-by-line scan fallback
             if not matched:
                 scanned = _scan_lines_for_caption(block, prefix_re, relaxed_re, label_only_re)
                 if scanned:
@@ -326,8 +329,7 @@ def is_in_references(
         sections: List of SectionSpan objects.
         pages: List of PageExtraction objects. If provided, uses
             char_start from the matching page to determine section.
-            If None, falls back to checking if any references section
-            spans could contain this page.
+            If None, returns False (cannot determine without page data).
 
     Returns:
         True if the page is in the references section.
@@ -341,5 +343,4 @@ def is_in_references(
                 return label == "references"
         return False
 
-    # Fallback: no pages available, cannot determine
     return False

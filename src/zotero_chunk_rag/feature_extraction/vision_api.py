@@ -6,7 +6,6 @@ Single-agent extraction logic is built on top of this layer.
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import json
 import logging
@@ -15,16 +14,15 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-try:
-    import anthropic
-except ImportError:
-    anthropic = None  # type: ignore[assignment]
+import anthropic
+import pymupdf
 
 from .vision_extract import (
     AgentResponse,
     build_common_ctx,
     parse_agent_response,
-    render_table_png,
+    render_table_region,
+    VISION_FIRST_SYSTEM,
 )
 
 logger = logging.getLogger(__name__)
@@ -96,23 +94,20 @@ def _compute_cost(usage: object, model: str) -> float:
 # Cost logging
 # ---------------------------------------------------------------------------
 
-_LOG_LOCK = asyncio.Lock()
 
-
-async def _append_cost_entry(path: Path, entry: CostEntry) -> None:
-    """Append a cost entry to the JSON log file (async-safe)."""
-    async with _LOG_LOCK:
-        entries: list[dict] = []
-        if path.exists():
-            try:
-                entries = json.loads(path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                entries = []
-        entries.append(asdict(entry))
-        path.write_text(
-            json.dumps(entries, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+def _append_cost_entry(path: Path, entry: CostEntry) -> None:
+    """Append a cost entry to the JSON log file."""
+    entries: list[dict] = []
+    if path.exists():
+        try:
+            entries = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            entries = []
+    entries.append(asdict(entry))
+    path.write_text(
+        json.dumps(entries, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -133,12 +128,6 @@ class VisionAPI:
         Path to persistent JSON cost log file.
     cache:
         Enable prompt caching (system prompts cached across requests).
-    dpi:
-        PNG render resolution.
-    padding_px:
-        Padding around table bbox in pixels.
-    concurrency:
-        Max concurrent API calls for async mode.
     """
 
     def __init__(
@@ -147,21 +136,14 @@ class VisionAPI:
         model: str = "claude-haiku-4-5-20251001",
         cost_log_path: Path | str = Path("vision_api_costs.json"),
         cache: bool = True,
-        dpi: int = 300,
-        padding_px: int = 20,
-        concurrency: int = 50,
     ) -> None:
         if anthropic is None:
             raise ImportError("anthropic package required: pip install anthropic")
 
-        self._client = anthropic.AsyncAnthropic(api_key=api_key)
-        self._sync_client = anthropic.Anthropic(api_key=api_key)
+        self._client = anthropic.Anthropic(api_key=api_key)
         self._model = model
         self._cost_log_path = Path(cost_log_path)
         self._cache = cache
-        self._dpi = dpi
-        self._padding_px = padding_px
-        self._concurrency = concurrency
         self._session_id = datetime.now(timezone.utc).isoformat()
         self._session_cost = 0.0
 
@@ -180,11 +162,11 @@ class VisionAPI:
 
     def _create_batch(self, requests: list[dict]) -> str:
         """Submit a batch and return the batch ID (synchronous API call)."""
-        batch = self._sync_client.messages.batches.create(requests=requests)
+        batch = self._client.messages.batches.create(requests=requests)
         logger.info("Submitted batch %s (%d requests)", batch.id, len(requests))
         return batch.id
 
-    async def _poll_batch(
+    def _poll_batch(
         self,
         batch_id: str,
         expected_count: int,
@@ -192,15 +174,15 @@ class VisionAPI:
     ) -> dict[str, str]:
         """Poll a batch until done, return {custom_id: response_text}."""
         while True:
-            await asyncio.sleep(poll_interval)
-            status = self._sync_client.messages.batches.retrieve(batch_id)
+            time.sleep(poll_interval)
+            status = self._client.messages.batches.retrieve(batch_id)
             if status.processing_status == "ended":
                 break
             logger.debug("Batch %s status: %s", batch_id, status.processing_status)
             poll_interval = min(poll_interval * 1.5, 30.0)
 
         results: dict[str, str] = {}
-        for result in self._sync_client.messages.batches.results(batch_id):
+        for result in self._client.messages.batches.results(batch_id):
             cid = result.custom_id
             rtype = getattr(result.result, "type", "unknown")
             if rtype != "succeeded":
@@ -214,7 +196,6 @@ class VisionAPI:
                 text = result.result.message.content[0].text
                 results[cid] = text
 
-                # Log cost for batch results
                 usage = result.result.message.usage
                 parts = cid.split("__")
                 table_id = parts[0] if parts else cid
@@ -233,7 +214,7 @@ class VisionAPI:
                     cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
                     cost_usd=cost,
                 )
-                await _append_cost_entry(self._cost_log_path, entry)
+                _append_cost_entry(self._cost_log_path, entry)
             except (AttributeError, IndexError) as exc:
                 logger.warning("Could not parse batch result %s: %s", cid, exc)
 
@@ -247,7 +228,7 @@ class VisionAPI:
 
         return results
 
-    async def _submit_and_poll(
+    def _submit_and_poll(
         self,
         requests: list[dict],
         poll_interval: float = 5.0,
@@ -256,19 +237,129 @@ class VisionAPI:
         if not requests:
             return {}
         batch_id = self._create_batch(requests)
-        return await self._poll_batch(batch_id, len(requests), poll_interval)
+        return self._poll_batch(batch_id, len(requests), poll_interval)
 
     # ------------------------------------------------------------------
-    # Prompt text builders
+    # Table rendering
     # ------------------------------------------------------------------
 
     def _prepare_table(
         self, spec: TableVisionSpec,
-    ) -> tuple[str, str, tuple]:
-        """Render PNG for a table spec. Returns (image_b64, media_type, bbox)."""
-        png_bytes, media_type = render_table_png(
-            spec.pdf_path, spec.page_num, spec.bbox,
-            dpi=self._dpi, padding_px=self._padding_px,
-        )
-        image_b64 = base64.b64encode(png_bytes).decode("ascii")
-        return image_b64, media_type, spec.bbox
+    ) -> list[tuple[str, str]]:
+        """Render PNG(s) for a table spec.
+
+        Opens the PDF, renders the crop region (possibly as multiple
+        overlapping strips for tall tables), and base64-encodes each image.
+
+        Returns list of (base64_string, media_type) pairs.
+        """
+        doc = pymupdf.open(str(spec.pdf_path))
+        try:
+            page = doc[spec.page_num - 1]
+            strips = render_table_region(page, spec.bbox)
+            return [
+                (base64.b64encode(png_bytes).decode("ascii"), media_type)
+                for png_bytes, media_type in strips
+            ]
+        finally:
+            doc.close()
+
+    # ------------------------------------------------------------------
+    # Request building
+    # ------------------------------------------------------------------
+
+    def _build_request(
+        self,
+        spec: TableVisionSpec,
+        images: list[tuple[str, str]],
+    ) -> dict:
+        """Build one Anthropic batch request dict.
+
+        Args:
+            spec: Table vision spec (provides raw_text, caption, garbled, table_id).
+            images: Pre-rendered images as (base64_string, media_type) pairs.
+
+        Returns:
+            Batch request dict with custom_id, params (model, max_tokens,
+            system, messages).
+        """
+        ctx = build_common_ctx(spec.raw_text, spec.caption, spec.garbled)
+
+        user_content: list[dict] = [{"type": "text", "text": ctx}]
+        for b64, media_type in images:
+            user_content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": media_type,
+                    "data": b64,
+                },
+            })
+
+        system_blocks: list[dict] = [
+            {"type": "text", "text": VISION_FIRST_SYSTEM},
+        ]
+        if self._cache:
+            system_blocks[0]["cache_control"] = {"type": "ephemeral"}
+
+        return {
+            "custom_id": f"{spec.table_id}__transcriber",
+            "params": {
+                "model": self._model,
+                "max_tokens": 4096,
+                "system": system_blocks,
+                "messages": [{"role": "user", "content": user_content}],
+            },
+        }
+
+    # ------------------------------------------------------------------
+    # Main entry point
+    # ------------------------------------------------------------------
+
+    def extract_tables_batch(
+        self,
+        specs: list[TableVisionSpec],
+    ) -> list[AgentResponse]:
+        """Extract tables via the Anthropic Batch API.
+
+        Renders each table as PNG(s), builds batch requests with
+        VISION_FIRST_SYSTEM prompt, submits a single batch, polls
+        until complete, and parses responses.
+
+        Re-crop is NOT handled here. If any response has
+        recrop_needed=True, the caller should compute a new crop
+        and call this method again with updated specs.
+
+        Args:
+            specs: Table vision specs to extract.
+
+        Returns:
+            AgentResponse per spec, in the same order as input.
+            Failed/missing batch results return AgentResponse with
+            parse_success=False.
+        """
+        if not specs:
+            return []
+
+        requests: list[dict] = []
+        for spec in specs:
+            images = self._prepare_table(spec)
+            requests.append(self._build_request(spec, images))
+
+        results = self._submit_and_poll(requests)
+
+        responses: list[AgentResponse] = []
+        for spec in specs:
+            raw_text = results.get(f"{spec.table_id}__transcriber")
+            if raw_text is not None:
+                responses.append(parse_agent_response(raw_text, "transcriber"))
+            else:
+                responses.append(AgentResponse(
+                    headers=[], rows=[], footnotes="",
+                    table_label=None, caption="",
+                    is_incomplete=False, incomplete_reason="",
+                    raw_shape=(0, 0), parse_success=False,
+                    raw_response="",
+                    recrop_needed=False, recrop_bbox_pct=None,
+                ))
+        return responses

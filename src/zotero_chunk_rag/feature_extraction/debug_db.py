@@ -9,24 +9,6 @@ from zotero_chunk_rag.feature_extraction.ground_truth import ComparisonResult
 
 
 EXTENDED_SCHEMA = """\
-CREATE TABLE IF NOT EXISTS method_results (
-    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-    table_id                TEXT NOT NULL,
-    method_name             TEXT NOT NULL,
-    boundary_hypotheses_json TEXT,
-    cell_grid_json          TEXT,
-    quality_score           REAL,
-    execution_time_ms       INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS pipeline_runs (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    table_id            TEXT NOT NULL,
-    pipeline_config_json TEXT,
-    winning_method      TEXT,
-    final_score         REAL
-);
-
 CREATE TABLE IF NOT EXISTS ground_truth_diffs (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     table_id            TEXT NOT NULL,
@@ -63,19 +45,23 @@ CREATE TABLE IF NOT EXISTS vision_agent_results (
     footnotes         TEXT
 );
 
-CREATE TABLE IF NOT EXISTS vision_consensus (
-    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-    table_id                TEXT NOT NULL,
-    shape_agreement         INTEGER,
-    winning_shape           TEXT,
-    agent_agreement_rate    REAL,
-    num_disputed_cells      INTEGER,
-    disputed_cells_json     TEXT,
-    consensus_label         TEXT,
-    consensus_footnotes     TEXT,
-    render_attempts         INTEGER,
-    fallback_to_traditional INTEGER,
-    caption_swap            TEXT
+CREATE TABLE IF NOT EXISTS vision_run_details (
+    table_id            TEXT PRIMARY KEY,
+    text_layer_caption  TEXT,
+    vision_caption      TEXT,
+    page_num            INTEGER,
+    crop_bbox_json      TEXT,
+    recropped           BOOLEAN DEFAULT 0,
+    recrop_bbox_pct_json TEXT,
+    parse_success       BOOLEAN,
+    is_incomplete       BOOLEAN,
+    incomplete_reason   TEXT,
+    recrop_needed       BOOLEAN,
+    raw_response        TEXT,
+    headers_json        TEXT,
+    rows_json           TEXT,
+    footnotes           TEXT,
+    table_label         TEXT
 );
 """
 
@@ -86,42 +72,6 @@ def create_extended_tables(con: sqlite3.Connection) -> None:
     Safe to call multiple times — all statements use CREATE TABLE IF NOT EXISTS.
     """
     con.executescript(EXTENDED_SCHEMA)
-
-
-def write_method_result(
-    con: sqlite3.Connection,
-    table_id: str,
-    method_name: str,
-    boundaries_json: str | None,
-    cell_grid_json: str | None,
-    quality_score: float | None,
-    execution_time_ms: int | None,
-) -> None:
-    """Insert a single method extraction result row."""
-    con.execute(
-        "INSERT INTO method_results "
-        "(table_id, method_name, boundary_hypotheses_json, cell_grid_json, "
-        "quality_score, execution_time_ms) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (table_id, method_name, boundaries_json, cell_grid_json,
-         quality_score, execution_time_ms),
-    )
-
-
-def write_pipeline_run(
-    con: sqlite3.Connection,
-    table_id: str,
-    pipeline_config_json: str | None,
-    winning_method: str | None,
-    final_score: float | None,
-) -> None:
-    """Insert a single pipeline run row."""
-    con.execute(
-        "INSERT INTO pipeline_runs "
-        "(table_id, pipeline_config_json, winning_method, final_score) "
-        "VALUES (?, ?, ?, ?)",
-        (table_id, pipeline_config_json, winning_method, final_score),
-    )
 
 
 def write_ground_truth_diff(
@@ -205,29 +155,45 @@ def write_vision_agent_result(
     )
 
 
-def write_vision_consensus(
+def write_vision_run_detail(
     con: sqlite3.Connection,
+    *,
     table_id: str,
-    shape_agreement: bool,
-    winning_shape: str,
-    agent_agreement_rate: float,
-    num_disputed_cells: int,
-    disputed_cells_json: str | None,
-    consensus_label: str | None,
-    consensus_footnotes: str | None,
-    render_attempts: int,
-    fallback_to_traditional: bool,
-    caption_swap: str | None = None,
+    details_dict: dict,
 ) -> None:
-    """Insert a single vision consensus result row."""
+    """Insert or replace a vision run detail row from a details dict.
+
+    Uses INSERT OR REPLACE for idempotency — writing the same table_id twice
+    overwrites the previous entry.
+
+    The details_dict must contain the keys defined by the vision_details schema
+    in Task 4.3.1.
+    """
+    crop_bbox = details_dict.get("crop_bbox")
+    recrop_bbox_pct = details_dict.get("recrop_bbox_pct")
     con.execute(
-        "INSERT INTO vision_consensus "
-        "(table_id, shape_agreement, winning_shape, agent_agreement_rate, "
-        "num_disputed_cells, disputed_cells_json, consensus_label, "
-        "consensus_footnotes, render_attempts, fallback_to_traditional, caption_swap) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (table_id, int(shape_agreement), winning_shape, agent_agreement_rate,
-         num_disputed_cells, disputed_cells_json, consensus_label,
-         consensus_footnotes, render_attempts, int(fallback_to_traditional),
-         caption_swap),
+        "INSERT OR REPLACE INTO vision_run_details "
+        "(table_id, text_layer_caption, vision_caption, page_num, crop_bbox_json, "
+        "recropped, recrop_bbox_pct_json, parse_success, is_incomplete, "
+        "incomplete_reason, recrop_needed, raw_response, headers_json, rows_json, "
+        "footnotes, table_label) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            table_id,
+            details_dict.get("text_layer_caption"),
+            details_dict.get("vision_caption"),
+            details_dict.get("page_num"),
+            json.dumps(crop_bbox) if crop_bbox is not None else None,
+            int(bool(details_dict.get("recropped", False))),
+            json.dumps(recrop_bbox_pct) if recrop_bbox_pct is not None else None,
+            int(bool(details_dict.get("parse_success", False))),
+            int(bool(details_dict.get("is_incomplete", False))),
+            details_dict.get("incomplete_reason"),
+            int(bool(details_dict.get("recrop_needed", False))),
+            details_dict.get("raw_response"),
+            json.dumps(details_dict.get("headers", [])),
+            json.dumps(details_dict.get("rows", [])),
+            details_dict.get("footnotes"),
+            details_dict.get("table_label"),
+        ),
     )

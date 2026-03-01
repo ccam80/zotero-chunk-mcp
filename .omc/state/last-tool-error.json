@@ -1,7 +1,7 @@
 {
   "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"cd \\\"C:/local_working_projects/zotero_citation_mcp\\\" && \\\"./.venv/Scripts/python.exe\\\" -c \\\"\\nfrom zotero_chunk_rag.pdf_processor import extract_document\\nfrom zotero_chunk_rag.feature_ext...",
-  "error": "Exit code 1\nTraceback (most recent call last):\r\n  File \"<string>\", line 5, in <module>\r\n  File \"C:\\local_working_projects\\zotero_citation_mcp\\src\\zotero_chunk_rag\\feature_extraction\\postprocessors\\cell_cleaning.py\", line 11, in <module>\r\n    from ..models import CellGrid, TableContext\r\nImportError: cannot import name 'TableContext' from 'zotero_chunk_rag.feature_extraction.models' (C:\\local_working_projects\\zotero_citation_mcp\\src\\zotero_chunk_rag\\feature_extraction\\models.py)\r\n\nTraceback (most ...",
-  "timestamp": "2026-03-01T02:31:21.136Z",
+  "tool_input_preview": "{\"command\":\"tail -20 \\\"C:/Users/cca79/AppData/Local/Temp/claude/C--local-working-projects-zotero-citation-mcp/tasks/bfht204s1.output\\\"\",\"description\":\"Check stress test progress\"}",
+  "error": "Exit code 1\ntail: cannot open 'C:/Users/cca79/AppData/Local/Temp/claude/C--local-working-projects-zotero-citation-mcp/tasks/bfht204s1.output' for reading: No such file or directory\n\ntail: cannot open 'C:/Users/cca79/AppData/Local/Temp/claude/C--local-working-projects-zotero-citation-mcp/tasks/bfht204s1.output' for reading: No such file or directory",
+  "timestamp": "2026-03-01T07:38:46.382Z",
   "retry_count": 1
 }

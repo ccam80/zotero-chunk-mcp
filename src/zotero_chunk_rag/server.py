@@ -480,7 +480,7 @@ def search_topic(
             "citation_key": best_hit.citation_key,
             "publication": best_hit.publication,
             "journal_quartile": best_hit.journal_quartile,
-            # Raw similarity scores (kept for backwards compatibility)
+            # Raw similarity scores
             "avg_score": round(sum(h.score for h in hits) / len(hits), 3),
             "best_chunk_score": round(best_hit.score, 3),
             # Composite scores

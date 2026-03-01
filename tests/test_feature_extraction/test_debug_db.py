@@ -9,8 +9,8 @@ import pytest
 from zotero_chunk_rag.feature_extraction.debug_db import (
     create_extended_tables,
     write_ground_truth_diff,
-    write_method_result,
-    write_pipeline_run,
+    write_vision_agent_result,
+    write_vision_run_detail,
 )
 from zotero_chunk_rag.feature_extraction.ground_truth import ComparisonResult
 
@@ -25,25 +25,28 @@ def _in_memory_con() -> sqlite3.Connection:
     return sqlite3.connect(":memory:")
 
 
+def _table_names(con: sqlite3.Connection) -> set[str]:
+    return {
+        row[0]
+        for row in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+
+
 # ---------------------------------------------------------------------------
-# TestSchema
+# TestSchema — existing tables still work
 # ---------------------------------------------------------------------------
 
 
 class TestSchema:
     def test_creates_tables(self) -> None:
-        """create_extended_tables() adds all 3 new tables to an in-memory DB."""
+        """create_extended_tables() adds the kept tables to an in-memory DB."""
         con = _in_memory_con()
         create_extended_tables(con)
-        table_names = {
-            row[0]
-            for row in con.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
-        }
-        assert "method_results" in table_names
-        assert "pipeline_runs" in table_names
-        assert "ground_truth_diffs" in table_names
+        names = _table_names(con)
+        assert "ground_truth_diffs" in names
+        assert "vision_agent_results" in names
         con.close()
 
     def test_idempotent(self) -> None:
@@ -51,54 +54,76 @@ class TestSchema:
         con = _in_memory_con()
         create_extended_tables(con)
         create_extended_tables(con)
-        table_names = {
-            row[0]
-            for row in con.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
-        }
-        assert "method_results" in table_names
-        assert "pipeline_runs" in table_names
-        assert "ground_truth_diffs" in table_names
+        names = _table_names(con)
+        assert "ground_truth_diffs" in names
+        assert "vision_agent_results" in names
         con.close()
 
 
 # ---------------------------------------------------------------------------
-# TestWrite
+# TestPrunedSchema — deleted tables must not exist
+# ---------------------------------------------------------------------------
+
+
+class TestPrunedSchema:
+    def test_no_method_results_table(self) -> None:
+        """method_results table must not be created by create_extended_tables()."""
+        con = _in_memory_con()
+        create_extended_tables(con)
+        assert "method_results" not in _table_names(con)
+        con.close()
+
+    def test_no_pipeline_runs_table(self) -> None:
+        """pipeline_runs table must not be created by create_extended_tables()."""
+        con = _in_memory_con()
+        create_extended_tables(con)
+        assert "pipeline_runs" not in _table_names(con)
+        con.close()
+
+    def test_no_vision_consensus_table(self) -> None:
+        """vision_consensus table must not be created by create_extended_tables()."""
+        con = _in_memory_con()
+        create_extended_tables(con)
+        assert "vision_consensus" not in _table_names(con)
+        con.close()
+
+    def test_kept_tables_exist(self) -> None:
+        """ground_truth_diffs and vision_agent_results must still be created."""
+        con = _in_memory_con()
+        create_extended_tables(con)
+        names = _table_names(con)
+        assert "ground_truth_diffs" in names
+        assert "vision_agent_results" in names
+        con.close()
+
+
+# ---------------------------------------------------------------------------
+# TestPrunedExports — deleted functions must not be importable
+# ---------------------------------------------------------------------------
+
+
+class TestPrunedExports:
+    def test_deleted_functions_not_importable(self) -> None:
+        """write_method_result, write_pipeline_run, write_vision_consensus must not exist."""
+        import zotero_chunk_rag.feature_extraction.debug_db as debug_db
+
+        assert not hasattr(debug_db, "write_method_result"), (
+            "write_method_result should have been deleted"
+        )
+        assert not hasattr(debug_db, "write_pipeline_run"), (
+            "write_pipeline_run should have been deleted"
+        )
+        assert not hasattr(debug_db, "write_vision_consensus"), (
+            "write_vision_consensus should have been deleted"
+        )
+
+
+# ---------------------------------------------------------------------------
+# TestWrite — retained write functions still work
 # ---------------------------------------------------------------------------
 
 
 class TestWrite:
-    def test_write_method_result(self) -> None:
-        """write_method_result() inserts a row with all fields queryable."""
-        con = _in_memory_con()
-        create_extended_tables(con)
-        write_method_result(
-            con,
-            table_id="paper1_table_1",
-            method_name="camelot_lattice",
-            boundaries_json='{"rows": [10, 20], "cols": [5, 15]}',
-            cell_grid_json='[["A", "B"], ["1", "2"]]',
-            quality_score=0.92,
-            execution_time_ms=135,
-        )
-        con.commit()
-
-        row = con.execute(
-            "SELECT table_id, method_name, boundary_hypotheses_json, cell_grid_json, "
-            "quality_score, execution_time_ms FROM method_results WHERE table_id = ?",
-            ("paper1_table_1",),
-        ).fetchone()
-
-        assert row is not None
-        assert row[0] == "paper1_table_1"
-        assert row[1] == "camelot_lattice"
-        assert row[2] == '{"rows": [10, 20], "cols": [5, 15]}'
-        assert row[3] == '[["A", "B"], ["1", "2"]]'
-        assert row[4] == 0.92
-        assert row[5] == 135
-        con.close()
-
     def test_write_ground_truth_diff(self) -> None:
         """write_ground_truth_diff() correctly serializes a ComparisonResult."""
         from zotero_chunk_rag.feature_extraction.ground_truth import (
@@ -138,53 +163,21 @@ class TestWrite:
             ("paper2_table_3",),
         ).fetchone()
 
-        assert row is not None
         assert row[0] == "paper2_table_3"
         assert row[1] == "2026-01-01T00:00:00"
-        # diff_json must be valid JSON containing the table_id
         diff = json.loads(row[2])
         assert diff["table_id"] == "paper2_table_3"
         assert row[3] == 80.0
-        # num_splits = len(row_splits) + len(column_splits) = 1 + 0
         assert row[4] == 1
-        # num_merges = len(row_merges) + len(column_merges) = 0 + 0
         assert row[5] == 0
-        # num_cell_diffs = len(cell_diffs) = 1
         assert row[6] == 1
         assert json.loads(row[7]) == [5, 3]
         assert json.loads(row[8]) == [6, 3]
         con.close()
 
-    def test_write_pipeline_run(self) -> None:
-        """write_pipeline_run() inserts a row with all fields queryable."""
-        con = _in_memory_con()
-        create_extended_tables(con)
-        config = json.dumps({"methods": ["camelot", "pdfplumber"], "strategy": "best"})
-        write_pipeline_run(
-            con,
-            table_id="paper3_table_2",
-            pipeline_config_json=config,
-            winning_method="camelot_lattice",
-            final_score=0.88,
-        )
-        con.commit()
-
-        row = con.execute(
-            "SELECT table_id, pipeline_config_json, winning_method, final_score "
-            "FROM pipeline_runs WHERE table_id = ?",
-            ("paper3_table_2",),
-        ).fetchone()
-
-        assert row is not None
-        assert row[0] == "paper3_table_2"
-        assert json.loads(row[1]) == {"methods": ["camelot", "pdfplumber"], "strategy": "best"}
-        assert row[2] == "camelot_lattice"
-        assert row[3] == 0.88
-        con.close()
-
 
 # ---------------------------------------------------------------------------
-# TestExtendedSchema
+# TestExtendedSchema — column-level checks on kept tables
 # ---------------------------------------------------------------------------
 
 
@@ -198,4 +191,99 @@ class TestExtendedSchema:
         assert "fuzzy_accuracy_pct" in column_names
         assert "fuzzy_precision_pct" in column_names
         assert "fuzzy_recall_pct" in column_names
+        con.close()
+
+
+# ---------------------------------------------------------------------------
+# TestVisionRunDetails — new table from Task 4.2.2
+# ---------------------------------------------------------------------------
+
+
+class TestVisionRunDetails:
+    def test_table_created(self) -> None:
+        """vision_run_details table must be created by create_extended_tables()."""
+        con = _in_memory_con()
+        create_extended_tables(con)
+        assert "vision_run_details" in _table_names(con)
+        con.close()
+
+    def test_write_and_read(self) -> None:
+        """write_vision_run_detail() inserts a row that can be read back correctly."""
+        con = _in_memory_con()
+        create_extended_tables(con)
+
+        details = {
+            "text_layer_caption": "Table 1",
+            "vision_caption": "Table 1. Demographics by group",
+            "page_num": 3,
+            "crop_bbox": [50.0, 100.0, 400.0, 300.0],
+            "recropped": True,
+            "recrop_bbox_pct": [10.0, 5.0, 90.0, 95.0],
+            "parse_success": True,
+            "is_incomplete": False,
+            "incomplete_reason": "",
+            "recrop_needed": False,
+            "raw_response": "raw text here",
+            "headers": ["A", "B", "C"],
+            "rows": [["1", "2", "3"]],
+            "footnotes": "Note: p < 0.05",
+            "table_label": "Table 1",
+        }
+
+        write_vision_run_detail(con, table_id="paper1_table_1", details_dict=details)
+        con.commit()
+
+        row = con.execute(
+            "SELECT table_id, text_layer_caption, vision_caption, recropped "
+            "FROM vision_run_details WHERE table_id = ?",
+            ("paper1_table_1",),
+        ).fetchone()
+
+        assert row[0] == "paper1_table_1"
+        assert row[1] == "Table 1"
+        assert row[2] == "Table 1. Demographics by group"
+        assert bool(row[3]) is True
+        con.close()
+
+    def test_upsert(self) -> None:
+        """Writing the same table_id twice overwrites the first entry (INSERT OR REPLACE)."""
+        con = _in_memory_con()
+        create_extended_tables(con)
+
+        base = {
+            "text_layer_caption": "Table 2",
+            "vision_caption": "Table 2. Outcomes",
+            "page_num": 5,
+            "crop_bbox": [0.0, 0.0, 200.0, 150.0],
+            "recropped": False,
+            "recrop_bbox_pct": None,
+            "parse_success": True,
+            "is_incomplete": False,
+            "incomplete_reason": "",
+            "recrop_needed": False,
+            "raw_response": "first",
+            "headers": ["X"],
+            "rows": [["1"]],
+            "footnotes": "",
+            "table_label": None,
+        }
+
+        write_vision_run_detail(con, table_id="paper1_table_2", details_dict=base)
+        con.commit()
+
+        updated = dict(base)
+        updated["recropped"] = True
+        updated["raw_response"] = "second"
+
+        write_vision_run_detail(con, table_id="paper1_table_2", details_dict=updated)
+        con.commit()
+
+        rows = con.execute(
+            "SELECT recropped, raw_response FROM vision_run_details WHERE table_id = ?",
+            ("paper1_table_2",),
+        ).fetchall()
+
+        assert len(rows) == 1, "INSERT OR REPLACE must leave exactly one row"
+        assert bool(rows[0][0]) is True
+        assert rows[0][1] == "second"
         con.close()

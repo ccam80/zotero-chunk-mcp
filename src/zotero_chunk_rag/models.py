@@ -60,6 +60,8 @@ class DocumentExtraction:
     stats: dict
     quality_grade: str
     completeness: ExtractionCompleteness | None = None
+    vision_details: list[dict] | None = None
+    pending_vision: object | None = field(default=None, repr=False)
 
 
 @dataclass

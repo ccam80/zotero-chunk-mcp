@@ -86,7 +86,7 @@ and Step 4 (integration) need to build and parse vision extraction requests.
   - Function returns crops only for the requested `caption_type`
   - Crop boundaries use the next caption of ANY type, not just the same type
   - Full page width always used (no column detection)
-  - All tests pass
+
 
 ---
 
@@ -199,7 +199,7 @@ and Step 4 (integration) need to build and parse vision extraction requests.
   - Each strip has width as the long edge (square or wider)
   - Strips overlap by ~15% of strip height
   - All returned items are valid PNG bytes with media_type "image/png"
-  - All tests pass
+
 
 ---
 
@@ -253,7 +253,7 @@ and Step 4 (integration) need to build and parse vision extraction requests.
 - **Acceptance criteria**:
   - Percentages correctly converted to absolute coordinates within original bbox
   - Out-of-range percentages clamped to [0, 100]
-  - All tests pass
+
 
 ---
 
@@ -274,13 +274,10 @@ and Step 4 (integration) need to build and parse vision extraction requests.
   - `test_vision_extract.py::TestDeletedRenderTablePng::test_not_importable`
     — Assert: `from zotero_chunk_rag.feature_extraction.vision_extract import render_table_png`
     raises `ImportError`.
-  - Import smoke test: `from zotero_chunk_rag.feature_extraction.vision_api import VisionAPI`
-    succeeds (no broken import).
 
 - **Acceptance criteria**:
   - `render_table_png` no longer exists in `vision_extract.py`
-  - `vision_api.py` imports succeed without `render_table_png`
-  - All tests pass
+  - `render_table_png` removed from `vision_api.py` import list
 
 ---
 
@@ -352,7 +349,7 @@ and Step 4 (integration) need to build and parse vision extraction requests.
   - Contains re-crop instructions
   - Contains multi-strip deduplication instructions
   - No references to the deleted multi-agent pipeline
-  - All tests pass
+
 
 ---
 
@@ -395,7 +392,7 @@ and Step 4 (integration) need to build and parse vision extraction requests.
 - **Acceptance criteria**:
   - Three new fields added: `caption`, `recrop_needed`, `recrop_bbox_pct`
   - Existing fields unchanged (no renames, no type changes)
-  - All tests pass
+
 
 ---
 
@@ -450,7 +447,7 @@ and Step 4 (integration) need to build and parse vision extraction requests.
   - Missing fields default safely (caption="", recrop_needed=False, recrop_bbox_pct=None)
   - Invalid recrop bbox_pct does not crash — treated as None
   - Old `corrections` parsing removed
-  - All tests pass
+
 
 ---
 
@@ -486,7 +483,7 @@ and Step 4 (integration) need to build and parse vision extraction requests.
   - All 6 examples include the `caption` field
   - Caption values match the visible caption text in each example's image description
   - JSON in examples is valid (parseable)
-  - All tests pass
+
 
 ---
 
@@ -518,15 +515,11 @@ assertions.
 
 ## Acceptance Criteria
 
-1. **Clean import**: `from zotero_chunk_rag.feature_extraction.vision_extract import compute_all_crops, render_table_region, compute_recrop_bbox, VISION_FIRST_SYSTEM, AgentResponse, parse_agent_response` succeeds
-2. **Clean import**: `from zotero_chunk_rag.feature_extraction.vision_api import VisionAPI` succeeds (no broken import from deleted `render_table_png`)
-3. **Deleted**: `render_table_png` no longer exists in `vision_extract.py`
-4. **Prompt**: `VISION_FIRST_SYSTEM` is a static string containing all 7 sections + worked examples, with no multi-agent references
-5. **AgentResponse**: has `caption: str`, `recrop_needed: bool`, `recrop_bbox_pct: list[float] | None` fields
-6. **parse_agent_response**: handles new fields with safe defaults for missing/invalid values
-7. **Rendering**: `render_table_region` returns 1 image for short crops, 2+ overlapping strips for tall crops
-8. **Crops**: `compute_all_crops` returns full-width crops bounded by next caption of any type
-9. **Recrop**: `compute_recrop_bbox` correctly converts 0–100 percentages to absolute PDF coordinates
-10. **Examples**: all 6 worked examples include `caption` field
-11. **Tests**: all tests in `test_vision_extract.py` pass
-12. **No new regressions**: no test that was passing before this step now fails because of this step's changes. Pre-existing failures (e.g., `test_ground_truth.py`, table-dependent tests) are expected and NOT blockers — report them and move on.
+1. **Deleted**: `render_table_png` no longer exists in `vision_extract.py`
+2. **Prompt**: `VISION_FIRST_SYSTEM` is a static string containing all 7 sections + worked examples, with no multi-agent references
+3. **AgentResponse**: has `caption: str`, `recrop_needed: bool`, `recrop_bbox_pct: list[float] | None` fields
+4. **parse_agent_response**: handles new fields with safe defaults for missing/invalid values
+5. **Rendering**: `render_table_region` returns 1 image for short crops, 2+ overlapping strips for tall crops
+6. **Crops**: `compute_all_crops` returns full-width crops bounded by next caption of any type
+7. **Recrop**: `compute_recrop_bbox` correctly converts 0–100 percentages to absolute PDF coordinates
+8. **Examples**: all 6 worked examples include `caption` field

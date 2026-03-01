@@ -1,14 +1,12 @@
 """Post-processor: clean cell text across the entire grid.
 
 Applies ligature normalization, leading-zero recovery, negative-sign
-reassembly, whitespace normalization, and font-aware control-character
-mapping to every cell.
+reassembly, whitespace normalization, and Unicode minus replacement
+to every cell.
 """
 from __future__ import annotations
 
 import re
-
-from ..models import CellGrid
 
 # ---------------------------------------------------------------------------
 # Ligature map
@@ -26,7 +24,7 @@ _LIGATURE_MAP = {
 # Numeric helpers
 # ---------------------------------------------------------------------------
 
-_STAT_MARKERS = re.compile(r"[*\u2020\u2021\u00a7\u2016]+")
+_STAT_MARKERS = re.compile(r"[*\u2020\u2021\u00a7\u2116]+")
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _WHITESPACE_RE = re.compile(r"  +")
 
@@ -155,51 +153,37 @@ def _map_control_chars(
     return _CONTROL_CHAR_RE.sub("", text)
 
 
-class CellCleaning:
-    """Clean cell text across the entire grid."""
+def clean_cells(
+    headers: list[str],
+    rows: list[list[str]],
+) -> tuple[list[str], list[list[str]]]:
+    """Apply text normalization to table headers and rows.
 
-    @property
-    def name(self) -> str:
-        return "cell_cleaning"
+    Applies (in order):
+    1. Ligature normalization (ffi -> ffi, etc.)
+    2. Negative sign reassembly (split minus signs)
+    3. Leading zero recovery (.047 -> 0.047)
+    4. Whitespace normalization (collapse, strip, newline -> space)
+    5. Unicode minus -> ASCII hyphen-minus
 
-    def process(self, grid: CellGrid, dict_blocks: list[dict] | None = None) -> CellGrid:
-        try:
-            return self._process(grid, dict_blocks or [])
-        except Exception:
-            return grid
+    Does NOT apply control character mapping (_map_control_chars) —
+    that function requires font metadata from the PDF text layer,
+    which is unavailable for vision-extracted tables.
 
-    def _process(self, grid: CellGrid, dict_blocks: list[dict]) -> CellGrid:
-
-        def clean(text: str, bbox: tuple[float, float, float, float] | None = None) -> str:
-            if not text:
-                return text
-            # 1. Ligature normalization
-            text = _normalize_ligatures(text)
-            # 2. Control character mapping (font-aware)
-            text = _map_control_chars(text, bbox, dict_blocks)
-            # 3. Negative sign reassembly (before whitespace collapse)
-            text = _reassemble_negative_signs(text)
-            # 4. Leading zero recovery
-            text = _recover_leading_zeros(text)
-            # 5. Whitespace normalization
-            text = text.replace("\n", " ")
-            text = _WHITESPACE_RE.sub(" ", text).strip()
-            # 6. Normalize Unicode minus to ASCII hyphen-minus
-            text = text.replace("\u2212", "-")
+    Returns:
+        (cleaned_headers, cleaned_rows) with same dimensions as input.
+    """
+    def _clean(text: str) -> str:
+        if not text:
             return text
+        text = _normalize_ligatures(text)
+        text = _reassemble_negative_signs(text)
+        text = _recover_leading_zeros(text)
+        text = text.replace("\n", " ")
+        text = _WHITESPACE_RE.sub(" ", text).strip()
+        text = text.replace("\u2212", "-")
+        return text
 
-        new_headers = tuple(clean(h) for h in grid.headers)
-        new_rows = tuple(
-            tuple(clean(c) for c in row) for row in grid.rows
-        )
-
-        if new_headers == grid.headers and new_rows == grid.rows:
-            return grid
-
-        return CellGrid(
-            headers=new_headers,
-            rows=new_rows,
-            col_boundaries=grid.col_boundaries,
-            row_boundaries=grid.row_boundaries,
-            method=grid.method,
-        )
+    cleaned_headers = [_clean(h) for h in headers]
+    cleaned_rows = [[_clean(c) for c in row] for row in rows]
+    return cleaned_headers, cleaned_rows

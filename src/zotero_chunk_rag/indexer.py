@@ -2,6 +2,7 @@
 import hashlib
 import json
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from tqdm import tqdm
@@ -66,13 +67,23 @@ class Indexer:
         self.journal_ranker = JournalRanker()
         self._empty_docs_path = config.chroma_db_path / "empty_docs.json"
         self._config_hash_path = config.chroma_db_path / "config_hash.txt"
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if api_key:
+            from .feature_extraction.vision_api import VisionAPI
+            cost_log_path = config.chroma_db_path.parent / "vision_costs.json"
+            self._vision_api = VisionAPI(
+                api_key=api_key,
+                cost_log_path=cost_log_path,
+            )
+        else:
+            self._vision_api = None
 
     # ------------------------------------------------------------------
     # Empty-doc tracking (keyed by item_key -> pdf file hash)
     # ------------------------------------------------------------------
 
     def _load_empty_docs(self) -> dict[str, str]:
-        """Load {item_key: pdf_hash} for docs that previously yielded no chunks."""
+        """Load {item_key: pdf_hash} for docs that yielded no chunks."""
         if self._empty_docs_path.exists():
             return json.loads(self._empty_docs_path.read_text())
         return {}
@@ -95,7 +106,7 @@ class Indexer:
             (needs_reindex, reason) where reason is:
             - "new": Document not in index
             - "changed": PDF hash differs from stored hash
-            - "no_hash": Document indexed without hash (legacy), needs reindex
+            - "no_hash": Document indexed without hash, needs reindex
             - "current": Document is up-to-date, no reindex needed
         """
         existing_meta = self.store.get_document_meta(item.item_key)
@@ -224,13 +235,42 @@ class Indexer:
             "empty_pages": 0,
         }
 
-        for item in tqdm(to_index, desc="Indexing"):
+        # ---- Phase 1: Extract all documents (vision specs collected but deferred) ----
+        figures_dir = self.config.chroma_db_path.parent / "figures"
+        doc_extractions: dict[str, tuple[ZoteroItem, object]] = {}  # item_key -> (item, extraction)
+
+        for item in tqdm(to_index, desc="Extracting"):
             try:
                 logger.debug(
-                    f"Starting {item.item_key}: "
+                    f"Starting extraction {item.item_key}: "
                     f"title={item.title!r}, pdf={item.pdf_path}"
                 )
-                n_chunks, n_tables, reason, extraction_stats, quality_grade = self._index_document_detailed(item)
+                extraction = extract_document(
+                    item.pdf_path,
+                    write_images=True,
+                    images_dir=figures_dir,
+                    ocr_language=self.config.ocr_language,
+                    vision_api=self._vision_api,
+                )
+                doc_extractions[item.item_key] = (item, extraction)
+            except Exception as e:
+                logger.error(f"Failed to extract {item.item_key}: {type(e).__name__}: {e}")
+                results.append(IndexResult(
+                    item.item_key, item.title, "failed",
+                    reason=f"{type(e).__name__}: {e}"))
+
+        # ---- Phase 2: Resolve vision batch (one API call for all papers) ----
+        if self._vision_api and doc_extractions:
+            from .pdf_processor import resolve_pending_vision
+            resolve_pending_vision(
+                {k: v[1] for k, v in doc_extractions.items()},
+                self._vision_api,
+            )
+
+        # ---- Phase 3: Index each document (chunk, store, etc.) ----
+        for item_key, (item, extraction) in doc_extractions.items():
+            try:
+                n_chunks, n_tables, reason, extraction_stats, quality_grade = self._index_extraction(item, extraction)
 
                 # Aggregate extraction stats
                 for key in ["total_pages", "text_pages", "ocr_pages", "empty_pages"]:
@@ -277,25 +317,36 @@ class Indexer:
 
     def _index_document_detailed(self, item: ZoteroItem) -> tuple[int, int, str, dict, str]:
         """
-        Index a single document.
+        Extract and index a single document (includes vision resolution).
 
-        Returns:
-            (n_chunks, n_tables, reason, extraction_stats, quality_grade)
+        For batch indexing use index_all() which batches vision across all docs.
         """
         if item.pdf_path is None or not item.pdf_path.exists():
             raise FileNotFoundError(f"PDF not found for {item.item_key}")
 
-        # Determine figures directory
         figures_dir = self.config.chroma_db_path.parent / "figures"
-
-        # Single-call extraction via pdf_processor
         extraction = extract_document(
             item.pdf_path,
             write_images=True,
             images_dir=figures_dir,
             ocr_language=self.config.ocr_language,
+            vision_api=self._vision_api,
         )
 
+        # Resolve vision for this single document
+        if extraction.pending_vision is not None and self._vision_api:
+            from .pdf_processor import resolve_pending_vision
+            resolve_pending_vision({item.item_key: extraction}, self._vision_api)
+
+        return self._index_extraction(item, extraction)
+
+    def _index_extraction(self, item: ZoteroItem, extraction) -> tuple[int, int, str, dict, str]:
+        """
+        Index a pre-extracted document (vision already resolved).
+
+        Returns:
+            (n_chunks, n_tables, reason, extraction_stats, quality_grade)
+        """
         if not extraction.pages:
             return 0, 0, "PDF has 0 pages (corrupt or unreadable)", extraction.stats, "F"
 

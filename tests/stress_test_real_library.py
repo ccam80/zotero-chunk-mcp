@@ -35,10 +35,8 @@ from pathlib import Path
 from zotero_chunk_rag.feature_extraction.debug_db import (
     create_extended_tables,
     write_ground_truth_diff,
-    write_method_result,
-    write_pipeline_run,
     write_vision_agent_result,
-    write_vision_consensus,
+    write_vision_run_detail,
 )
 from zotero_chunk_rag.feature_extraction.ground_truth import (
     GROUND_TRUTH_DB_PATH,
@@ -236,6 +234,7 @@ class StressTestReport:
     extraction_summaries: list[dict] = field(default_factory=list)
     timings: dict = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
+    db_path: Path | None = None
 
     def add(self, test_name: str, paper: str, passed: bool, detail: str,
             severity: str = "MAJOR"):
@@ -342,6 +341,18 @@ class StressTestReport:
         lines.append("")
         lines.append("_(See OCR test results in the test output above)_")
         lines.append("")
+
+        # Ground truth comparison summary (requires debug DB)
+        if self.db_path is not None:
+            gt_lines = _build_gt_summary_markdown(self.db_path)
+            if gt_lines:
+                lines.append("")
+                lines.extend(gt_lines)
+
+            vision_lines = _build_vision_extraction_report(self.db_path)
+            if vision_lines:
+                lines.append("")
+                lines.extend(vision_lines)
 
         return "\n".join(lines)
 
@@ -452,7 +463,22 @@ def run_stress_test():
         reranker = Reranker(alpha=0.7)
         retriever = Retriever(store)
 
+        # Construct VisionAPI if ANTHROPIC_API_KEY is available
+        vision_api = None
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if api_key:
+            from zotero_chunk_rag.feature_extraction.vision_api import VisionAPI
+            vision_cost_log = test_dir / "vision_costs.json"
+            vision_api = VisionAPI(api_key=api_key, cost_log_path=vision_cost_log)
+            print(f"  Vision API enabled (model: {vision_api._model})")
+        else:
+            print("  Vision API disabled (no ANTHROPIC_API_KEY)")
+
         t_start = time.perf_counter()
+
+        # --- Phase 2a: Extract all documents (vision specs collected, deferred) ---
+        # Collects vision specs but does NOT call the Batch API yet.
+        doc_data: dict[str, tuple] = {}  # item_key -> (extraction, item, short_name, gt, t_extract)
 
         for item, short_name, gt in corpus_items:
             print(f"\n  Extracting [{short_name}]...", end=" ", flush=True)
@@ -461,9 +487,41 @@ def run_stress_test():
                 item.pdf_path,
                 write_images=True,
                 images_dir=figures_path / item.item_key,
+                vision_api=vision_api,
             )
             t_extract = time.perf_counter() - t0
+            n_pending = len(extraction.pending_vision.specs) if extraction.pending_vision else 0
+            print(
+                f"{t_extract:.1f}s | {len(extraction.pages)}pp | "
+                f"{len(extraction.figures)}fig | "
+                f"{n_pending} table specs pending"
+            )
+            doc_data[item.item_key] = (extraction, item, short_name, gt, t_extract)
 
+        # --- Phase 2b: Resolve vision batch (one API call for ALL papers) ---
+        if vision_api:
+            from zotero_chunk_rag.pdf_processor import resolve_pending_vision
+            total_specs = sum(
+                len(ext.pending_vision.specs)
+                for ext, _, _, _, _ in doc_data.values()
+                if ext.pending_vision
+            )
+            print(f"\n  Resolving vision batch: {total_specs} tables across {len(doc_data)} papers...")
+            t_vision = time.perf_counter()
+            resolve_pending_vision(
+                {k: v[0] for k, v in doc_data.items()},
+                vision_api,
+            )
+            t_vision = time.perf_counter() - t_vision
+            print(f"  Vision batch resolved in {t_vision:.1f}s")
+
+        # --- Phase 2c: Index each document (chunk, store, report) ---
+        from zotero_chunk_rag._reference_matcher import match_references, get_reference_context
+        from zotero_chunk_rag.pdf_processor import SYNTHETIC_CAPTION_PREFIX
+        _TAB_NUM_RE = re.compile(r"(?:Table|Tab\.?)\s+(\d+)", re.IGNORECASE)
+        _FIG_NUM_RE = re.compile(r"(?:Figure|Fig\.?)\s+(\d+)", re.IGNORECASE)
+
+        for item_key, (extraction, item, short_name, gt, t_extract) in doc_data.items():
             # Chunk
             chunks = chunker.chunk(
                 extraction.full_markdown,
@@ -496,12 +554,7 @@ def run_stress_test():
             store.add_chunks(item.item_key, doc_meta, chunks)
 
             # Build reference map and enrich tables/figures with body-text context
-            # (mirrors production indexer pipeline)
-            from zotero_chunk_rag._reference_matcher import match_references, get_reference_context
-            from zotero_chunk_rag.pdf_processor import SYNTHETIC_CAPTION_PREFIX
             ref_map = match_references(extraction.full_markdown, chunks, extraction.tables, extraction.figures)
-            _TAB_NUM_RE = re.compile(r"(?:Table|Tab\.?)\s+(\d+)", re.IGNORECASE)
-            _FIG_NUM_RE = re.compile(r"(?:Figure|Fig\.?)\s+(\d+)", re.IGNORECASE)
             for table in extraction.tables:
                 if table.caption and not table.caption.startswith(SYNTHETIC_CAPTION_PREFIX):
                     m_cap = _TAB_NUM_RE.search(table.caption)
@@ -528,7 +581,7 @@ def run_stress_test():
             n_sections = len([s for s in extraction.sections if s.label != "preamble"])
             section_labels = [s.label for s in extraction.sections if s.label not in ("preamble", "unknown")]
             print(
-                f"{t_extract:.1f}s | {len(extraction.pages)}pp | "
+                f"\n  Indexed [{short_name}]: {t_extract:.1f}s | {len(extraction.pages)}pp | "
                 f"{len(chunks)}ch | {len(extraction.tables)}tab | "
                 f"{len(extraction.figures)}fig | "
                 f"sections: {section_labels} | "
@@ -1560,6 +1613,33 @@ def write_debug_database(
                     continue
                 write_ground_truth_diff(con, table_id, run_id, result)
 
+        # --- vision extraction details ---
+        if extraction.vision_details:
+            for vi, vd in enumerate(extraction.vision_details):
+                table_id = make_table_id(
+                    item_key,
+                    vd["text_layer_caption"],
+                    vd["page_num"],
+                    vi,
+                )
+                write_vision_agent_result(
+                    con,
+                    table_id=table_id,
+                    agent_idx=0,
+                    model="claude-haiku-4-5-20251001",
+                    raw_response=vd["raw_response"],
+                    headers_json=json.dumps(vd["headers"]),
+                    rows_json=json.dumps(vd["rows"]),
+                    table_label=vd["table_label"],
+                    is_incomplete=vd["is_incomplete"],
+                    incomplete_reason=vd["incomplete_reason"],
+                    parse_success=vd["parse_success"],
+                    execution_time_ms=None,
+                    agent_role="transcriber",
+                    footnotes=vd["footnotes"],
+                )
+                write_vision_run_detail(con, table_id=table_id, details_dict=vd)
+
         # --- figures ---
         for fig in extraction.figures:
             has_img = 1 if (fig.image_path and fig.image_path.exists()) else 0
@@ -1665,378 +1745,108 @@ def _build_gt_summary_markdown(db_path: Path) -> list[str]:
     lines.append("")
     return lines
 
-
 # ---------------------------------------------------------------------------
-# Vision eval DB writer (keeps _vision_stage_eval.db in sync for the viewer)
-# ---------------------------------------------------------------------------
-
-_EVAL_DB_PATH = Path(__file__).resolve().parent.parent / "_vision_stage_eval.db"
-_EVAL_ROLE_NAMES = ["transcriber", "y_verifier", "x_verifier", "synthesizer"]
-_EVAL_STAGE_PAIRS = [
-    ("transcriber", "y_verifier", 0, 1),
-    ("transcriber", "x_verifier", 0, 2),
-    ("transcriber", "synthesizer", 0, 3),
-    ("y_verifier", "synthesizer", 1, 3),
-    ("x_verifier", "synthesizer", 2, 3),
-]
-
-_EVAL_SCHEMA = """\
-CREATE TABLE IF NOT EXISTS runs (
-    run_id TEXT PRIMARY KEY, timestamp TEXT,
-    num_papers INTEGER, num_tables INTEGER,
-    total_cost_usd REAL, vision_time_s REAL
-);
-CREATE TABLE IF NOT EXISTS agent_outputs (
-    run_id TEXT, table_id TEXT, agent_role TEXT,
-    headers_json TEXT, rows_json TEXT, footnotes TEXT,
-    corrections_json TEXT, shape TEXT, parse_success INTEGER,
-    num_corrections INTEGER, raw_response TEXT,
-    PRIMARY KEY (run_id, table_id, agent_role)
-);
-CREATE TABLE IF NOT EXISTS gt_comparisons (
-    run_id TEXT, table_id TEXT, agent_role TEXT,
-    cell_accuracy_pct REAL, structural_coverage_pct REAL,
-    gt_shape TEXT, ext_shape TEXT,
-    num_matched_cols INTEGER, num_extra_cols INTEGER, num_missing_cols INTEGER,
-    num_col_splits INTEGER, num_col_merges INTEGER,
-    num_matched_rows INTEGER, num_extra_rows INTEGER, num_missing_rows INTEGER,
-    num_row_splits INTEGER, num_row_merges INTEGER, num_cell_diffs INTEGER,
-    PRIMARY KEY (run_id, table_id, agent_role)
-);
-CREATE TABLE IF NOT EXISTS stage_diffs (
-    run_id TEXT, table_id TEXT, from_role TEXT, to_role TEXT,
-    shape_changed INTEGER, num_header_diffs INTEGER, num_cell_diffs INTEGER,
-    cells_added INTEGER, cells_removed INTEGER, accuracy_delta REAL,
-    PRIMARY KEY (run_id, table_id, from_role, to_role)
-);
-CREATE TABLE IF NOT EXISTS correction_log (
-    run_id TEXT, table_id TEXT, agent_role TEXT,
-    correction_index INTEGER, correction_text TEXT
-);
-"""
-
-
-def _eval_cell_diff(a, b) -> dict:
-    """Compare two AgentResponses cell-by-cell for stage diffs."""
-    if not a.parse_success or not b.parse_success:
-        return {"shape_changed": 1, "num_header_diffs": 0,
-                "num_cell_diffs": 0, "cells_added": 0, "cells_removed": 0}
-    shape_changed = int(a.raw_shape != b.raw_shape)
-    h_diffs = sum(1 for i in range(min(len(a.headers), len(b.headers)))
-                  if a.headers[i].strip() != b.headers[i].strip())
-    h_diffs += abs(len(a.headers) - len(b.headers))
-    cell_diffs = cells_added = cells_removed = 0
-    min_rows = min(len(a.rows), len(b.rows))
-    for r in range(min_rows):
-        mc = min(len(a.rows[r]), len(b.rows[r]))
-        cell_diffs += sum(1 for c in range(mc)
-                          if a.rows[r][c].strip() != b.rows[r][c].strip())
-        diff = len(b.rows[r]) - len(a.rows[r])
-        if diff > 0:
-            cells_added += diff
-        elif diff < 0:
-            cells_removed -= diff
-    for r in range(min_rows, len(b.rows)):
-        cells_added += len(b.rows[r])
-    for r in range(min_rows, len(a.rows)):
-        cells_removed += len(a.rows[r])
-    return {"shape_changed": shape_changed, "num_header_diffs": h_diffs,
-            "num_cell_diffs": cell_diffs, "cells_added": cells_added,
-            "cells_removed": cells_removed}
-
-
-def _update_vision_eval_db(
-    vision_results: list,
-    session_cost: float,
-    vision_time: float,
-    num_papers: int,
-    gt_db_exists: bool,
-) -> None:
-    """Write vision results to _vision_stage_eval.db for the viewer."""
-    from zotero_chunk_rag.feature_extraction.vision_extract import (
-        AgentResponse, _parse_agent_json,
-    )
-
-    eval_conn = sqlite3.connect(str(_EVAL_DB_PATH))
-    eval_conn.executescript(_EVAL_SCHEMA)
-
-    run_id = time.strftime("%Y%m%d_%H%M%S")
-    n_specs = sum(1 for _, r in vision_results if r.error is None)
-
-    eval_conn.execute(
-        "INSERT OR REPLACE INTO runs VALUES (?, ?, ?, ?, ?, ?)",
-        (run_id, time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-         num_papers, n_specs, session_cost, vision_time),
-    )
-
-    gt_tables: set[str] = set()
-    if gt_db_exists:
-        gt_conn = sqlite3.connect(str(GROUND_TRUTH_DB_PATH))
-        gt_tables = {r[0] for r in gt_conn.execute(
-            "SELECT table_id FROM ground_truth_tables"
-        ).fetchall()}
-        gt_conn.close()
-
-    for spec, result in vision_results:
-        if result.error or not result.agent_responses:
-            continue
-
-        responses = list(result.agent_responses)
-        while len(responses) < 4:
-            responses.append(AgentResponse(
-                headers=[], rows=[], footnotes="",
-                table_label=None, is_incomplete=False,
-                incomplete_reason="", raw_shape=(0, 0),
-                parse_success=False, raw_response="",
-            ))
-
-        for i, role in enumerate(_EVAL_ROLE_NAMES):
-            resp = responses[i]
-            corrections = []
-            if resp.parse_success and resp.raw_response:
-                parsed = _parse_agent_json(resp.raw_response)
-                if parsed:
-                    corrections = parsed.get("corrections") or []
-
-            eval_conn.execute(
-                "INSERT OR REPLACE INTO agent_outputs VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                (run_id, spec.table_id, role,
-                 json.dumps(resp.headers, ensure_ascii=False),
-                 json.dumps(resp.rows, ensure_ascii=False),
-                 resp.footnotes,
-                 json.dumps(corrections, ensure_ascii=False),
-                 f"{resp.raw_shape[0]}x{resp.raw_shape[1]}",
-                 int(resp.parse_success),
-                 len(corrections),
-                 resp.raw_response),
-            )
-
-            for ci, ct in enumerate(corrections):
-                eval_conn.execute(
-                    "INSERT INTO correction_log VALUES (?,?,?,?,?)",
-                    (run_id, spec.table_id, role, ci, ct),
-                )
-
-            # GT comparison
-            if spec.table_id in gt_tables and resp.parse_success and resp.headers:
-                try:
-                    cmp = compare_extraction(
-                        GROUND_TRUTH_DB_PATH, spec.table_id,
-                        resp.headers, resp.rows, resp.footnotes or "",
-                    )
-                    eval_conn.execute(
-                        "INSERT OR REPLACE INTO gt_comparisons "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                        (run_id, spec.table_id, role,
-                         cmp.cell_accuracy_pct,
-                         cmp.structural_coverage_pct,
-                         f"{cmp.gt_shape[0]}x{cmp.gt_shape[1]}",
-                         f"{cmp.ext_shape[0]}x{cmp.ext_shape[1]}",
-                         len(cmp.matched_columns),
-                         len(cmp.extra_columns),
-                         len(cmp.missing_columns),
-                         len(cmp.column_splits),
-                         len(cmp.column_merges),
-                         len(cmp.matched_rows),
-                         len(cmp.extra_rows),
-                         len(cmp.missing_rows),
-                         len(cmp.row_splits),
-                         len(cmp.row_merges),
-                         len(cmp.cell_diffs)),
-                    )
-                except (KeyError, Exception):
-                    pass
-
-        # Stage-to-stage diffs
-        for from_role, to_role, fi, ti in _EVAL_STAGE_PAIRS:
-            diff = _eval_cell_diff(responses[fi], responses[ti])
-            acc_delta = None
-            if spec.table_id in gt_tables:
-                row_from = eval_conn.execute(
-                    "SELECT cell_accuracy_pct FROM gt_comparisons "
-                    "WHERE run_id=? AND table_id=? AND agent_role=?",
-                    (run_id, spec.table_id, from_role),
-                ).fetchone()
-                row_to = eval_conn.execute(
-                    "SELECT cell_accuracy_pct FROM gt_comparisons "
-                    "WHERE run_id=? AND table_id=? AND agent_role=?",
-                    (run_id, spec.table_id, to_role),
-                ).fetchone()
-                if (row_from and row_to
-                        and row_from[0] is not None and row_to[0] is not None):
-                    acc_delta = row_to[0] - row_from[0]
-
-            eval_conn.execute(
-                "INSERT OR REPLACE INTO stage_diffs VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (run_id, spec.table_id, from_role, to_role,
-                 diff["shape_changed"], diff["num_header_diffs"],
-                 diff["num_cell_diffs"], diff["cells_added"],
-                 diff["cells_removed"], acc_delta),
-            )
-
-    eval_conn.commit()
-    eval_conn.close()
-    print(f"  [Vision] Updated {_EVAL_DB_PATH.name} (run {run_id})")
-
-
-# ---------------------------------------------------------------------------
-# Pipeline depth report builder
+# Vision extraction report builder
 # ---------------------------------------------------------------------------
 
 
-def _build_pipeline_depth_report(db_path: Path) -> list[str]:
-    """Query the debug DB for all method results, GT diffs, and pipeline runs.
+def _build_vision_extraction_report(db_path: Path) -> list[str]:
+    """Query vision_run_details and vision_agent_results from the debug DB.
 
-    Builds a markdown report showing:
-    - Per-method win rates (how often each cell/structure method is best)
-    - Combination value (best-single-method vs consensus accuracy)
-    - Post-processing improvement (winning grid vs post-processed GT accuracy)
-    - Per-table accuracy chain (raw method accuracies -> winning -> post-processed -> GT)
-
-    Returns an empty list when no method_results data exists.
+    Returns markdown lines for the Vision Extraction Report section, or an
+    empty list when no vision data was recorded (vision_api was None).
     """
     con = sqlite3.connect(str(db_path))
     try:
-        # Check if method_results has data
-        count_row = con.execute("SELECT COUNT(*) FROM method_results").fetchone()
+        count_row = con.execute(
+            "SELECT COUNT(*) FROM vision_run_details"
+        ).fetchone()
         if count_row[0] == 0:
             return []
 
         lines: list[str] = []
-        lines.append("## Pipeline Depth Report")
+        lines.append("## Vision Extraction Report")
         lines.append("")
 
-        # --- 1. Per-method win rates ---
-        lines.append("### Per-Method Win Rates")
+        # --- Summary metrics ---
+        total = con.execute(
+            "SELECT COUNT(*) FROM vision_run_details"
+        ).fetchone()[0]
+        parse_success = con.execute(
+            "SELECT COUNT(*) FROM vision_run_details WHERE parse_success = 1"
+        ).fetchone()[0]
+        recropped = con.execute(
+            "SELECT COUNT(*) FROM vision_run_details WHERE recropped = 1"
+        ).fetchone()[0]
+        incomplete = con.execute(
+            "SELECT COUNT(*) FROM vision_run_details WHERE is_incomplete = 1"
+        ).fetchone()[0]
+
+        parse_pct = 100 * parse_success / total if total else 0.0
+        recrop_pct = 100 * recropped / total if total else 0.0
+        incomplete_pct = 100 * incomplete / total if total else 0.0
+
+        lines.append("| Metric | Value |")
+        lines.append("|--------|-------|")
+        lines.append(f"| Tables attempted | {total} |")
+        lines.append(f"| Parse success | {parse_success} ({parse_pct:.1f}%) |")
+        lines.append(f"| Re-crops performed | {recropped} ({recrop_pct:.1f}%) |")
+        lines.append(f"| Incomplete tables | {incomplete} ({incomplete_pct:.1f}%) |")
         lines.append("")
 
-        # For each table_id, find which structure+cell combo had the best quality_score
-        table_ids = [
-            r[0] for r in con.execute(
-                "SELECT DISTINCT table_id FROM method_results"
-            ).fetchall()
-        ]
+        # --- Per-paper breakdown ---
+        paper_rows = con.execute(
+            """
+            SELECT
+                p.short_name,
+                COUNT(vrd.table_id) AS total,
+                SUM(vrd.parse_success) AS parsed,
+                SUM(vrd.recropped) AS recrops,
+                SUM(vrd.is_incomplete) AS incomplete
+            FROM vision_run_details vrd
+            LEFT JOIN extracted_tables et ON et.table_id = vrd.table_id
+            LEFT JOIN papers p ON p.item_key = et.item_key
+            GROUP BY p.short_name
+            ORDER BY p.short_name
+            """
+        ).fetchall()
 
-        structure_wins: dict[str, int] = {}
-        cell_wins: dict[str, int] = {}
-        structure_totals: dict[str, int] = {}
-        cell_totals: dict[str, int] = {}
-
-        for tid in table_ids:
-            rows = con.execute(
-                "SELECT method_name, quality_score FROM method_results "
-                "WHERE table_id = ? AND quality_score IS NOT NULL "
-                "ORDER BY quality_score DESC LIMIT 1",
-                (tid,),
-            ).fetchone()
-            if rows:
-                best_method = rows[0]
-                parts = best_method.split("+", 1)
-                if len(parts) == 2:
-                    struct_name, cell_name = parts
-                    structure_wins[struct_name] = structure_wins.get(struct_name, 0) + 1
-                    cell_wins[cell_name] = cell_wins.get(cell_name, 0) + 1
-
-            # Count participation
-            all_methods = con.execute(
-                "SELECT DISTINCT method_name FROM method_results WHERE table_id = ?",
-                (tid,),
-            ).fetchall()
-            for (method_name,) in all_methods:
-                parts = method_name.split("+", 1)
-                if len(parts) == 2:
-                    structure_totals[parts[0]] = structure_totals.get(parts[0], 0) + 1
-                    cell_totals[parts[1]] = cell_totals.get(parts[1], 0) + 1
-
-        if structure_wins:
-            lines.append("**Structure method wins** (how often each method's boundaries produce the best cell accuracy):")
+        if paper_rows:
+            lines.append("### Per-paper breakdown")
             lines.append("")
-            lines.append("| Structure Method | Wins | Participated | Win Rate |")
-            lines.append("|-----------------|------|-------------|----------|")
-            for name in sorted(structure_wins.keys(), key=lambda n: structure_wins[n], reverse=True):
-                total = structure_totals.get(name, 0)
-                wr = structure_wins[name] / total if total > 0 else 0
-                lines.append(f"| {name} | {structure_wins[name]} | {total} | {wr:.0%} |")
-            lines.append("")
-
-        if cell_wins:
-            lines.append("**Cell method wins** (how often each method is selected as best):")
-            lines.append("")
-            lines.append("| Cell Method | Wins | Participated | Win Rate |")
-            lines.append("|------------|------|-------------|----------|")
-            for name in sorted(cell_wins.keys(), key=lambda n: cell_wins[n], reverse=True):
-                total = cell_totals.get(name, 0)
-                wr = cell_wins[name] / total if total > 0 else 0
-                lines.append(f"| {name} | {cell_wins[name]} | {total} | {wr:.0%} |")
-            lines.append("")
-
-        # --- 2. Combination value ---
-        lines.append("### Combination Value")
-        lines.append("")
-        lines.append("Comparison of best-single-method accuracy vs pipeline (consensus boundaries) accuracy:")
-        lines.append("")
-
-        # For each table, find best single-method accuracy and pipeline accuracy
-        best_single_accs: list[float] = []
-        pipeline_accs: list[float] = []
-        combo_table_ids: list[str] = []
-
-        for tid in table_ids:
-            # Best single method accuracy
-            best_row = con.execute(
-                "SELECT MAX(quality_score) FROM method_results "
-                "WHERE table_id = ? AND quality_score IS NOT NULL",
-                (tid,),
-            ).fetchone()
-            # Pipeline accuracy (from ground_truth_diffs)
-            pipeline_row = con.execute(
-                "SELECT fuzzy_accuracy_pct FROM ground_truth_diffs "
-                "WHERE table_id = ? ORDER BY rowid DESC LIMIT 1",
-                (tid,),
-            ).fetchone()
-
-            if best_row and best_row[0] is not None and pipeline_row:
-                best_single_accs.append(best_row[0])
-                pipeline_accs.append(pipeline_row[0])
-                combo_table_ids.append(tid)
-
-        if best_single_accs:
-            avg_best = sum(best_single_accs) / len(best_single_accs)
-            avg_pipeline = sum(pipeline_accs) / len(pipeline_accs)
-            delta = avg_pipeline - avg_best
-            lines.append(f"- **Avg best-single-method accuracy**: {avg_best:.1f}%")
-            lines.append(f"- **Avg pipeline (consensus) accuracy**: {avg_pipeline:.1f}%")
-            lines.append(f"- **Delta (positive = combination helps)**: {delta:+.1f}%")
-            lines.append(f"- **Tables compared**: {len(best_single_accs)}")
-        else:
-            lines.append("_(No tables with both per-method and GT data available)_")
-        lines.append("")
-
-        # --- 3. Per-table accuracy chain ---
-        lines.append("### Per-Table Accuracy Chain")
-        lines.append("")
-        lines.append("| Table ID | Best Single Method | Best Accuracy | Pipeline Accuracy | Delta |")
-        lines.append("|----------|-------------------|---------------|-------------------|-------|")
-
-        for i, tid in enumerate(combo_table_ids):
-            # Find best single method name and accuracy
-            best_row = con.execute(
-                "SELECT method_name, quality_score FROM method_results "
-                "WHERE table_id = ? AND quality_score IS NOT NULL "
-                "ORDER BY quality_score DESC LIMIT 1",
-                (tid,),
-            ).fetchone()
-            if best_row:
-                best_name = best_row[0]
-                best_acc = best_single_accs[i]
-                pipe_acc = pipeline_accs[i]
-                delta = pipe_acc - best_acc
+            lines.append("| Paper | Tables | Parsed | Re-cropped | Incomplete |")
+            lines.append("|-------|--------|--------|------------|------------|")
+            for short_name, total_p, parsed_p, recrops_p, incomplete_p in paper_rows:
+                label = short_name if short_name else "(unknown)"
                 lines.append(
-                    f"| {tid[:40]} | {best_name} | {best_acc:.1f}% "
-                    f"| {pipe_acc:.1f}% | {delta:+.1f}% |"
+                    f"| {label} | {total_p} | {parsed_p} "
+                    f"| {recrops_p} | {incomplete_p} |"
                 )
+            lines.append("")
 
-        lines.append("")
+        # --- Caption changes ---
+        caption_rows = con.execute(
+            """
+            SELECT table_id, text_layer_caption, vision_caption
+            FROM vision_run_details
+            WHERE vision_caption IS NOT NULL
+              AND vision_caption != ''
+              AND vision_caption != text_layer_caption
+            ORDER BY table_id
+            """
+        ).fetchall()
+
+        if caption_rows:
+            lines.append("### Caption changes (text-layer → vision)")
+            lines.append("")
+            lines.append("| Table ID | Text Layer | Vision |")
+            lines.append("|----------|-----------|--------|")
+            for table_id, text_cap, vision_cap in caption_rows:
+                text_short = (text_cap or "")[:60].replace("|", "/")
+                vision_short = (vision_cap or "")[:60].replace("|", "/")
+                lines.append(f"| {table_id} | {text_short} | {vision_short} |")
+            lines.append("")
+
         return lines
     finally:
         con.close()
@@ -2061,40 +1871,36 @@ if __name__ == "__main__":
 
     report, extractions = run_stress_test()
 
-    # Print report
-    md = report.to_markdown()
-    print("\n" + "=" * 70)
-    print(md)
-
-    # Save report
     base_dir = Path(__file__).parent.parent
     report_path = base_dir / "STRESS_TEST_REPORT.md"
-    report_path.write_text(md, encoding="utf-8")
-    print(f"\nReport saved to: {report_path}")
 
-    # Write debug database (all figures, tables, chunks, sections, test results)
+    # Write debug database first so db_path can be set on report before rendering
     if extractions:
         db_path = base_dir / "_stress_test_debug.db"
         write_debug_database(extractions, report, db_path)
         print(f"Debug database saved to: {db_path} ({db_path.stat().st_size:,} bytes)")
         print(f"  Query with: sqlite3 {db_path} \"SELECT short_name, quality_grade FROM papers\"")
         print(f"  Tables: run_metadata, papers, sections, pages, extracted_tables, extracted_figures, chunks, test_results")
+        report.db_path = db_path
 
-        # Append ground truth comparison summary to the report file if any diffs exist
-        gt_md_lines = _build_gt_summary_markdown(db_path)
+    # Render report (includes GT + vision sections when db_path is set)
+    md = report.to_markdown()
+    print("\n" + "=" * 70)
+    print(md)
+
+    # Save report
+    report_path.write_text(md, encoding="utf-8")
+    print(f"\nReport saved to: {report_path}")
+
+    # Also print GT and vision sections to stdout separately for visibility
+    if extractions:
+        gt_md_lines = _build_gt_summary_markdown(report.db_path)
         if gt_md_lines:
-            gt_section = "\n".join(gt_md_lines)
-            with open(report_path, "a", encoding="utf-8") as fh:
-                fh.write("\n" + gt_section + "\n")
-            print(gt_section)
+            print("\n".join(gt_md_lines))
 
-        # Append pipeline depth report to the report file if method data exists
-        depth_md_lines = _build_pipeline_depth_report(db_path)
-        if depth_md_lines:
-            depth_section = "\n".join(depth_md_lines)
-            with open(report_path, "a", encoding="utf-8") as fh:
-                fh.write("\n" + depth_section + "\n")
-            print(depth_section)
+        vision_md_lines = _build_vision_extraction_report(report.db_path)
+        if vision_md_lines:
+            print("\n".join(vision_md_lines))
 
 
     # Exit with appropriate code
