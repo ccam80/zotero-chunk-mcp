@@ -93,9 +93,6 @@ CREATE TABLE IF NOT EXISTS vision_run_details (
     rows_json           TEXT,
     footnotes           TEXT,
     table_label         TEXT,
-    retry_attempted     BOOLEAN DEFAULT 0,
-    retry_parse_success BOOLEAN,
-    initial_raw_response TEXT,
     fullpage_attempted  BOOLEAN DEFAULT 0,
     fullpage_parse_success BOOLEAN
 );
@@ -208,16 +205,14 @@ def write_vision_run_detail(
     """
     crop_bbox = details_dict.get("crop_bbox")
     recrop_bbox_pct = details_dict.get("recrop_bbox_pct")
-    retry_ps = details_dict.get("retry_parse_success")
     fullpage_ps = details_dict.get("fullpage_parse_success")
     con.execute(
         "INSERT OR REPLACE INTO vision_run_details "
         "(table_id, text_layer_caption, vision_caption, page_num, crop_bbox_json, "
         "recropped, recrop_bbox_pct_json, parse_success, is_incomplete, "
         "incomplete_reason, recrop_needed, raw_response, headers_json, rows_json, "
-        "footnotes, table_label, retry_attempted, retry_parse_success, "
-        "initial_raw_response, fullpage_attempted, fullpage_parse_success) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "footnotes, table_label, fullpage_attempted, fullpage_parse_success) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             table_id,
             details_dict.get("text_layer_caption"),
@@ -235,9 +230,6 @@ def write_vision_run_detail(
             json.dumps(details_dict.get("rows", [])),
             details_dict.get("footnotes"),
             details_dict.get("table_label"),
-            int(bool(details_dict.get("retry_attempted", False))),
-            int(retry_ps) if retry_ps is not None else None,
-            details_dict.get("initial_raw_response"),
             int(bool(details_dict.get("fullpage_attempted", False))),
             int(fullpage_ps) if fullpage_ps is not None else None,
         ),

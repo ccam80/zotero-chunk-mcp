@@ -84,10 +84,8 @@ class PaddleOCRVLEngine:
     ``extract_tables`` runs a full-document predict pass and returns all
     detected table blocks as ``RawPaddleTable`` instances.
     """
-    from paddleocr import PaddleOCRVL  # noqa: E402
-
-
     def __init__(self) -> None:
+        from paddleocr import PaddleOCRVL
         self._pipeline = PaddleOCRVL(pipeline_version="v1.5", device="gpu:0")
 
     def extract_tables(self, pdf_path: Path) -> list[RawPaddleTable]:

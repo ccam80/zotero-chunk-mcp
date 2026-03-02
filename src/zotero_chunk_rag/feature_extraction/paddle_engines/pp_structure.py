@@ -150,10 +150,41 @@ class PPStructureEngine:
     and parsing their HTML representations into structured ``RawPaddleTable``
     objects.
     """
-    from paddleocr import PPStructureV3  # noqa: E402
-
     def __init__(self) -> None:
-        self._pipeline = PPStructureV3(device="gpu", lang="en")
+        from paddleocr import PPStructureV3  # noqa: E402
+        from paddlex.inference.pipelines.layout_parsing.pipeline_v2 import (
+            _LayoutParsingPipelineV2,
+        )
+
+        # PaddleX bug: _LayoutParsingPipelineV2.inintial_predictor()
+        # unconditionally initialises the chart recognition model (a doc_vlm
+        # predictor) even when use_chart_recognition is False.  That predictor
+        # raises "Static graph models are not supported" on this platform.
+        # Work around: temporarily wrap create_model to swallow that error.
+        _orig = _LayoutParsingPipelineV2.inintial_predictor
+
+        def _safe_init(self_lp, config):
+            real_create = self_lp.create_model
+
+            def _guarded_create(model_config, **kw):
+                try:
+                    return real_create(model_config, **kw)
+                except RuntimeError as exc:
+                    if "Static graph" in str(exc):
+                        return None
+                    raise
+
+            self_lp.create_model = _guarded_create
+            try:
+                _orig(self_lp, config)
+            finally:
+                self_lp.create_model = real_create
+
+        _LayoutParsingPipelineV2.inintial_predictor = _safe_init
+        try:
+            self._pipeline = PPStructureV3(device="gpu", lang="en")
+        finally:
+            _LayoutParsingPipelineV2.inintial_predictor = _orig
 
     def extract_tables(self, pdf_path: Path) -> list[RawPaddleTable]:
         """Extract all tables from a PDF file.
@@ -169,27 +200,42 @@ class PPStructureEngine:
         tables: list[RawPaddleTable] = []
 
         for page_result in results:
-            page_num: int = page_result.get("page_num", 0)
-            page_width: int = page_result.get("page_width", 0)
-            page_height: int = page_result.get("page_height", 0)
-            page_size: tuple[int, int] = (page_width, page_height)
+            # PP-StructureV3 uses "page_index" (0-indexed), "width", "height"
+            page_index: int = page_result["page_index"]
+            page_num: int = page_index + 1  # convert to 1-indexed
+            img_width: int = page_result["width"]
+            img_height: int = page_result["height"]
+            page_size: tuple[int, int] = (img_width, img_height)
 
-            layout_regions = page_result.get("layout_result", {}).get("boxes", [])
+            # Table HTML lives in table_res_list (separate from layout boxes).
+            # Bounding boxes come from layout_det_res["boxes"] with label "table".
+            table_res_list = page_result["table_res_list"]
 
-            for region in layout_regions:
-                label: str = region.get("label", "").lower()
-                if label != "table":
-                    continue
+            layout_det_res = page_result["layout_det_res"]
+            layout_boxes = layout_det_res["boxes"]
+            table_boxes = [
+                box for box in layout_boxes
+                if box["label"].lower() == "table"
+            ]
 
-                bbox_raw = region.get("bbox", [0.0, 0.0, 0.0, 0.0])
-                bbox: tuple[float, float, float, float] = (
-                    float(bbox_raw[0]),
-                    float(bbox_raw[1]),
-                    float(bbox_raw[2]),
-                    float(bbox_raw[3]),
+            for i, table_res in enumerate(table_res_list):
+                # Match bbox from layout detection by index
+                if i < len(table_boxes):
+                    coord = table_boxes[i]["coordinate"]
+                    bbox: tuple[float, float, float, float] = (
+                        float(coord[0]),
+                        float(coord[1]),
+                        float(coord[2]),
+                        float(coord[3]),
+                    )
+                else:
+                    bbox = (0.0, 0.0, 0.0, 0.0)
+
+                # pred_html is a list of HTML tokens; join into a string
+                html_raw = table_res["pred_html"]
+                html: str = (
+                    "".join(html_raw) if isinstance(html_raw, list) else str(html_raw)
                 )
-
-                html: str = region.get("table_result", {}).get("html", "")
 
                 headers, rows, footnotes = _parse_html_table(html)
 

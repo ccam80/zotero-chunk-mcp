@@ -1,7 +1,7 @@
 {
   "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"cd \\\"C:\\\\local_working_projects\\\\zotero_citation_mcp\\\" && \\\"./.venv/Scripts/python.exe\\\" -c \\\"\\nimport sys; sys.stdout.reconfigure(encoding='utf-8')\\n\\nimport pymupdf.layout  # MUST be bef...",
-  "error": "Exit code 1\nTraceback (most recent call last):\r\n  File \"<string>\", line 14, in <module>\r\nKeyError: 'page'\r\n=== With pymupdf.layout imported first ===\r\n\nTraceback (most recent call last):\r\n  File \"<string>\", line 14, in <module>\r\nKeyError: 'page'\r\n=== With pymupdf.layout imported first ===",
-  "timestamp": "2026-03-01T23:24:54.374Z",
+  "tool_input_preview": "{\"command\":\"cd \\\"C:\\\\local_working_projects\\\\zotero_citation_mcp\\\" && \\\"./.venv/Scripts/python.exe\\\" -c \\\"\\nimport os\\nos.environ['PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK'] = 'True'\\n\\n# Find get_table_...",
+  "error": "Exit code 1\n\u001b[33mConnectivity check to the model hoster has been skipped because `PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK` is enabled.\u001b[0m\r\nTraceback (most recent call last):\r\n  File \"<string>\", line 6, in <module>\r\nImportError: cannot import name 'get_table_recognition_res' from 'paddlex.inference.pipelines.table_recognition.utils' (C:\\local_working_projects\\zotero_citation_mcp\\.venv\\Lib\\site-packages\\paddlex\\inference\\pipelines\\table_recognition\\utils.py)\r\n\n\u001b[33mConnectivity check to the model h...",
+  "timestamp": "2026-03-02T09:24:24.030Z",
   "retry_count": 1
 }

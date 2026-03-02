@@ -433,7 +433,7 @@ def resolve_pending_vision(
     Call this after extracting all documents with ``extract_document(...,
     vision_api=api)`` so that every table across every paper is submitted in
     one Anthropic Batch API request (plus one re-crop batch if needed, plus
-    one retry batch for any JSON parse failures).
+    one full-page resend batch for incomplete/unparsable/empty responses).
 
     Args:
         extractions: Mapping of doc_key -> DocumentExtraction with
@@ -476,9 +476,13 @@ def resolve_pending_vision(
     for (doc_key, _local_idx), resp in zip(mapping, all_responses):
         per_doc_responses[doc_key].append(resp)
 
-    # --- Collect re-crop specs across all documents ---
-    recrop_all_specs: list[TableVisionSpec] = []
-    recrop_mapping: list[tuple[str, int]] = []  # (doc_key, local_index)
+    # --- Batch 2: recrop + full-page combined ---
+    # After batch 1, two disjoint sets need a second attempt:
+    #   Recrops:   model parsed OK but requests a tighter crop
+    #   Full-page: parse failure, incomplete w/o recrop coords, or parsed-but-empty
+    # These are disjoint (recrop requires parse_success=True) so they share one batch.
+    b2_specs: list[TableVisionSpec] = []
+    b2_mapping: list[tuple[str, int, str]] = []  # (doc_key, local_index, "recrop"|"fullpage")
 
     for doc_key, ext in extractions.items():
         pending = ext.pending_vision  # type: ignore[assignment]
@@ -488,147 +492,102 @@ def resolve_pending_vision(
         if not responses:
             continue
 
-        needs_recrop = [
-            (i, resp)
-            for i, resp in enumerate(responses)
-            if resp.recrop_needed and resp.recrop_bbox_pct is not None
-        ]
-        if not needs_recrop:
-            continue
-
         doc = pymupdf.open(str(pending.pdf_path))
         try:
-            for local_idx, resp in needs_recrop:
+            for local_idx, resp in enumerate(responses):
                 crop_info = pending.crop_infos[local_idx]
-                new_bbox = compute_recrop_bbox(
-                    crop_info.crop_bbox, resp.recrop_bbox_pct,
-                )
                 page = doc[crop_info.page_num - 1]
-                new_raw_text = page.get_text(
-                    "text", clip=pymupdf.Rect(new_bbox),
-                )
-                recrop_all_specs.append(TableVisionSpec(
-                    table_id=f"{doc_key}__recrop_p{crop_info.page_num}_t{local_idx}",
-                    pdf_path=pending.pdf_path,
-                    page_num=crop_info.page_num,
-                    bbox=new_bbox,
-                    raw_text=new_raw_text,
-                    caption=crop_info.caption_text,
-                    garbled=False,
-                ))
-                recrop_mapping.append((doc_key, local_idx))
+
+                # Recrop: parsed OK, model says crop needs adjustment
+                if resp.recrop_needed and resp.recrop_bbox_pct is not None:
+                    new_bbox = compute_recrop_bbox(
+                        crop_info.crop_bbox, resp.recrop_bbox_pct,
+                    )
+                    new_raw_text = page.get_text(
+                        "text", clip=pymupdf.Rect(new_bbox),
+                    )
+                    b2_specs.append(TableVisionSpec(
+                        table_id=f"{doc_key}__recrop_p{crop_info.page_num}_t{local_idx}",
+                        pdf_path=pending.pdf_path,
+                        page_num=crop_info.page_num,
+                        bbox=new_bbox,
+                        raw_text=new_raw_text,
+                        caption=crop_info.caption_text,
+                        garbled=False,
+                    ))
+                    b2_mapping.append((doc_key, local_idx, "recrop"))
+                    continue
+
+                # Full-page triggers (disjoint from recrop):
+                needs_fullpage = False
+                if resp.is_incomplete and not resp.recrop_needed:
+                    needs_fullpage = True
+                elif resp.parse_success and not resp.headers and not resp.rows:
+                    needs_fullpage = True
+                elif not resp.parse_success:
+                    needs_fullpage = True
+
+                if needs_fullpage:
+                    full_rect = page.rect
+                    full_bbox = (full_rect.x0, full_rect.y0, full_rect.x1, full_rect.y1)
+                    raw_text = page.get_text("text")
+                    b2_specs.append(TableVisionSpec(
+                        table_id=f"{doc_key}__fullpage_p{crop_info.page_num}_t{local_idx}",
+                        pdf_path=pending.pdf_path,
+                        page_num=crop_info.page_num,
+                        bbox=full_bbox,
+                        raw_text=raw_text,
+                        caption=crop_info.caption_text,
+                        garbled=False,
+                    ))
+                    b2_mapping.append((doc_key, local_idx, "fullpage"))
         finally:
             doc.close()
 
-    # --- Second batch for all re-crops ---
     per_doc_recrop: dict[str, dict[int, object]] = defaultdict(dict)
-    if recrop_all_specs:
-        logger.info("Vision re-crop batch: %d tables", len(recrop_all_specs))
-        recrop_responses = vision_api.extract_tables_batch(recrop_all_specs)
-        for (doc_key, local_idx), resp in zip(recrop_mapping, recrop_responses):
-            per_doc_recrop[doc_key][local_idx] = resp
-
-    # --- Collect initial parse-failure specs for retry batch ---
-    retry_all_specs: list[TableVisionSpec] = []
-    retry_mapping: list[tuple[str, int]] = []  # (doc_key, local_index)
-    parse_failure_raws: dict[str, dict[int, str]] = defaultdict(dict)
-
-    for doc_key, ext in extractions.items():
-        pending = ext.pending_vision  # type: ignore[assignment]
-        if pending is None or not pending.specs:
-            continue
-        responses = per_doc_responses.get(doc_key, [])
-        if not responses:
-            continue
-
-        for local_idx, resp in enumerate(responses):
-            if resp.parse_success:
-                continue
-            # Initial response failed to parse — queue for retry
-            spec = pending.specs[local_idx]
-            parse_failure_raws[doc_key][local_idx] = resp.raw_response
-            retry_all_specs.append(TableVisionSpec(
-                table_id=f"{spec.table_id}__retry",
-                pdf_path=spec.pdf_path,
-                page_num=spec.page_num,
-                bbox=spec.bbox,
-                raw_text=spec.raw_text,
-                caption=spec.caption,
-                garbled=spec.garbled,
-            ))
-            retry_mapping.append((doc_key, local_idx))
-
-    # --- Third batch for parse-failure retries ---
-    per_doc_retry: dict[str, dict[int, object]] = defaultdict(dict)
-    if retry_all_specs:
+    per_doc_fullpage: dict[str, dict[int, object]] = defaultdict(dict)
+    if b2_specs:
+        n_recrop = sum(1 for _, _, k in b2_mapping if k == "recrop")
+        n_fullpage = len(b2_specs) - n_recrop
         logger.info(
-            "Vision retry batch: %d tables with parse failures",
-            len(retry_all_specs),
+            "Vision batch 2: %d tables (%d recrop + %d full-page)",
+            len(b2_specs), n_recrop, n_fullpage,
         )
-        retry_batch_responses = vision_api.extract_tables_batch(retry_all_specs)
-        n_recovered = 0
-        for (doc_key, local_idx), resp in zip(retry_mapping, retry_batch_responses):
-            per_doc_retry[doc_key][local_idx] = resp
-            if resp.parse_success:
-                n_recovered += 1
-        logger.info(
-            "Vision retry recovered %d / %d parse failures",
-            n_recovered, len(retry_all_specs),
-        )
+        b2_responses = vision_api.extract_tables_batch(b2_specs)
+        for (doc_key, local_idx, kind), resp in zip(b2_mapping, b2_responses):
+            if kind == "recrop":
+                per_doc_recrop[doc_key][local_idx] = resp
+            else:
+                per_doc_fullpage[doc_key][local_idx] = resp
 
-    # --- Fourth batch: full-page retry for degenerate tables ---
-    fullpage_all_specs: list[TableVisionSpec] = []
-    fullpage_mapping: list[tuple[str, int]] = []  # (doc_key, local_index)
+    # --- Batch 3: failed-recrop follow-up (rare) ---
+    # If any recrop came back broken (still incomplete, parse failure, or empty),
+    # fall back to full-page for those tables only.
+    b3_specs: list[TableVisionSpec] = []
+    b3_mapping: list[tuple[str, int]] = []
 
-    for doc_key, ext in extractions.items():
-        pending = ext.pending_vision  # type: ignore[assignment]
-        if pending is None or not pending.specs:
+    for doc_key, recrop_dict in per_doc_recrop.items():
+        pending = extractions[doc_key].pending_vision  # type: ignore[assignment]
+        if pending is None:
             continue
-        responses = per_doc_responses.get(doc_key, [])
-        if not responses:
-            continue
-
-        recrop_for_doc = per_doc_recrop.get(doc_key, {})
-        retry_for_doc = per_doc_retry.get(doc_key, {})
-        needs_fullpage: list[int] = []
-
-        for local_idx, orig_resp in enumerate(responses):
-            # Determine the effective response after recrop/retry overrides
-            eff_resp = orig_resp
-            if local_idx in recrop_for_doc:
-                rc = recrop_for_doc[local_idx]
-                if not rc.is_incomplete and rc.parse_success:
-                    eff_resp = rc
-            if local_idx in retry_for_doc:
-                rt = retry_for_doc[local_idx]
-                if rt.parse_success:
-                    eff_resp = rt
-
-            # Trigger 1: incomplete but no recrop coordinates
-            if eff_resp.is_incomplete and not orig_resp.recrop_needed:
-                needs_fullpage.append(local_idx)
+        need_followup: list[tuple[int, object]] = []
+        for local_idx, rc_resp in recrop_dict.items():
+            if rc_resp.parse_success and not rc_resp.is_incomplete and (rc_resp.headers or rc_resp.rows):
                 continue
-            # Trigger 2: parsed successfully but empty (degenerate crop)
-            if eff_resp.parse_success and not eff_resp.headers and not eff_resp.rows:
-                needs_fullpage.append(local_idx)
-                continue
-            # Trigger 3: double parse failure (initial + retry both failed)
-            if not eff_resp.parse_success:
-                needs_fullpage.append(local_idx)
-                continue
+            need_followup.append((local_idx, rc_resp))
 
-        if not needs_fullpage:
+        if not need_followup:
             continue
 
         doc = pymupdf.open(str(pending.pdf_path))
         try:
-            for local_idx in needs_fullpage:
+            for local_idx, _rc_resp in need_followup:
                 crop_info = pending.crop_infos[local_idx]
                 page = doc[crop_info.page_num - 1]
                 full_rect = page.rect
                 full_bbox = (full_rect.x0, full_rect.y0, full_rect.x1, full_rect.y1)
                 raw_text = page.get_text("text")
-                fullpage_all_specs.append(TableVisionSpec(
+                b3_specs.append(TableVisionSpec(
                     table_id=f"{doc_key}__fullpage_p{crop_info.page_num}_t{local_idx}",
                     pdf_path=pending.pdf_path,
                     page_num=crop_info.page_num,
@@ -637,24 +596,23 @@ def resolve_pending_vision(
                     caption=crop_info.caption_text,
                     garbled=False,
                 ))
-                fullpage_mapping.append((doc_key, local_idx))
+                b3_mapping.append((doc_key, local_idx))
         finally:
             doc.close()
 
-    per_doc_fullpage: dict[str, dict[int, object]] = defaultdict(dict)
-    if fullpage_all_specs:
+    if b3_specs:
         logger.info(
-            "Vision full-page retry batch: %d tables", len(fullpage_all_specs),
+            "Vision batch 3 (failed-recrop follow-up): %d tables", len(b3_specs),
         )
-        fullpage_batch_responses = vision_api.extract_tables_batch(fullpage_all_specs)
+        b3_responses = vision_api.extract_tables_batch(b3_specs)
         n_recovered = 0
-        for (doc_key, local_idx), resp in zip(fullpage_mapping, fullpage_batch_responses):
+        for (doc_key, local_idx), resp in zip(b3_mapping, b3_responses):
             per_doc_fullpage[doc_key][local_idx] = resp
             if resp.parse_success and (resp.headers or resp.rows):
                 n_recovered += 1
         logger.info(
-            "Vision full-page retry recovered %d / %d degenerate tables",
-            n_recovered, len(fullpage_all_specs),
+            "Vision batch 3 recovered %d / %d failed recrops",
+            n_recovered, len(b3_specs),
         )
 
     # --- Build tables and finalize each document ---
@@ -668,14 +626,9 @@ def resolve_pending_vision(
 
         responses = per_doc_responses.get(doc_key, [])
         recrop_for_doc = per_doc_recrop.get(doc_key, {})
-
-        retry_for_doc = per_doc_retry.get(doc_key, {})
-        failures_for_doc = parse_failure_raws.get(doc_key, {})
         fullpage_for_doc = per_doc_fullpage.get(doc_key, {})
         tables, vision_details = _build_tables_from_responses(
             responses, pending.crop_infos, recrop_for_doc,
-            retry_responses=retry_for_doc,
-            initial_failure_raws=failures_for_doc,
             fullpage_responses=fullpage_for_doc,
         )
 
@@ -751,35 +704,25 @@ def _build_tables_from_responses(
     responses: list,
     crop_infos: list[_CropInfo],
     recrop_responses: dict[int, object],
-    retry_responses: dict[int, object] | None = None,
-    initial_failure_raws: dict[int, str] | None = None,
     fullpage_responses: dict[int, object] | None = None,
 ) -> tuple[list[ExtractedTable], list[dict]]:
     """Convert vision API responses into ExtractedTable objects and detail dicts.
 
     Args:
-        retry_responses: Retry batch results keyed by local index. Populated
-            when the initial response had ``parse_success=False`` and was
-            resubmitted.
-        initial_failure_raws: Raw response text from the initial parse failure,
-            keyed by local index. Stored in ``initial_raw_response`` for
-            debugging.
+        recrop_responses: Re-crop batch results keyed by local index.
         fullpage_responses: Full-page retry results keyed by local index.
             Populated when the effective response was degenerate (empty,
-            incomplete without recrop coords, or double parse failure).
+            incomplete without recrop coords, or parse failure).
     """
     tables: list[ExtractedTable] = []
     vision_details: list[dict] = []
     table_idx_per_page: dict[int, int] = {}
-    _retry = retry_responses or {}
-    _failure_raws = initial_failure_raws or {}
     _fullpage = fullpage_responses or {}
 
     for i, (orig_resp, crop_info) in enumerate(zip(responses, crop_infos)):
-        resp = orig_resp  # may be overridden by recrop, retry, or fullpage
+        resp = orig_resp  # may be overridden by recrop or fullpage
         recropped = False
         recrop_bbox_pct_used: list[float] | None = None
-        retried = i in _retry
         fullpage_attempted = i in _fullpage
 
         if i in recrop_responses:
@@ -791,13 +734,7 @@ def _build_tables_from_responses(
                 resp = recrop_resp
                 recropped = True
 
-        # Retry override: applied after recrop, only for initial parse failures
-        if retried:
-            retry_resp = _retry[i]
-            if retry_resp.parse_success:
-                resp = retry_resp
-
-        # Full-page override: applied last, only if the result has content
+        # Full-page override: applied after recrop, only if the result has content
         fullpage_parse_success: bool | None = None
         if fullpage_attempted:
             fp_resp = _fullpage[i]
@@ -821,9 +758,6 @@ def _build_tables_from_responses(
             "rows": resp.rows,
             "footnotes": resp.footnotes,
             "table_label": resp.table_label,
-            "retry_attempted": retried,
-            "retry_parse_success": _retry[i].parse_success if retried else None,
-            "initial_raw_response": _failure_raws.get(i),
             "fullpage_attempted": fullpage_attempted,
             "fullpage_parse_success": fullpage_parse_success,
         }

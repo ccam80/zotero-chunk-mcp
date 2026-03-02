@@ -170,7 +170,7 @@ class VisionAPI:
         self,
         batch_id: str,
         expected_count: int,
-        poll_interval: float = 5.0,
+        poll_interval: float = 30.0,
     ) -> dict[str, str]:
         """Poll a batch until done, return {custom_id: response_text}."""
         while True:
@@ -179,7 +179,6 @@ class VisionAPI:
             if status.processing_status == "ended":
                 break
             logger.debug("Batch %s status: %s", batch_id, status.processing_status)
-            poll_interval = min(poll_interval * 1.5, 30.0)
 
         results: dict[str, str] = {}
         for result in self._client.messages.batches.results(batch_id):
@@ -231,13 +230,12 @@ class VisionAPI:
     def _submit_and_poll(
         self,
         requests: list[dict],
-        poll_interval: float = 5.0,
     ) -> dict[str, str]:
         """Submit a batch, poll until done, return {custom_id: response_text}."""
         if not requests:
             return {}
         batch_id = self._create_batch(requests)
-        return self._poll_batch(batch_id, len(requests), poll_interval)
+        return self._poll_batch(batch_id, len(requests))
 
     # ------------------------------------------------------------------
     # Table rendering
