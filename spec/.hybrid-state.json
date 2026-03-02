@@ -1,7 +1,7 @@
 {
-  "phase": "B1-B2",
-  "wave": "W2",
-  "completed_waves": ["W1", "W2"],
+  "phase": "B4",
+  "wave": "W3",
+  "completed_waves": ["B1-B2:W1", "B1-B2:W2", "B3:W1", "B4:W1", "B4:W2", "B4:W3"],
   "status": "complete",
-  "last_updated": "2026-03-02T10:15:00Z"
+  "last_updated": "2026-03-02T10:45:00Z"
 }

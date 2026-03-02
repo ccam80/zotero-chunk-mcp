@@ -24,11 +24,11 @@ _CAPTION_NUM_RE = re.compile(r"(\d+|[A-Z]\.\d+|S\d+)")
 # Relaxed caption patterns for gap search (not block-start anchored)
 _NUM_GROUP = r"(\d+|[IVXLCDM]+|[A-Z]\.\d+|S\d+)"
 _FIG_REF_RE = re.compile(
-    rf"(?:Figure|Fig\.?)\s+{_NUM_GROUP}\s*[.:()\u2014\u2013-]",
+    rf"(?:Figure|Fig\.?)\s+{_NUM_GROUP}\s*[.:(\u2014\u2013-]",
     re.IGNORECASE,
 )
 _TABLE_REF_RE = re.compile(
-    rf"(?:Table|Tab\.)\s+{_NUM_GROUP}\s*[.:()\u2014\u2013-]",
+    rf"(?:Table|Tab\.)\s+{_NUM_GROUP}\s*[.:(\u2014\u2013-]",
     re.IGNORECASE,
 )
 

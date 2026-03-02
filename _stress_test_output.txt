@@ -1,0 +1,46 @@
+======================================================================
+  STRESS TEST: zotero-chunk-rag
+  Real papers, real searches, real expectations
+======================================================================
+Test directory: C:\Users\cca79\AppData\Local\Temp\stress_test_q3nbpqy2
+Figures directory: C:\local_working_projects\zotero_citation_mcp\_stress_test_figures
+======================================================================
+
+[PHASE 1] Loading papers from Zotero library...
+  [active-inference-tutorial] A step-by-step tutorial on active inference and its applicat — Smith et al. - 2022 - A step-by-step tutorial on active inference and it.pdf
+  [huang-emd-1998] The empirical mode decomposition and the Hilbert spectrum fo — Huang et al. - 1998 - The empirical mode decomposition and the Hilbert s.pdf
+  [hallett-tms-primer] Transcranial Magnetic Stimulation: A Primer — Hallett - 2007 - Transcranial Magnetic Stimulation A Primer.pdf
+  [laird-fick-polyps] Colonic polyp histopathology and location in a community-bas — Laird-Fick et al. - 2016 - Colonic polyp histopathology and location in a com.pdf
+  [helm-coregulation] Coregulation of respiratory sinus arrhythmia in adult romant — Helm et al. - 2014 - Coregulation of respiratory sinus arrhythmia in ad.pdf
+  [roland-emg-filter] Ultra-Low-Power Digital Filtering for Insulated EMG Sensing — Roland et al. - 2019 - Ultra-Low-Power Digital Filtering for Insulated EM.pdf
+  [friston-life] Life as we know it — Friston - 2013 - Life as we know it.pdf
+  [yang-ppv-meta] Does pulse pressure variation predict fluid responsiveness i — Yang and Du - 2014 - Does pulse pressure variation predict fluid respon.pdf
+  [fortune-impedance] Electrode–skin impedance imbalance measured in the frequency — Fortune et al. - 2021 - Electrode–skin impedance imbalance measured in the.pdf
+  [reyes-lf-hrv] The utility of low frequency heart rate variability as an in — Reyes del Paso et al. - 2013 - The utility of low frequency heart rate variabilit.pdf
+  [osterrieder-ach-kinetics-1980] On the kinetics of the potassium channel activated by acetyl — Osterrieder et al. - 1980 - On the kinetics of the potassium channel activated by acetylcholine in the S-A node of the rabbit he.pdf
+  [linssen-emg-fatigue-1993] Variability and interrelationships of surface EMG parameters — Linssen et al. - 1993 - Variability and interrelationships of surface EMG .pdf
+  [berntson-hrv-origins-1997] Heart rate variability: Origins, methods, and interpretive c — Berntson et al. - 1997 - Heart rate variability Origins, methods, and inte.pdf
+  [ats-ers-respiratory-muscle-2002] ATS/ERS Statement on Respiratory Muscle Testing — 2002 - ATSERS Statement on Respiratory Muscle Testing.pdf
+  [schroeder-hrv-repeatability-2004] Repeatability of heart rate variability measures — Schroeder et al. - 2004 - Repeatability of heart rate variability measures.pdf
+  [raez-emg-techniques-2006] Techniques of EMG signal analysis: detection, processing, cl — Raez et al. - 2006 - Techniques of EMG signal analysis detection, proc.pdf
+  [daly-hodgkin-huxley-bayesian-2015] Hodgkin–Huxley revisited: reparametrization and identifiabil — Daly et al. - 2015 - Hodgkin–Huxley revisited reparametrization and identifiability analysis of the classic action poten.pdf
+  [shaffer-hrv-norms-2017] An Overview of Heart Rate Variability Metrics and Norms — Shaffer and Ginsberg - 2017 - An Overview of Heart Rate Variability Metrics and .pdf
+  [charlton-wearable-ppg-2022] Wearable Photoplethysmography for Cardiovascular Monitoring — Charlton et al. - 2022 - Wearable Photoplethysmography for Cardiovascular Monitoring.pdf
+  [flett-wearable-hr-accuracy-2025] Assessing the Accuracy of a Wrist-Worn Wearable Device’s Hea — Flett et al. - 2025 - Assessing the Accuracy of a Wrist-Worn Wearable Device’s Heart Rate Measurment Over Changing Levels.pdf
+
+[PHASE 2] Extracting and indexing 20 papers...
+  Vision API enabled (model: claude-haiku-4-5-20251001)
+
+  Extracting [active-inference-tutorial]... 47.0s | 60pp | 17fig | 7 table specs pending
+
+  Extracting [huang-emd-1998]... 37.8s | 96pp | 85fig | 0 table specs pending
+
+  Extracting [hallett-tms-primer]... 7.9s | 13pp | 8fig | 1 table specs pending
+
+  Extracting [laird-fick-polyps]... 7.2s | 7pp | 3fig | 5 table specs pending
+
+  Extracting [helm-coregulation]... 7.7s | 10pp | 2fig | 2 table specs pending
+
+  Extracting [roland-emg-filter]... 36.5s | 24pp | 17fig | 7 table specs pending
+
+  Extracting [friston-life]... 

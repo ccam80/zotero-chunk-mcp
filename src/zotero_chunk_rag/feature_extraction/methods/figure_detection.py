@@ -20,10 +20,65 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_MIN_FIGURE_AREA = 15000  # ~120x125 pts; filters logos/icons
 _MERGE_GAP_PTS = 50  # merge boxes within 50 pts (bridges multi-panel figure gaps)
 _DEFAULT_DPI = 150
 _CAPTION_NUM_RE = re.compile(r"(\d+)")
+
+
+def _min_figure_area(page_rect: pymupdf.Rect) -> float:
+    """Adaptive minimum figure area derived from page dimensions.
+
+    A figure must be large enough to convey meaningful visual information.
+    Threshold is 1/200th of the page area — for US Letter (612x792) this
+    yields ~2,424 sq pts (~49x49 pts), scaling naturally with page size.
+    """
+    return page_rect.get_area() / 200
+
+
+# ---------------------------------------------------------------------------
+# Vector graphics detection
+# ---------------------------------------------------------------------------
+
+
+def _detect_vector_figures(
+    page: pymupdf.Page,
+    page_rect: pymupdf.Rect,
+) -> list[pymupdf.Rect]:
+    """Detect figure regions from clustered vector graphics.
+
+    Uses ``page.cluster_drawings()`` — PyMuPDF's native spatial clustering
+    of drawing paths.  Filters out clusters that are too small to be figures
+    or that span the full page (backgrounds / watermarks).
+
+    This is a fallback for pages where the layout engine and
+    ``get_image_info()`` found nothing but captions indicate figures exist.
+    """
+    try:
+        clusters = page.cluster_drawings()
+    except Exception:
+        return []
+
+    if not clusters:
+        return []
+
+    page_area = page_rect.get_area()
+    min_area = _min_figure_area(page_rect)
+    result: list[pymupdf.Rect] = []
+
+    for c in clusters:
+        r = pymupdf.Rect(c)
+        if r.is_empty or r.is_infinite:
+            continue
+        if r.get_area() < min_area:
+            continue
+        if r.get_area() > page_area * 0.9:
+            continue
+        r = r & page_rect
+        if r.is_empty:
+            continue
+        result.append(r)
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -311,18 +366,19 @@ def detect_figures(
         caption_text is None if no caption matched.
     """
     page_rect = page.rect
+    min_area = _min_figure_area(page_rect)
 
     # Step 1: Collect picture and table boxes from page_chunk
     picture_rects: list[pymupdf.Rect] = []
     table_rects: list[pymupdf.Rect] = []
 
-    for box in page_chunk.get("page_boxes", []):
+    for box in (page_chunk.get("page_boxes") or []):
         bbox = box.get("bbox")
         if not bbox or len(bbox) != 4:
             continue
         x0, y0, x1, y1 = bbox
         area = abs(x1 - x0) * abs(y1 - y0)
-        if area < _MIN_FIGURE_AREA:
+        if area < min_area:
             continue
         rect = pymupdf.Rect(x0, y0, x1, y1)
         rect = rect & page_rect
@@ -344,11 +400,20 @@ def detect_figures(
                 continue
             rect = pymupdf.Rect(bbox)
             area = rect.get_area()
-            if area < _MIN_FIGURE_AREA:
+            if area < min_area:
                 continue
             if area > page_rect.get_area() * 0.9:
                 continue
             rects.append(rect)
+
+    # Step 3b: Vector graphics fallback — drawings-based detection
+    if not rects and captions:
+        rects = _detect_vector_figures(page, page_rect)
+        if rects:
+            logger.debug(
+                "Vector graphics fallback: %d region(s) from drawings on p%d",
+                len(rects), page.number + 1,
+            )
 
     if not rects:
         return []

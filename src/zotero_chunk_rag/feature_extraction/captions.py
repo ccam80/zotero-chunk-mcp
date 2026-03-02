@@ -21,7 +21,7 @@ _NUM_GROUP = r"(\d+|[IVXLCDM]+|[A-Z]\.\d+|S\d+)"
 # ---------------------------------------------------------------------------
 
 _FIG_CAPTION_RE = re.compile(
-    rf"^(?:Figure|Fig\.?)\s+{_NUM_GROUP}\s*[.:()\u2014\u2013-]",
+    rf"^(?:Figure|Fig\.?)\s+{_NUM_GROUP}\s*[.:(\u2014\u2013-]",
     re.IGNORECASE,
 )
 
@@ -40,7 +40,7 @@ _FIG_LABEL_ONLY_RE = re.compile(
 # ---------------------------------------------------------------------------
 
 _TABLE_CAPTION_RE = re.compile(
-    rf"^(?:\*\*)?(?:Table|Tab\.)\s+{_NUM_GROUP}\s*[.:()\u2014\u2013-]",
+    rf"^(?:\*\*)?(?:Table|Tab\.)\s+{_NUM_GROUP}\s*[.:(\u2014\u2013-]",
     re.IGNORECASE,
 )
 

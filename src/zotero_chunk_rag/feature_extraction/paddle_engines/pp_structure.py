@@ -11,7 +11,6 @@ from pathlib import Path
 
 os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
 
-from paddleocr import PPStructureV3  # noqa: E402
 
 from ..paddle_extract import RawPaddleTable
 
@@ -151,6 +150,7 @@ class PPStructureEngine:
     and parsing their HTML representations into structured ``RawPaddleTable``
     objects.
     """
+    from paddleocr import PPStructureV3  # noqa: E402
 
     def __init__(self) -> None:
         self._pipeline = PPStructureV3(device="gpu", lang="en")
