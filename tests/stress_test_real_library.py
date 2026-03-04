@@ -600,7 +600,8 @@ def run_stress_test():
 
     report = StressTestReport()
     extractions: dict[str, tuple] = {}
-    paddle_results: dict[str, list[MatchedPaddleTable]] = {}
+    # {engine_name: {item_key: [MatchedPaddleTable]}}
+    paddle_results: dict[str, dict[str, list[MatchedPaddleTable]]] = {}
 
     # Temp dir for ephemeral data (chroma index, OCR scratch).
     # Figures go to a persistent directory alongside the report/audit.
@@ -727,18 +728,22 @@ def run_stress_test():
             doc_data[item.item_key] = (extraction, item, short_name, gt, t_extract)
 
         # --- Phase 2b: Start PaddleOCR extraction in background thread ---
+        # Both engines run sequentially in one thread (both are GPU-bound).
+        PADDLE_ENGINES = ["pp_structure_v3", "paddleocr_vl_1.5"]
         paddle_exception: list[BaseException] = []
 
         def _paddle_worker() -> None:
             try:
-                result = _extract_with_paddle(corpus_items)
-                paddle_results.update(result)
+                for engine_name in PADDLE_ENGINES:
+                    print(f"\n  PaddleOCR: running {engine_name}...")
+                    result = _extract_with_paddle(corpus_items, engine_name=engine_name)
+                    paddle_results[engine_name] = result
             except BaseException as exc:
                 paddle_exception.append(exc)
 
         paddle_thread = threading.Thread(target=_paddle_worker, daemon=True)
         paddle_thread.start()
-        print("\n  PaddleOCR extraction thread started.")
+        print("\n  PaddleOCR extraction thread started (both engines).")
 
         # --- Phase 2c: Resolve vision batch (one API call for ALL papers) ---
         if vision_api:
@@ -764,9 +769,15 @@ def run_stress_test():
             raise RuntimeError(
                 "PaddleOCR extraction thread failed"
             ) from paddle_exception[0]
+        total_paddle = sum(
+            len(tables)
+            for engine_res in paddle_results.values()
+            for tables in engine_res.values()
+        )
+        engines_done = list(paddle_results.keys())
         print(f"  PaddleOCR extraction complete: "
-              f"{sum(len(v) for v in paddle_results.values())} tables across "
-              f"{len(paddle_results)} papers.")
+              f"{total_paddle} tables across "
+              f"{len(engines_done)} engines: {engines_done}")
 
         # --- Phase 2e: Index each document (chunk, store, report) ---
         from zotero_chunk_rag._reference_matcher import match_references, get_reference_context
@@ -2325,14 +2336,18 @@ if __name__ == "__main__":
         print(f"  Tables: run_metadata, papers, sections, pages, extracted_tables, extracted_figures, chunks, test_results")
         report.db_path = db_path
 
-        # Phase 4 (paddle): compare against GT and record results
+        # Phase 4 (paddle): compare against GT and record results for each engine
         if paddle_results:
             print("\n[PHASE 4 - Paddle] Running paddle GT comparisons...")
-            paddle_test_results = _test_paddle_extraction(paddle_results, db_path)
-            for tr in paddle_test_results:
-                report.results.append(tr)
-            paddle_passed = sum(1 for t in paddle_test_results if t.passed)
-            print(f"  Paddle assertions: {paddle_passed}/{len(paddle_test_results)} passed")
+            for engine_name, engine_res in paddle_results.items():
+                print(f"  Engine: {engine_name}...")
+                paddle_test_results = _test_paddle_extraction(
+                    engine_res, db_path, engine_name=engine_name,
+                )
+                for tr in paddle_test_results:
+                    report.results.append(tr)
+                paddle_passed = sum(1 for t in paddle_test_results if t.passed)
+                print(f"    {engine_name}: {paddle_passed}/{len(paddle_test_results)} assertions passed")
 
     # Render report (includes GT + vision sections when db_path is set)
     md = report.to_markdown()

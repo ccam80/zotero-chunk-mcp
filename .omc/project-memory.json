@@ -125,15 +125,33 @@
   },
   "hotPaths": [
     {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\paddle_engines\\paddleocr_vl.py",
+      "accessCount": 35,
+      "lastAccessed": 1772510159792,
+      "type": "file"
+    },
+    {
       "path": "tests\\stress_test_real_library.py",
-      "accessCount": 13,
-      "lastAccessed": 1772431385222,
+      "accessCount": 34,
+      "lastAccessed": 1772509222740,
       "type": "directory"
     },
     {
+      "path": "tools\\debug_viewer.py",
+      "accessCount": 33,
+      "lastAccessed": 1772499447282,
+      "type": "file"
+    },
+    {
       "path": "tools\\engine_compare.py",
-      "accessCount": 13,
-      "lastAccessed": 1772483845480,
+      "accessCount": 21,
+      "lastAccessed": 1772509223612,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\paddle_engines\\pp_structure.py",
+      "accessCount": 14,
+      "lastAccessed": 1772498971903,
       "type": "file"
     },
     {
@@ -143,15 +161,21 @@
       "type": "directory"
     },
     {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\paddle_engines\\pp_structure.py",
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\debug_db.py",
       "accessCount": 9,
-      "lastAccessed": 1772445108236,
+      "lastAccessed": 1772498979572,
       "type": "file"
     },
     {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\debug_db.py",
+      "path": "",
       "accessCount": 6,
-      "lastAccessed": 1772431361661,
+      "lastAccessed": 1772499479863,
+      "type": "directory"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\paddle_extract.py",
+      "accessCount": 6,
+      "lastAccessed": 1772519711880,
       "type": "file"
     },
     {
@@ -161,15 +185,87 @@
       "type": "file"
     },
     {
+      "path": "tools\\diag_vl.py",
+      "accessCount": 5,
+      "lastAccessed": 1772509210620,
+      "type": "file"
+    },
+    {
       "path": ".venv\\Lib\\site-packages\\paddlex\\inference\\pipelines\\layout_parsing\\pipeline_v2.py",
       "accessCount": 4,
       "lastAccessed": 1772432214336,
       "type": "directory"
     },
     {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\paddle_engines\\paddleocr_vl.py",
+      "path": ".venv\\Lib\\site-packages\\paddlex\\inference\\pipelines\\paddleocr_vl\\pipeline.py",
+      "accessCount": 4,
+      "lastAccessed": 1772485417182,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\paddle_engines\\__init__.py",
+      "accessCount": 4,
+      "lastAccessed": 1772498882157,
+      "type": "file"
+    },
+    {
+      "path": "tools\\diag_vl_content.py",
       "accessCount": 3,
-      "lastAccessed": 1772484683474,
+      "lastAccessed": 1772498895971,
+      "type": "file"
+    },
+    {
+      "path": "tools\\docker\\docker-compose.paddleocr-vl.yml",
+      "accessCount": 3,
+      "lastAccessed": 1772510640516,
+      "type": "file"
+    },
+    {
+      "path": ".venv\\Lib\\site-packages\\paddleocr",
+      "accessCount": 2,
+      "lastAccessed": 1772485227226,
+      "type": "directory"
+    },
+    {
+      "path": ".venv\\Lib\\site-packages",
+      "accessCount": 2,
+      "lastAccessed": 1772485291278,
+      "type": "directory"
+    },
+    {
+      "path": ".venv\\Lib\\site-packages\\paddlex",
+      "accessCount": 2,
+      "lastAccessed": 1772485374742,
+      "type": "directory"
+    },
+    {
+      "path": "tests",
+      "accessCount": 2,
+      "lastAccessed": 1772495619266,
+      "type": "directory"
+    },
+    {
+      "path": "tests\\test_paddle_extract.py",
+      "accessCount": 2,
+      "lastAccessed": 1772498907454,
+      "type": "file"
+    },
+    {
+      "path": "tools\\vision_viewer.py",
+      "accessCount": 2,
+      "lastAccessed": 1772498978490,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction",
+      "accessCount": 2,
+      "lastAccessed": 1772509229913,
+      "type": "directory"
+    },
+    {
+      "path": "tools\\test_vl_backend.py",
+      "accessCount": 2,
+      "lastAccessed": 1772519720568,
       "type": "file"
     },
     {
@@ -185,22 +281,88 @@
       "type": "directory"
     },
     {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\paddle_extract.py",
+      "path": "spec\\progress.md",
       "accessCount": 1,
-      "lastAccessed": 1772441549022,
+      "lastAccessed": 1772485134349,
       "type": "file"
     },
     {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\paddle_engines\\__init__.py",
+      "path": "spec",
       "accessCount": 1,
-      "lastAccessed": 1772441549727,
-      "type": "file"
-    },
-    {
-      "path": ".venv\\Lib\\site-packages\\paddlex",
-      "accessCount": 1,
-      "lastAccessed": 1772443471243,
+      "lastAccessed": 1772485134635,
       "type": "directory"
+    },
+    {
+      "path": "spec\\b1-b2-engine-foundation.md",
+      "accessCount": 1,
+      "lastAccessed": 1772485137270,
+      "type": "file"
+    },
+    {
+      "path": ".venv\\Lib\\site-packages\\paddleocr\\_pipelines\\paddleocr_vl.py",
+      "accessCount": 1,
+      "lastAccessed": 1772485210333,
+      "type": "file"
+    },
+    {
+      "path": ".venv\\Lib\\site-packages\\paddleocr\\_models\\_doc_vlm.py",
+      "accessCount": 1,
+      "lastAccessed": 1772485210913,
+      "type": "file"
+    },
+    {
+      "path": ".venv\\Lib\\site-packages\\paddlex\\inference\\pipelines",
+      "accessCount": 1,
+      "lastAccessed": 1772485228360,
+      "type": "directory"
+    },
+    {
+      "path": ".venv\\Lib\\site-packages\\paddlex\\inference\\pipelines\\_parallel.py",
+      "accessCount": 1,
+      "lastAccessed": 1772485250324,
+      "type": "file"
+    },
+    {
+      "path": ".venv\\Lib\\site-packages\\paddlex\\configs\\pipelines\\PaddleOCR-VL-1.5.yaml",
+      "accessCount": 1,
+      "lastAccessed": 1772485381309,
+      "type": "file"
+    },
+    {
+      "path": ".venv\\Lib\\site-packages\\paddlex\\inference\\models\\doc_vlm\\processors\\paddleocr_vl\\_paddleocr_vl.py",
+      "accessCount": 1,
+      "lastAccessed": 1772485561735,
+      "type": "file"
+    },
+    {
+      "path": ".venv\\Lib\\site-packages\\paddle\\base\\dygraph\\math_op_patch.py",
+      "accessCount": 1,
+      "lastAccessed": 1772485593789,
+      "type": "file"
+    },
+    {
+      "path": ".venv\\Lib\\site-packages\\paddlex\\inference\\pipelines\\paddleocr_vl\\uilts.py",
+      "accessCount": 1,
+      "lastAccessed": 1772489398864,
+      "type": "file"
+    },
+    {
+      "path": "tools",
+      "accessCount": 1,
+      "lastAccessed": 1772495619795,
+      "type": "directory"
+    },
+    {
+      "path": "src\\zotero_chunk_rag",
+      "accessCount": 1,
+      "lastAccessed": 1772503006363,
+      "type": "directory"
+    },
+    {
+      "path": "tools\\docker\\vllm_config.yaml",
+      "accessCount": 1,
+      "lastAccessed": 1772505863549,
+      "type": "file"
     }
   ],
   "userDirectives": []

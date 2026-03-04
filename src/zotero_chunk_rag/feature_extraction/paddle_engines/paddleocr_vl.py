@@ -1,80 +1,177 @@
-"""PaddleOCR-VL-1.5 engine: VLM-based PDF table extraction with markdown output."""
+"""PaddleOCR-VL-1.5 engine: VLM-based PDF table extraction.
+
+The VL model outputs OTSL (table structure language) which the PaddleOCR
+pipeline internally converts to HTML via ``convert_otsl_to_html()``.  Table
+block content is therefore HTML, not markdown.  We reuse the HTML parser from
+the PP-StructureV3 engine to handle colspan/rowspan correctly.
+
+Backend selection is CC-gated:
+
+- **CC >= 8.0** — native vLLM backend (inline, gets Flash Attention 2)
+- **CC 7.0–7.9** — vLLM-server backend via Docker container
+- **No GPU** — raises ``RuntimeError``
+
+Override via env vars:
+
+- ``PADDLEOCR_VL_SERVER_URL`` — server endpoint (default ``http://localhost:8118/v1``)
+- ``PADDLEOCR_VL_BACKEND``   — force ``"native"`` or ``"server"``
+"""
 
 from __future__ import annotations
 
+import logging
 import os
-import re
+import shutil
+import subprocess
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
 
+_log = logging.getLogger(__name__)
+_VL_SERVER_URL_DEFAULT = "http://localhost:8118/v1"
+
+
+def _get_compute_capability() -> tuple[int, int] | None:
+    """Return (major, minor) CC of GPU 0, or None if no CUDA GPU."""
+    try:
+        import paddle
+
+        if not paddle.device.is_compiled_with_cuda():
+            return None
+        if paddle.device.cuda.device_count() < 1:
+            return None
+        return paddle.device.cuda.get_device_capability()
+    except Exception:
+        return None
+
+
+def _check_vllm_server(url: str, timeout: float = 5.0) -> bool:
+    """Return True if vLLM server responds at *url*/models."""
+    models_url = url.rstrip("/") + "/models"
+    try:
+        req = urllib.request.Request(models_url, method="GET")
+        with urllib.request.urlopen(req, timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
+def _compose_file() -> Path:
+    """Return the path to the Docker Compose file shipped with this package."""
+    return Path(__file__).resolve().parents[4] / "tools" / "docker" / "docker-compose.paddleocr-vl.yml"
+
+
+def _start_vllm_server(
+    url: str,
+    *,
+    startup_timeout: float = 300.0,
+    poll_interval: float = 3.0,
+) -> None:
+    """Start the vLLM Docker container and wait until it responds.
+
+    Raises ``RuntimeError`` if Docker is not installed, the compose file is
+    missing, or the server does not become healthy within *startup_timeout*
+    seconds.
+    """
+    compose = _compose_file()
+    if not compose.exists():
+        raise RuntimeError(
+            f"Docker Compose file not found at {compose}.\n"
+            f"Expected: tools/docker/docker-compose.paddleocr-vl.yml"
+        )
+
+    docker = shutil.which("docker")
+    if docker is None:
+        raise RuntimeError(
+            "Docker is not installed or not on PATH.\n"
+            "Install Docker Desktop and try again, or start the vLLM "
+            "server manually and set PADDLEOCR_VL_SERVER_URL."
+        )
+
+    _log.info("Starting vLLM Docker container via %s ...", compose)
+    print(f"[paddleocr-vl] Starting vLLM Docker container...", flush=True)
+
+    # Pull image first (can take minutes for multi-GB images).
+    _log.info("Pulling Docker image (this may take several minutes on first run)...")
+    print("[paddleocr-vl] Pulling Docker image (may take several minutes on first run)...", flush=True)
+    pull = subprocess.run(
+        [docker, "compose", "-f", str(compose), "pull"],
+        capture_output=True,
+        text=True,
+        timeout=600,  # 10 min for large image pulls
+    )
+    if pull.returncode != 0:
+        raise RuntimeError(
+            f"docker compose pull failed (exit {pull.returncode}):\n"
+            f"{pull.stderr.strip()}"
+        )
+
+    result = subprocess.run(
+        [docker, "compose", "-f", str(compose), "up", "-d"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"docker compose up failed (exit {result.returncode}):\n"
+            f"{result.stderr.strip()}"
+        )
+
+    _log.info("Waiting up to %.0fs for vLLM server at %s ...", startup_timeout, url)
+    print(f"[paddleocr-vl] Waiting up to {startup_timeout:.0f}s for server at {url} ...", flush=True)
+    deadline = time.monotonic() + startup_timeout
+    while time.monotonic() < deadline:
+        if _check_vllm_server(url, timeout=3.0):
+            _log.info("vLLM server is ready.")
+            return
+        time.sleep(poll_interval)
+
+    raise RuntimeError(
+        f"vLLM server did not become ready at {url} within "
+        f"{startup_timeout:.0f}s.\n\n"
+        f"Check container logs:\n"
+        f"  docker compose -f {compose} logs"
+    )
+
+
+def _patch_paddle_int() -> None:
+    """Fix Paddle's ``int(tensor)`` for numpy >= 1.24.
+
+    Paddle's ``_int_`` does ``int(np.array(var))`` which fails when the tensor
+    has shape ``(1,)`` instead of ``()``.  Newer numpy versions reject
+    ``int()`` on arrays with ``ndim > 0``.  We replace
+    ``paddle.Tensor.__int__`` with a version that calls ``.item()`` on the
+    numpy array so the conversion works regardless of tensor shape (as long as
+    the tensor has exactly one element, which the existing assert already
+    guarantees).
+    """
+    try:
+        import numpy as _np
+        import paddle
+
+        if getattr(paddle.Tensor, "_int_patched_by_zcr", False):
+            return  # already patched
+
+        def _safe_int(var):  # type: ignore[no-untyped-def]
+            numel = _np.prod(var.shape)
+            assert numel == 1, "only one element variable can be converted to int."
+            assert var._is_initialized(), "variable's tensor is not initialized"
+            return int(_np.array(var).item())
+
+        paddle.Tensor.__int__ = _safe_int
+        paddle.Tensor._int_patched_by_zcr = True  # type: ignore[attr-defined]
+    except Exception:
+        pass  # non-critical — let the original code run
+
+
+_patch_paddle_int()
 
 from ..paddle_extract import RawPaddleTable  # noqa: E402
-
-# Matches markdown table separator rows: cells containing only dashes, colons,
-# and spaces (e.g. |---|, |:---|, |---:|, |:---:|).
-_SEPARATOR_RE = re.compile(r"^\|(?:\s*:?-+:?\s*\|)+\s*$")
-
-
-def _parse_markdown_table(md: str) -> tuple[list[str], list[list[str]], str]:
-    """Parse a GitHub-flavour markdown table into headers, rows, and footnotes.
-
-    Args:
-        md: Raw markdown string containing a table.
-
-    Returns:
-        A three-tuple ``(headers, rows, footnotes)`` where *headers* is the
-        first (header) row's cells, *rows* is every subsequent data row, and
-        *footnotes* is any text found after the table body (currently always
-        an empty string because the VL engine embeds footnotes in the block
-        text rather than appending them to the markdown).
-    """
-    if not md or not md.strip():
-        return [], [], ""
-
-    raw_lines = md.splitlines()
-
-    # Split on unescaped pipes only.  We temporarily replace ``\|`` with a
-    # placeholder so a simple ``split("|")`` doesn't break on escaped pipes.
-    _ESCAPED_PIPE_PLACEHOLDER = "\x00PIPE\x00"
-
-    def _split_row(line: str) -> list[str]:
-        """Split one markdown table row on unescaped ``|`` characters."""
-        safe = line.replace(r"\|", _ESCAPED_PIPE_PLACEHOLDER)
-        parts = safe.split("|")
-        # Strip leading/trailing empty strings produced by outer ``|`` chars.
-        if parts and parts[0].strip() == "":
-            parts = parts[1:]
-        if parts and parts[-1].strip() == "":
-            parts = parts[:-1]
-        return [p.replace(_ESCAPED_PIPE_PLACEHOLDER, "|").strip() for p in parts]
-
-    # Collect only lines that look like table rows (contain at least one ``|``).
-    table_lines = [ln for ln in raw_lines if "|" in ln]
-
-    if not table_lines:
-        return [], [], ""
-
-    # Identify whether a separator row exists and where.
-    separator_index: int | None = None
-    for i, line in enumerate(table_lines):
-        if _SEPARATOR_RE.match(line.strip()):
-            separator_index = i
-            break
-
-    if separator_index is not None:
-        # Standard layout: row 0 = headers, separator_index = alignment row,
-        # rows after separator = data rows.
-        headers = _split_row(table_lines[0])
-        data_lines = table_lines[separator_index + 1 :]
-    else:
-        # Fallback: no separator found — treat first row as headers.
-        headers = _split_row(table_lines[0])
-        data_lines = table_lines[1:]
-
-    rows = [_split_row(ln) for ln in data_lines if ln.strip()]
-
-    return headers, rows, ""
+from .pp_structure import _parse_html_table  # noqa: E402
 
 
 class PaddleOCRVLEngine:
@@ -86,7 +183,49 @@ class PaddleOCRVLEngine:
     """
     def __init__(self) -> None:
         from paddleocr import PaddleOCRVL
-        self._pipeline = PaddleOCRVL(pipeline_version="v1.5", device="gpu:0")
+
+        cc = _get_compute_capability()
+        server_url = os.environ.get("PADDLEOCR_VL_SERVER_URL", _VL_SERVER_URL_DEFAULT)
+        backend_override = os.environ.get("PADDLEOCR_VL_BACKEND")  # "native" | "server"
+
+        if cc is None:
+            raise RuntimeError(
+                "PaddleOCR-VL-1.5 requires a CUDA GPU (CC >= 7.0). "
+                "No CUDA device detected."
+            )
+
+        use_native = (cc[0] >= 8) or (backend_override == "native")
+
+        if use_native and backend_override != "server":
+            _log.info("VL-1.5: CC %d.%d >= 8.0 — using native vLLM backend", *cc)
+            self._pipeline = PaddleOCRVL(
+                pipeline_version="v1.5",
+                device="gpu:0",
+                vl_rec_backend="vllm",
+            )
+        elif cc[0] >= 7 or backend_override == "server":
+            if not _check_vllm_server(server_url):
+                print(
+                    f"[paddleocr-vl] vLLM server not reachable at {server_url}"
+                    f" — attempting auto-start",
+                    flush=True,
+                )
+                _start_vllm_server(server_url)
+            print(
+                f"[paddleocr-vl] CC {cc[0]}.{cc[1]} < 8.0"
+                f" — using vLLM server at {server_url}",
+                flush=True,
+            )
+            self._pipeline = PaddleOCRVL(
+                pipeline_version="v1.5",
+                device="gpu:0",
+                vl_rec_backend="vllm-server",
+                vl_rec_server_url=server_url,
+            )
+        else:
+            raise RuntimeError(
+                f"PaddleOCR-VL-1.5 requires CC >= 7.0. Detected CC {cc[0]}.{cc[1]}."
+            )
 
     def extract_tables(self, pdf_path: Path) -> list[RawPaddleTable]:
         """Extract all tables from *pdf_path* using PaddleOCR-VL-1.5.
@@ -99,24 +238,31 @@ class PaddleOCRVLEngine:
 
         Returns:
             One ``RawPaddleTable`` per detected table block.
+
+        The predict output is a list of ``PaddleOCRVLResult`` objects (dict-like)
+        with keys ``page_index`` (0-indexed), ``width``, ``height``, and
+        ``parsing_res_list`` containing ``PaddleOCRVLBlock`` objects with
+        attributes ``label``, ``content``, ``bbox``.
         """
         pages_res = self._pipeline.predict(str(pdf_path))
         restructured = self._pipeline.restructure_pages(pages_res, merge_tables=True)
 
         tables: list[RawPaddleTable] = []
         for page_result in restructured:
-            page_num: int = page_result.get("page_num", 1)
-            page_width: int = page_result.get("page_width", 0)
-            page_height: int = page_result.get("page_height", 0)
+            # PaddleOCRVLResult uses page_index (0-indexed); convert to 1-indexed
+            page_num: int = page_result.get("page_index", 0) + 1
+            page_width: int = page_result.get("width", 0)
+            page_height: int = page_result.get("height", 0)
             page_size: tuple[int, int] = (page_width, page_height)
 
             for block in page_result.get("parsing_res_list", []):
-                block_label: str = block.get("block_label", "")
+                # PaddleOCRVLBlock exposes .label / .content / .bbox attrs
+                block_label: str = getattr(block, "label", "") or ""
                 if "table" not in block_label.lower():
                     continue
 
-                markdown_str: str = block.get("block_content", "") or ""
-                bbox_raw = block.get("block_bbox", [0.0, 0.0, 0.0, 0.0])
+                content_str: str = getattr(block, "content", "") or ""
+                bbox_raw = getattr(block, "bbox", [0.0, 0.0, 0.0, 0.0])
                 bbox: tuple[float, float, float, float] = (
                     float(bbox_raw[0]),
                     float(bbox_raw[1]),
@@ -124,7 +270,8 @@ class PaddleOCRVLEngine:
                     float(bbox_raw[3]),
                 )
 
-                headers, rows, footnotes = _parse_markdown_table(markdown_str)
+                # VL pipeline converts OTSL → HTML; parse as HTML.
+                headers, rows, footnotes = _parse_html_table(content_str)
 
                 tables.append(
                     RawPaddleTable(
@@ -135,7 +282,7 @@ class PaddleOCRVLEngine:
                         rows=rows,
                         footnotes=footnotes,
                         engine_name="paddleocr_vl_1.5",
-                        raw_output=markdown_str,
+                        raw_output=content_str,
                     )
                 )
 

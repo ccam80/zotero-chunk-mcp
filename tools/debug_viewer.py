@@ -9,8 +9,10 @@ If no path given, defaults to _stress_test_debug.db in the project root.
 
 from __future__ import annotations
 
+import difflib
 import json
 import os
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -115,6 +117,186 @@ def _populate_table_widget(
     widget.resizeColumnsToContents()
 
 
+# ── char-level diff helpers (ported from vision_viewer) ──────────────────────
+
+_DASH_CHARS = "\u2212\u2013\u2014\u2010\u2011\ufe63\uff0d"
+
+_LIGATURE_MAP = {
+    "\ufb00": "ff", "\ufb01": "fi", "\ufb02": "fl",
+    "\ufb03": "ffi", "\ufb04": "ffl",
+}
+
+_SUPER_SUB_MAP = str.maketrans({
+    "\u00b2": "2", "\u00b3": "3", "\u00b9": "1",
+    "\u2070": "0", "\u2074": "4", "\u2075": "5", "\u2076": "6",
+    "\u2077": "7", "\u2078": "8", "\u2079": "9",
+    "\u207a": "+", "\u207b": "-", "\u207c": "=", "\u207d": "(", "\u207e": ")",
+    "\u207f": "n", "\u1d40": "T", "\u1d48": "d", "\u1d49": "e", "\u2071": "i",
+    "\u2080": "0", "\u2081": "1", "\u2082": "2", "\u2083": "3", "\u2084": "4",
+    "\u2085": "5", "\u2086": "6", "\u2087": "7", "\u2088": "8", "\u2089": "9",
+    "\u208a": "+", "\u208b": "-", "\u208c": "=", "\u208d": "(", "\u208e": ")",
+    "\u2090": "a", "\u2091": "e", "\u2092": "o", "\u2093": "x",
+    "\u2095": "h", "\u2096": "k", "\u2097": "l", "\u2098": "m",
+    "\u2099": "n", "\u209a": "p", "\u209b": "s", "\u209c": "t", "\u1d0b": "K",
+})
+
+_LATEX_SUPER_RE = re.compile(r"\^{([^}]*)}")
+_LATEX_SUB_RE = re.compile(r"_{([^}]*)}")
+
+
+def _normalize_cell(text: str) -> str:
+    """Normalize a cell for comparison (mirrors ground_truth._normalize_cell)."""
+    text = text.strip()
+    text = re.sub(r"\s+", " ", text)
+    for ch in _DASH_CHARS:
+        text = text.replace(ch, "-")
+    for lig, repl in _LIGATURE_MAP.items():
+        text = text.replace(lig, repl)
+    text = _LATEX_SUPER_RE.sub(r"\1", text)
+    text = _LATEX_SUB_RE.sub(r"\1", text)
+    text = text.translate(_SUPER_SUB_MAP)
+    return text
+
+
+def _escape_html(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace(" ", "&nbsp;")
+
+
+def _build_norm_index_map(original: str, normalized: str) -> list[int]:
+    """Map normalized string indices back to original string positions."""
+    n_map: list[int] = []
+    oi = 0
+    for ni in range(len(normalized)):
+        while oi < len(original) and _normalize_cell(original[oi]) == "" and original[oi].strip() == "":
+            oi += 1
+        n_map.append(oi)
+        if oi < len(original):
+            oi += 1
+    n_map.append(len(original))
+    return n_map
+
+
+def _char_diff_html(agent_text: str, gt_text: str) -> str:
+    """Return HTML with character-level diff highlighting.
+
+    - Equal text: plain black
+    - Insertions (only in agent): green background
+    - Deletions (only in GT): red strikethrough
+    - Replacements: red strikethrough + green insertion
+    """
+    norm_agent = _normalize_cell(agent_text)
+    norm_gt = _normalize_cell(gt_text)
+    if norm_agent == norm_gt:
+        return _escape_html(agent_text)
+
+    a_map = _build_norm_index_map(agent_text, norm_agent)
+    g_map = _build_norm_index_map(gt_text, norm_gt)
+
+    sm = difflib.SequenceMatcher(None, norm_gt, norm_agent)
+    parts: list[str] = []
+    for op, i1, i2, j1, j2 in sm.get_opcodes():
+        if op == "equal":
+            orig_slice = agent_text[a_map[j1]:a_map[j2]]
+            parts.append(_escape_html(orig_slice))
+        elif op == "insert":
+            orig_slice = agent_text[a_map[j1]:a_map[j2]]
+            parts.append(
+                f'<span style="background:#a5d6a7;">{_escape_html(orig_slice)}</span>'
+            )
+        elif op == "delete":
+            orig_slice = gt_text[g_map[i1]:g_map[i2]]
+            parts.append(
+                f'<span style="background:#ef9a9a;text-decoration:line-through;">'
+                f'{_escape_html(orig_slice)}</span>'
+            )
+        elif op == "replace":
+            gt_slice = gt_text[g_map[i1]:g_map[i2]]
+            ag_slice = agent_text[a_map[j1]:a_map[j2]]
+            parts.append(
+                f'<span style="background:#ef9a9a;text-decoration:line-through;">'
+                f'{_escape_html(gt_slice)}</span>'
+            )
+            parts.append(
+                f'<span style="background:#a5d6a7;">{_escape_html(ag_slice)}</span>'
+            )
+    return "".join(parts)
+
+
+def _populate_diff_table(
+    widget: QTableWidget,
+    headers: list[str],
+    rows: list[list[str]],
+    ref_headers: list[str] | None = None,
+    ref_rows: list[list[str]] | None = None,
+) -> None:
+    """Fill a QTableWidget with char-level diff highlighting against a reference.
+
+    When ref_headers/ref_rows are None, falls back to plain display (no diff).
+    """
+    widget.clear()
+    n_cols = len(headers) if headers else (len(rows[0]) if rows else 0)
+    total_rows = 1 + len(rows)
+
+    if n_cols == 0 and len(rows) == 0:
+        widget.setRowCount(1)
+        widget.setColumnCount(1)
+        widget.setHorizontalHeaderLabels([""])
+        item = QTableWidgetItem("No data")
+        item.setForeground(QColor("#888888"))
+        widget.setItem(0, 0, item)
+        return
+
+    widget.setColumnCount(n_cols)
+    widget.setRowCount(total_rows)
+    widget.setHorizontalHeaderLabels([str(i) for i in range(n_cols)])
+
+    has_ref = ref_headers is not None and ref_rows is not None
+
+    # Row 0: headers
+    for c, h in enumerate(headers):
+        h_str = str(h)
+        ref_h = str(ref_headers[c]).strip() if has_ref and c < len(ref_headers) else None
+        item = QTableWidgetItem()
+        font = item.font()
+        font.setBold(True)
+        item.setFont(font)
+        item.setBackground(QColor("#e0e0e0"))
+        if has_ref and ref_h is not None and _normalize_cell(h_str) != _normalize_cell(ref_h):
+            item.setBackground(QColor("#ffcdd2"))
+        item.setText(h_str)
+        widget.setItem(0, c, item)
+
+    # Data rows
+    for r_idx, row in enumerate(rows):
+        ref_row = ref_rows[r_idx] if has_ref and r_idx < len(ref_rows) else None
+        for c_idx, cell in enumerate(row):
+            if c_idx >= n_cols:
+                continue
+            cell_str = str(cell)
+            ref_cell = (
+                str(ref_row[c_idx]).strip()
+                if ref_row is not None and c_idx < len(ref_row)
+                else None
+            )
+            if has_ref and ref_cell is not None and _normalize_cell(cell_str) != _normalize_cell(ref_cell):
+                diff_html = _char_diff_html(cell_str.strip(), ref_cell)
+                te = QTextEdit()
+                te.setReadOnly(True)
+                te.setFrameStyle(0)
+                te.setHtml(
+                    f'<span style="font-family:Consolas;font-size:9pt;">{diff_html}</span>'
+                )
+                te.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+                te.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+                widget.setCellWidget(r_idx + 1, c_idx, te)
+            else:
+                item = QTableWidgetItem(cell_str)
+                widget.setItem(r_idx + 1, c_idx, item)
+
+    widget.resizeColumnsToContents()
+    widget.resizeRowsToContents()
+
+
 # ── main window ──────────────────────────────────────────────────────────────
 
 
@@ -141,6 +323,8 @@ class DebugViewer(QMainWindow):
             _table_has_column(self.conn, "vision_agent_results", "agent_role")
             if self._has_vision_results else False
         )
+        self._has_paddle_results = _table_exists(self.conn, "paddle_results")
+        self._has_paddle_gt_diffs = _table_exists(self.conn, "paddle_gt_diffs")
 
         # ── load manifest (for PDF paths / bboxes) ────────────────────────
         self._manifest: dict[str, dict] = {}
@@ -308,7 +492,7 @@ class DebugViewer(QMainWindow):
         vis_pdf_layout.addWidget(self.vis_pdf_scroll)
         vision_splitter.addWidget(self.vis_pdf_group)
 
-        # Middle: Extracted table with cell marks
+        # Middle: Extracted table with char-level diff highlighting
         self.vis_ext_group = QGroupBox("Extracted Table")
         vis_ext_layout = QVBoxLayout(self.vis_ext_group)
         self.vis_ext_table = QTableWidget()
@@ -324,27 +508,39 @@ class DebugViewer(QMainWindow):
         vis_ext_layout.addWidget(self.vis_ext_table)
         vision_splitter.addWidget(self.vis_ext_group)
 
-        # Bottom: Ground truth table
-        self.vis_gt_group = QGroupBox("Ground Truth")
-        vis_gt_layout = QVBoxLayout(self.vis_gt_group)
-        self.vis_gt_table = QTableWidget()
-        self.vis_gt_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.vis_gt_table.setAlternatingRowColors(True)
-        self.vis_gt_table.setWordWrap(True)
-        self.vis_gt_table.setVerticalScrollMode(
+        # Bottom: Reference panel (selectable via dropdown)
+        self.vis_ref_group = QGroupBox("Reference")
+        vis_ref_layout = QVBoxLayout(self.vis_ref_group)
+        self.vis_ref_combo = QComboBox()
+        self.vis_ref_combo.currentIndexChanged.connect(self._on_ref_dropdown_changed)
+        vis_ref_layout.addWidget(self.vis_ref_combo)
+        self.vis_ref_table = QTableWidget()
+        self.vis_ref_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.vis_ref_table.setAlternatingRowColors(True)
+        self.vis_ref_table.setWordWrap(True)
+        self.vis_ref_table.setVerticalScrollMode(
             QAbstractItemView.ScrollMode.ScrollPerPixel
         )
-        self.vis_gt_table.setHorizontalScrollMode(
+        self.vis_ref_table.setHorizontalScrollMode(
             QAbstractItemView.ScrollMode.ScrollPerPixel
         )
-        vis_gt_layout.addWidget(self.vis_gt_table)
-        vision_splitter.addWidget(self.vis_gt_group)
+        vis_ref_layout.addWidget(self.vis_ref_table)
+        vision_splitter.addWidget(self.vis_ref_group)
 
-        # Default proportions: PDF 30%, extracted 40%, GT 30%
-        vision_splitter.setSizes([250, 350, 250])
+        # Default proportions: PDF 25%, extracted 40%, reference 35%
+        vision_splitter.setSizes([220, 350, 300])
 
         vision_layout.addWidget(vision_splitter)
         content_layout.addWidget(self.vision_widget)
+
+        # ── state for vision view refresh ────────────────────────────
+        # Stored when a vision/paddle/method node is clicked so the
+        # dropdown change handler can recalculate diffs without
+        # re-querying the extraction data.
+        self._vis_current_table_id: str | None = None
+        self._vis_current_ext_headers: list[str] = []
+        self._vis_current_ext_rows: list[list[str]] = []
+        self._vis_ref_sources: list[dict] = []  # [{label, headers, rows}]
 
         vsplitter.addWidget(self.content_stack)
 
@@ -464,6 +660,9 @@ class DebugViewer(QMainWindow):
 
                     # ── Vision agent children ─────────────────────────
                     self._add_vision_children(ti, key, tbl)
+
+                    # ── Paddle engine children ────────────────────────
+                    self._add_paddle_children(ti, key, tbl)
 
             # ── Figures ──────────────────────────────────────────────
             figures = self.conn.execute(
@@ -682,6 +881,72 @@ class DebugViewer(QMainWindow):
 
             vision_parent.addChild(vi)
 
+    # ── paddle engine child nodes ─────────────────────────────────────────
+
+    def _add_paddle_children(
+        self, table_item: QTreeWidgetItem, item_key: str, tbl: sqlite3.Row
+    ) -> None:
+        """Add per-engine paddle child nodes under a table tree item."""
+        if not self._has_paddle_results:
+            return
+
+        # Resolve table_id
+        table_id = None
+        if self._has_table_id_col:
+            table_id = tbl["table_id"]
+        if not table_id:
+            from zotero_chunk_rag.feature_extraction.ground_truth import make_table_id
+            table_id = make_table_id(
+                item_key, tbl["caption"], tbl["page_num"], tbl["table_index"]
+            )
+
+        engines = self.conn.execute(
+            "SELECT id, engine_name, caption, is_orphan "
+            "FROM paddle_results WHERE table_id=? ORDER BY engine_name",
+            (table_id,),
+        ).fetchall()
+        if not engines:
+            return
+
+        paddle_parent = QTreeWidgetItem(["Paddle Engines", f"{len(engines)} results"])
+        paddle_parent.setData(
+            0, Qt.ItemDataRole.UserRole, ("paddle_parent", item_key, table_id)
+        )
+        paddle_parent.setForeground(0, QColor("#00897b"))  # teal
+        table_item.addChild(paddle_parent)
+
+        for eng in engines:
+            engine_name = eng["engine_name"]
+            # Look up accuracy from paddle_gt_diffs
+            acc_str = "no GT"
+            if self._has_paddle_gt_diffs:
+                gtd = self.conn.execute(
+                    "SELECT cell_accuracy_pct FROM paddle_gt_diffs "
+                    "WHERE table_id=? AND engine_name=?",
+                    (table_id, engine_name),
+                ).fetchone()
+                if gtd and gtd["cell_accuracy_pct"] is not None:
+                    acc_str = f"{gtd['cell_accuracy_pct']:.1f}%"
+
+            short_label = engine_name.replace("paddleocr_", "").replace("pp_structure_", "ppv")
+            ei = QTreeWidgetItem([short_label, f"[{acc_str}]"])
+            ei.setData(
+                0, Qt.ItemDataRole.UserRole,
+                ("paddle_result", item_key, tbl["id"], table_id, eng["id"]),
+            )
+
+            # Color-code accuracy
+            if acc_str != "no GT":
+                acc_val = float(acc_str.rstrip("%"))
+                if acc_val >= 95:
+                    ei.setForeground(1, QColor("#4caf50"))
+                elif acc_val >= 80:
+                    ei.setForeground(1, QColor("#ffc107"))
+                else:
+                    ei.setForeground(1, QColor("#f44336"))
+
+            paddle_parent.addChild(ei)
+
     # ── grade filter ─────────────────────────────────────────────────────
 
     def _apply_grade_filter(self):
@@ -752,8 +1017,12 @@ class DebugViewer(QMainWindow):
             self._show_method_comparison(data[1], data[2], data[3], data[4])
         elif kind == "vision_agent":
             self._show_vision_agent(data[1], data[2], data[3], data[4])
+        elif kind == "paddle_result":
+            self._show_paddle_result(data[1], data[2], data[3], data[4])
         elif kind == "vision_parent":
             self._show_vision_summary(data[1], data[2])
+        elif kind == "paddle_parent":
+            self._show_paddle_summary(data[1], data[2])
         elif kind == "chunks_parent":
             self._show_chunks_summary(data[1])
         elif kind == "tables_parent":
@@ -1394,7 +1663,8 @@ class DebugViewer(QMainWindow):
         table_id: str,
         vision_row_id: int,
     ) -> None:
-        """Show vertical 3-panel view: PDF, extracted table with marks, GT."""
+        """Show vertical 3-panel view: PDF, extracted table with char-level
+        diff, and selectable reference panel."""
         vr = self.conn.execute(
             "SELECT * FROM vision_agent_results WHERE id=?", (vision_row_id,)
         ).fetchone()
@@ -1416,66 +1686,6 @@ class DebugViewer(QMainWindow):
             try:
                 ext_rows = json.loads(vr["rows_json"])
             except (json.JSONDecodeError, TypeError):
-                pass
-
-        # Load ground truth
-        gt_data = self._load_ground_truth(table_id)
-        gt_headers: list[str] = gt_data[0] if gt_data else []
-        gt_rows: list[list[str]] = gt_data[1] if gt_data else []
-
-        # Per-cell GT match/mismatch marks
-        cell_marks: dict[tuple[int, int], bool] = {}
-        gt_diff_info = {}
-        if gt_data and ext_headers and ext_rows:
-            try:
-                from zotero_chunk_rag.feature_extraction.ground_truth import (
-                    compare_extraction,
-                    GROUND_TRUTH_DB_PATH,
-                    _normalize_cell,
-                )
-                cmp = compare_extraction(
-                    GROUND_TRUTH_DB_PATH, table_id, ext_headers, ext_rows,
-                )
-                gt_diff_info = {
-                    "cell_accuracy": cmp.cell_accuracy_pct,
-                    "fuzzy_accuracy": cmp.fuzzy_accuracy_pct,
-                    "fuzzy_precision": cmp.fuzzy_precision_pct,
-                    "fuzzy_recall": cmp.fuzzy_recall_pct,
-                    "splits": len(cmp.column_splits) + len(cmp.row_splits),
-                    "merges": len(cmp.column_merges) + len(cmp.row_merges),
-                    "cell_diffs": len(cmp.cell_diffs),
-                    "coverage": cmp.structural_coverage_pct,
-                }
-                col_map = {g: e for g, e in cmp.matched_columns}
-                used_gt = {g for g, _ in cmp.matched_columns}
-                used_ext = {e for _, e in cmp.matched_columns}
-                for g_ci in cmp.missing_columns:
-                    if g_ci not in used_gt and g_ci not in used_ext:
-                        if g_ci < len(ext_headers) and g_ci not in used_ext:
-                            col_map[g_ci] = g_ci
-                            used_gt.add(g_ci)
-                            used_ext.add(g_ci)
-
-                row_map: list[tuple[int, int]] = list(cmp.matched_rows)
-                used_gt_r = {g for g, _ in cmp.matched_rows}
-                used_ext_r = {e for _, e in cmp.matched_rows}
-                for g_ri in cmp.missing_rows:
-                    if g_ri not in used_gt_r and g_ri not in used_ext_r:
-                        if g_ri < len(ext_rows) and g_ri not in used_ext_r:
-                            row_map.append((g_ri, g_ri))
-                            used_gt_r.add(g_ri)
-                            used_ext_r.add(g_ri)
-
-                for g_ri, e_ri in row_map:
-                    for g_ci, e_ci in col_map.items():
-                        gt_val = _normalize_cell(
-                            gt_rows[g_ri][g_ci]
-                        ) if g_ci < len(gt_rows[g_ri]) else ""
-                        ext_val = _normalize_cell(
-                            ext_rows[e_ri][e_ci]
-                        ) if e_ci < len(ext_rows[e_ri]) else ""
-                        cell_marks[(e_ri, e_ci)] = (gt_val == ext_val)
-            except (KeyError, ImportError):
                 pass
 
         # ── Top: PDF region ───────────────────────────────────────────
@@ -1507,29 +1717,11 @@ class DebugViewer(QMainWindow):
             self.vis_pdf_label.setText("(no PDF available)")
             self.vis_pdf_label.setPixmap(QPixmap())
 
-        # ── Middle: Extracted table with cell marks ───────────────────
+        # ── Middle + Bottom: extraction with diff + dropdown reference ─
         n_corr = vr["num_corrections"] or 0
         corr_suffix = f" — {n_corr} corrections" if n_corr else ""
         self.vis_ext_group.setTitle(f"{label} Output{corr_suffix}")
-        _populate_table_widget(self.vis_ext_table, ext_headers, ext_rows, cell_marks)
-        self.vis_ext_table.verticalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.ResizeToContents
-        )
-
-        # ── Bottom: Ground truth table ────────────────────────────────
-        if gt_data:
-            _populate_table_widget(self.vis_gt_table, gt_headers, gt_rows)
-            self.vis_gt_group.setTitle(
-                f"Ground Truth ({len(gt_rows)}x{len(gt_headers)})"
-            )
-            self.vis_gt_table.verticalHeader().setSectionResizeMode(
-                QHeaderView.ResizeMode.ResizeToContents
-            )
-        else:
-            self.vis_gt_table.clear()
-            self.vis_gt_table.setRowCount(0)
-            self.vis_gt_table.setColumnCount(0)
-            self.vis_gt_group.setTitle("Ground Truth (not available)")
+        self._setup_vision_view(table_id, ext_headers, ext_rows)
 
         # ── Build metadata ────────────────────────────────────────────
         n_ext_rows = len(ext_rows)
@@ -1566,26 +1758,11 @@ class DebugViewer(QMainWindow):
             for i, c in enumerate(corrections, 1):
                 meta.append((f"Correction {i}", c))
 
-        if gt_diff_info:
-            meta.extend([
-                ("", ""),
-                ("GT Cell Accuracy", f"{gt_diff_info['cell_accuracy']:.1f}%"),
-                ("GT Fuzzy Accuracy", f"{gt_diff_info['fuzzy_accuracy']:.1f}%"),
-                ("GT Fuzzy Precision", f"{gt_diff_info['fuzzy_precision']:.1f}%"),
-                ("GT Fuzzy Recall", f"{gt_diff_info['fuzzy_recall']:.1f}%"),
-                ("Splits", str(gt_diff_info["splits"])),
-                ("Merges", str(gt_diff_info["merges"])),
-                ("Cell Diffs", str(gt_diff_info["cell_diffs"])),
-                ("Coverage", f"{gt_diff_info['coverage']:.1f}%"),
-            ])
-        elif gt_data:
-            meta.append(("GT Comparison", "comparison failed"))
-        else:
-            meta.append(("GT Comparison", "no ground truth"))
-
+        # GT accuracy from stored data
         stored_acc = vr["cell_accuracy_pct"]
         if stored_acc is not None:
-            meta.append(("Stored Accuracy (eval run)", f"{stored_acc:.1f}%"))
+            meta.append(("", ""))
+            meta.append(("Stored GT Accuracy", f"{stored_acc:.1f}%"))
 
         self._set_meta(meta)
 
@@ -1633,6 +1810,324 @@ class DebugViewer(QMainWindow):
             "Click an individual agent to see its output vs ground truth."
         )
         self.status.showMessage(f"Vision agents for {table_id}")
+
+    # ── paddle result display ────────────────────────────────────────────
+
+    def _show_paddle_result(
+        self,
+        item_key: str,
+        table_db_id: int,
+        table_id: str,
+        paddle_row_id: int,
+    ) -> None:
+        """Show a paddle engine result in the vision view with diff highlighting."""
+        pr = self.conn.execute(
+            "SELECT * FROM paddle_results WHERE id=?", (paddle_row_id,)
+        ).fetchone()
+        if not pr:
+            return
+
+        engine_name = pr["engine_name"]
+
+        # Parse headers/rows
+        ext_headers: list[str] = []
+        ext_rows: list[list[str]] = []
+        if pr["headers_json"]:
+            try:
+                ext_headers = json.loads(pr["headers_json"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if pr["rows_json"]:
+            try:
+                ext_rows = json.loads(pr["rows_json"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Render PDF
+        tbl_row = self.conn.execute(
+            "SELECT bbox, page_num FROM extracted_tables WHERE id=?", (table_db_id,)
+        ).fetchone()
+        bbox = json.loads(tbl_row["bbox"]) if tbl_row and tbl_row["bbox"] else None
+        pdf_info = self._resolve_pdf_info(table_id, item_key)
+
+        if pdf_info and bbox:
+            render_result = self._render_table_pixmap(
+                pdf_info["pdf_path"],
+                pdf_info["page_num"] or tbl_row["page_num"],
+                bbox,
+            )
+            if render_result:
+                clean_pixmap, _ = render_result
+                display_pixmap = clean_pixmap
+                if display_pixmap.width() > 900:
+                    display_pixmap = display_pixmap.scaledToWidth(
+                        900, Qt.TransformationMode.SmoothTransformation
+                    )
+                self.vis_pdf_label.setPixmap(display_pixmap)
+                self.vis_pdf_group.setTitle("PDF Region")
+            else:
+                self.vis_pdf_label.setText("(PDF render failed)")
+                self.vis_pdf_label.setPixmap(QPixmap())
+        else:
+            self.vis_pdf_label.setText("(no PDF available)")
+            self.vis_pdf_label.setPixmap(QPixmap())
+
+        # Build metadata
+        n_ext_rows = len(ext_rows)
+        n_ext_cols = len(ext_headers) if ext_headers else (
+            len(ext_rows[0]) if ext_rows else 0
+        )
+        non_empty = sum(
+            1 for row in ext_rows for cell in row if str(cell).strip()
+        )
+        total = sum(len(row) for row in ext_rows)
+        fill_rate = non_empty / total if total else 0.0
+
+        meta: list[tuple[str, str]] = [
+            ("Engine", engine_name),
+            ("Caption", pr["caption"] or "(none)"),
+            ("Orphan", "Yes" if pr["is_orphan"] else "No"),
+            ("Page", str(pr["page_num"])),
+            ("Grid Shape", f"{n_ext_rows} x {n_ext_cols}"),
+            ("Fill Rate", f"{fill_rate:.1%}"),
+        ]
+
+        # GT comparison from paddle_gt_diffs
+        if self._has_paddle_gt_diffs:
+            gtd = self.conn.execute(
+                "SELECT * FROM paddle_gt_diffs "
+                "WHERE table_id=? AND engine_name=?",
+                (table_id, engine_name),
+            ).fetchone()
+            if gtd:
+                meta.extend([
+                    ("", ""),
+                    ("GT Cell Accuracy", f"{gtd['cell_accuracy_pct']:.1f}%"
+                     if gtd["cell_accuracy_pct"] is not None else "N/A"),
+                    ("GT Fuzzy Accuracy", f"{gtd['fuzzy_accuracy_pct']:.1f}%"
+                     if gtd["fuzzy_accuracy_pct"] is not None else "N/A"),
+                    ("Splits", str(gtd["num_splits"])),
+                    ("Merges", str(gtd["num_merges"])),
+                    ("Cell Diffs", str(gtd["num_cell_diffs"])),
+                ])
+
+        self._set_meta(meta)
+
+        # Show in vision view with diff
+        short_label = engine_name.replace("paddleocr_", "").replace("pp_structure_", "ppv")
+        self.vis_ext_group.setTitle(f"{short_label} Output")
+        self._setup_vision_view(table_id, ext_headers, ext_rows)
+
+        self._show_content("vision")
+        self.status.showMessage(
+            f"Paddle: {engine_name}  {n_ext_rows}x{n_ext_cols}  fill={fill_rate:.0%}"
+        )
+
+    def _show_paddle_summary(self, item_key: str, table_id: str) -> None:
+        """Show accuracy summary across all paddle engines for a table."""
+        if not self._has_paddle_results:
+            return
+
+        engines = self.conn.execute(
+            "SELECT engine_name FROM paddle_results WHERE table_id=? ORDER BY engine_name",
+            (table_id,),
+        ).fetchall()
+
+        meta = [("Table ID", table_id)]
+        for eng in engines:
+            engine_name = eng["engine_name"]
+            acc_str = "no GT"
+            if self._has_paddle_gt_diffs:
+                gtd = self.conn.execute(
+                    "SELECT cell_accuracy_pct FROM paddle_gt_diffs "
+                    "WHERE table_id=? AND engine_name=?",
+                    (table_id, engine_name),
+                ).fetchone()
+                if gtd and gtd["cell_accuracy_pct"] is not None:
+                    acc_str = f"{gtd['cell_accuracy_pct']:.1f}%"
+            meta.append((engine_name, f"acc={acc_str}"))
+
+        self._set_meta(meta)
+        self._show_content("text")
+        self.text_display.setPlainText(
+            "Click an individual engine to see its output vs reference."
+        )
+        self.status.showMessage(f"Paddle engines for {table_id}")
+
+    # ── reference dropdown and vision view helpers ────────────────────────
+
+    def _gather_ref_sources(self, table_id: str) -> list[dict]:
+        """Gather all available reference sources for a table_id.
+
+        Returns a list of {label, headers, rows} dicts for populating the
+        reference dropdown.
+        """
+        sources: list[dict] = []
+
+        # 1. Ground Truth
+        gt_data = self._load_ground_truth(table_id)
+        if gt_data:
+            sources.append({
+                "label": "Ground Truth",
+                "headers": gt_data[0],
+                "rows": gt_data[1],
+            })
+
+        # 2. Vision transcriber
+        if self._has_vision_results:
+            vr = self.conn.execute(
+                "SELECT headers_json, rows_json FROM vision_agent_results "
+                "WHERE table_id=? AND agent_role='transcriber'",
+                (table_id,),
+            ).fetchone()
+            if vr and vr["headers_json"]:
+                try:
+                    sources.append({
+                        "label": "Vision (transcriber)",
+                        "headers": json.loads(vr["headers_json"]),
+                        "rows": json.loads(vr["rows_json"] or "[]"),
+                    })
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+        # 3. Paddle engines
+        if self._has_paddle_results:
+            paddles = self.conn.execute(
+                "SELECT engine_name, headers_json, rows_json "
+                "FROM paddle_results WHERE table_id=? ORDER BY engine_name",
+                (table_id,),
+            ).fetchall()
+            for pr in paddles:
+                if pr["headers_json"]:
+                    try:
+                        label = pr["engine_name"].replace(
+                            "paddleocr_", "PaddleOCR-"
+                        ).replace("pp_structure_", "PP-Structure-")
+                        sources.append({
+                            "label": label,
+                            "headers": json.loads(pr["headers_json"]),
+                            "rows": json.loads(pr["rows_json"] or "[]"),
+                        })
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+        # 4. Pipeline methods (from extracted_tables — the pipeline winner)
+        if self._has_table_id_col:
+            et = self.conn.execute(
+                "SELECT headers_json, rows_json, extraction_strategy "
+                "FROM extracted_tables WHERE table_id=?",
+                (table_id,),
+            ).fetchone()
+            if et and et["headers_json"]:
+                try:
+                    strat = et["extraction_strategy"] or "pipeline"
+                    sources.append({
+                        "label": f"Pipeline ({strat})",
+                        "headers": json.loads(et["headers_json"]),
+                        "rows": json.loads(et["rows_json"] or "[]"),
+                    })
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+        # 5. Individual pipeline methods
+        if self._has_method_results:
+            methods = self.conn.execute(
+                "SELECT method_name, cell_grid_json FROM method_results "
+                "WHERE table_id=? AND cell_grid_json IS NOT NULL "
+                "ORDER BY quality_score DESC",
+                (table_id,),
+            ).fetchall()
+            for m in methods:
+                try:
+                    grid = json.loads(m["cell_grid_json"])
+                    if grid.get("headers") or grid.get("rows"):
+                        sources.append({
+                            "label": f"Method: {m['method_name']}",
+                            "headers": grid.get("headers", []),
+                            "rows": grid.get("rows", []),
+                        })
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+        return sources
+
+    def _setup_vision_view(
+        self,
+        table_id: str,
+        ext_headers: list[str],
+        ext_rows: list[list[str]],
+    ) -> None:
+        """Set up the vision view with extraction data and populate the
+        reference dropdown.  Called by _show_vision_agent and _show_paddle_result."""
+        # Store current extraction for dropdown refresh
+        self._vis_current_table_id = table_id
+        self._vis_current_ext_headers = ext_headers
+        self._vis_current_ext_rows = ext_rows
+
+        # Gather reference sources
+        self._vis_ref_sources = self._gather_ref_sources(table_id)
+
+        # Populate dropdown (block signals to avoid triggering refresh mid-setup)
+        self.vis_ref_combo.blockSignals(True)
+        self.vis_ref_combo.clear()
+        for src in self._vis_ref_sources:
+            self.vis_ref_combo.addItem(src["label"])
+        if not self._vis_ref_sources:
+            self.vis_ref_combo.addItem("(no references available)")
+        self.vis_ref_combo.blockSignals(False)
+
+        # Trigger initial refresh with first reference
+        self._refresh_vision_diff()
+
+    def _on_ref_dropdown_changed(self, index: int) -> None:
+        """Handle reference dropdown selection change — recalculate diff."""
+        self._refresh_vision_diff()
+
+    def _refresh_vision_diff(self) -> None:
+        """Recalculate char-level diff between current extraction and selected reference."""
+        ext_headers = self._vis_current_ext_headers
+        ext_rows = self._vis_current_ext_rows
+
+        # Get selected reference
+        ref_idx = self.vis_ref_combo.currentIndex()
+        ref_headers: list[str] | None = None
+        ref_rows: list[list[str]] | None = None
+        ref_label = "(none)"
+
+        if 0 <= ref_idx < len(self._vis_ref_sources):
+            src = self._vis_ref_sources[ref_idx]
+            ref_headers = src["headers"]
+            ref_rows = src["rows"]
+            ref_label = src["label"]
+
+        # Populate extracted table with char-level diff
+        _populate_diff_table(
+            self.vis_ext_table, ext_headers, ext_rows,
+            ref_headers, ref_rows,
+        )
+        self.vis_ext_table.verticalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.ResizeToContents
+        )
+
+        # Populate reference table (plain, no diff)
+        if ref_headers is not None and ref_rows is not None:
+            n_ref_cols = len(ref_headers) if ref_headers else (
+                len(ref_rows[0]) if ref_rows else 0
+            )
+            self.vis_ref_group.setTitle(
+                f"Reference: {ref_label} ({len(ref_rows)}x{n_ref_cols})"
+            )
+            _populate_table_widget(
+                self.vis_ref_table, ref_headers, ref_rows,
+            )
+            self.vis_ref_table.verticalHeader().setSectionResizeMode(
+                QHeaderView.ResizeMode.ResizeToContents
+            )
+        else:
+            self.vis_ref_table.clear()
+            self.vis_ref_table.setRowCount(0)
+            self.vis_ref_table.setColumnCount(0)
+            self.vis_ref_group.setTitle("Reference (not available)")
 
     # ── summary views for category nodes ─────────────────────────────────
 
