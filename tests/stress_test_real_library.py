@@ -35,7 +35,10 @@ from pathlib import Path
 
 from zotero_chunk_rag.feature_extraction.captions import find_all_captions
 from zotero_chunk_rag.feature_extraction.debug_db import (
+    clear_paddle_results,
+    clear_vision_results,
     create_extended_tables,
+    fix_duplicate_table_ids,
     write_ground_truth_diff,
     write_paddle_gt_diff,
     write_paddle_result,
@@ -45,6 +48,7 @@ from zotero_chunk_rag.feature_extraction.debug_db import (
 from zotero_chunk_rag.feature_extraction.ground_truth import (
     GROUND_TRUTH_DB_PATH,
     compare_extraction,
+    disambiguate_table_ids,
     make_table_id,
 )
 from zotero_chunk_rag.feature_extraction.paddle_extract import (
@@ -588,7 +592,11 @@ def _extract_with_paddle(
 # Main stress test runner
 # ---------------------------------------------------------------------------
 
-def run_stress_test():
+def run_stress_test(
+    *,
+    local_vision_url: str | None = None,
+    local_vision_model: str | None = None,
+):
     """Run the full stress test and return the report and extractions."""
     logging.basicConfig(
         level=logging.WARNING,
@@ -692,16 +700,24 @@ def run_stress_test():
         reranker = Reranker(alpha=0.7)
         retriever = Retriever(store)
 
-        # Construct VisionAPI if ANTHROPIC_API_KEY is available
+        # Construct vision API (local vLLM or Anthropic)
         vision_api = None
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if api_key:
-            from zotero_chunk_rag.feature_extraction.vision_api import VisionAPI
-            vision_cost_log = test_dir / "vision_costs.json"
-            vision_api = VisionAPI(api_key=api_key, cost_log_path=vision_cost_log)
-            print(f"  Vision API enabled (model: {vision_api._model})")
+        if local_vision_url is not None:
+            from zotero_chunk_rag.feature_extraction.local_vision_api import LocalVisionAPI
+            vision_api = LocalVisionAPI(
+                base_url=local_vision_url,
+                model=local_vision_model or "Qwen/Qwen2.5-VL-7B-Instruct",
+            )
+            print(f"  Local vision API enabled (model: {vision_api._model}, url: {vision_api._base_url})")
         else:
-            print("  Vision API disabled (no ANTHROPIC_API_KEY)")
+            api_key = os.environ.get("ANTHROPIC_API_KEY")
+            if api_key:
+                from zotero_chunk_rag.feature_extraction.vision_api import VisionAPI
+                vision_cost_log = test_dir / "vision_costs.json"
+                vision_api = VisionAPI(api_key=api_key, cost_log_path=vision_cost_log)
+                print(f"  Vision API enabled (model: {vision_api._model})")
+            else:
+                print("  Vision API disabled (no ANTHROPIC_API_KEY)")
 
         t_start = time.perf_counter()
 
@@ -1629,12 +1645,11 @@ def _test_paddle_extraction(
 ) -> list:
     """Compare PaddleOCR extractions against ground truth and write to debug DB.
 
-    For each matched (non-orphan) table in paddle_results, generates a
-    table_id via make_table_id(), attempts a GT comparison via
-    compare_extraction(), and writes both the raw extraction record and the
-    GT diff record to the debug DB.  Returns a list of TestResult objects
-    describing MAJOR and MINOR assertions for inclusion in the stress test
-    report.
+    Uses a two-pass approach per paper: first generates all table_ids, then
+    disambiguates collisions (multi-section papers that restart numbering)
+    before writing.  For GT comparison the base (un-disambiguated) table_id
+    is tried first so that papers whose IDs *don't* collide still match the
+    ground-truth DB exactly.
 
     Args:
         paddle_results: Dict keyed by item_key from _extract_with_paddle().
@@ -1672,9 +1687,22 @@ def _test_paddle_extraction(
             severity="MINOR",
         ))
 
+        # --- Pass 1: generate raw table_ids ---
+        raw_ids: list[tuple[str, int]] = []
         for table_idx, matched in enumerate(matched_tables):
+            caption_for_id = matched.caption if not matched.is_orphan else None
+            raw_id = make_table_id(item_key, caption_for_id, matched.page_num, table_idx)
+            raw_ids.append((raw_id, matched.page_num))
+
+        # --- Pass 1b: disambiguate collisions ---
+        unique_ids = disambiguate_table_ids(raw_ids)
+
+        # --- Pass 2: write rows with unique IDs, run GT comparison ---
+        for table_idx, (matched, table_id) in enumerate(zip(matched_tables, unique_ids)):
+            base_id = raw_ids[table_idx][0]  # un-disambiguated, for GT lookup
+
             result_dict = {
-                "table_id": None,
+                "table_id": table_id,
                 "page_num": matched.page_num,
                 "engine_name": engine_name,
                 "caption": matched.caption,
@@ -1686,33 +1714,21 @@ def _test_paddle_extraction(
                 "raw_output": matched.raw_output,
                 "item_key": item_key,
             }
-
-            if not matched.is_orphan:
-                table_id = make_table_id(
-                    item_key,
-                    matched.caption,
-                    matched.page_num,
-                    table_idx,
-                )
-                result_dict["table_id"] = table_id
-            else:
-                table_id = make_table_id(
-                    item_key,
-                    None,
-                    matched.page_num,
-                    table_idx,
-                )
-                result_dict["table_id"] = table_id
-
             write_paddle_result(str(db_path), result_dict)
 
-            if table_id not in gt_table_ids:
+            # Try GT lookup with base_id first (matches GT DB), then table_id
+            gt_id = None
+            if base_id in gt_table_ids:
+                gt_id = base_id
+            elif table_id in gt_table_ids:
+                gt_id = table_id
+            if gt_id is None:
                 continue
 
             try:
                 comparison = compare_extraction(
                     GROUND_TRUTH_DB_PATH,
-                    table_id,
+                    gt_id,
                     matched.headers,
                     matched.rows,
                 )
@@ -1763,19 +1779,20 @@ def _test_paddle_extraction(
                 severity="MINOR",
             ))
 
+    # --- GT coverage check (uses base IDs for matching) ---
     matched_gt_ids = set()
     for item_key, matched_tables in paddle_results.items():
         for table_idx, matched in enumerate(matched_tables):
             if matched.is_orphan:
                 continue
-            table_id = make_table_id(
+            base_id = make_table_id(
                 item_key,
                 matched.caption,
                 matched.page_num,
                 table_idx,
             )
-            if table_id in gt_table_ids:
-                matched_gt_ids.add(table_id)
+            if base_id in gt_table_ids:
+                matched_gt_ids.add(base_id)
 
     for gt_id in gt_table_ids:
         item_key = gt_id.split("_table_")[0].split("_orphan_")[0]
@@ -2000,14 +2017,19 @@ def write_debug_database(
                 (item_key, pg.page_num, pg.markdown),
             )
 
-        # --- tables ---
-        for tab in extraction.tables:
+        # --- tables (with disambiguation) ---
+        # Generate all raw IDs first, then disambiguate collisions
+        raw_table_ids = [
+            (make_table_id(item_key, tab.caption, tab.page_num, tab.table_index),
+             tab.page_num)
+            for tab in extraction.tables
+        ]
+        unique_table_ids = disambiguate_table_ids(raw_table_ids)
+
+        for tab, table_id in zip(extraction.tables, unique_table_ids):
             non_empty = sum(1 for row in tab.rows for cell in row if cell.strip())
             total_cells = sum(len(row) for row in tab.rows)
             fill_rate = non_empty / total_cells if total_cells else 0.0
-            table_id = make_table_id(
-                item_key, tab.caption, tab.page_num, tab.table_index
-            )
             con.execute(
                 "INSERT INTO extracted_tables (item_key, table_index, page_num, "
                 "caption, caption_position, num_rows, num_cols, non_empty_cells, "
@@ -2040,40 +2062,57 @@ def write_debug_database(
         # --- ground truth diffs ---
         if Path(GROUND_TRUTH_DB_PATH).exists():
             run_id = time.strftime("%Y-%m-%dT%H:%M:%S")
-            for tab in extraction.tables:
+            for tab_idx, (tab, table_id) in enumerate(
+                zip(extraction.tables, unique_table_ids)
+            ):
                 if tab.artifact_type is not None:
                     continue
-                table_id = make_table_id(
-                    item_key, tab.caption, tab.page_num, tab.table_index
-                )
+                base_id = raw_table_ids[tab_idx][0]
+                # Try base_id for GT lookup (GT DB uses un-disambiguated IDs)
+                gt_id = base_id if base_id != table_id else table_id
                 try:
                     result = compare_extraction(
-                        GROUND_TRUTH_DB_PATH, table_id, tab.headers, tab.rows
+                        GROUND_TRUTH_DB_PATH, gt_id, tab.headers, tab.rows
                     )
                 except KeyError:
-                    continue
+                    if gt_id != table_id:
+                        try:
+                            result = compare_extraction(
+                                GROUND_TRUTH_DB_PATH, table_id, tab.headers, tab.rows
+                            )
+                        except KeyError:
+                            continue
+                    else:
+                        continue
                 write_ground_truth_diff(con, table_id, run_id, result)
 
         # --- vision extraction details ---
         if extraction.vision_details:
-            for vi, vd in enumerate(extraction.vision_details):
-                table_id = make_table_id(
-                    item_key,
-                    vd["text_layer_caption"],
-                    vd["page_num"],
-                    vi,
-                )
-                # Compute GT accuracy for the raw vision output
+            # Pass 1: generate raw IDs, then disambiguate collisions
+            raw_vision_ids = [
+                (make_table_id(item_key, vd["text_layer_caption"], vd["page_num"], vi),
+                 vd["page_num"])
+                for vi, vd in enumerate(extraction.vision_details)
+            ]
+            unique_vision_ids = disambiguate_table_ids(raw_vision_ids)
+
+            for vi, (vd, table_id) in enumerate(
+                zip(extraction.vision_details, unique_vision_ids)
+            ):
+                base_id = raw_vision_ids[vi][0]
+                # Compute GT accuracy — try base_id first, then disambiguated
                 cell_accuracy_pct = None
                 if Path(GROUND_TRUTH_DB_PATH).exists():
-                    try:
-                        gt_result = compare_extraction(
-                            GROUND_TRUTH_DB_PATH, table_id,
-                            vd["headers"], vd["rows"],
-                        )
-                        cell_accuracy_pct = gt_result.cell_accuracy_pct
-                    except KeyError:
-                        pass
+                    for try_id in (base_id, table_id):
+                        try:
+                            gt_result = compare_extraction(
+                                GROUND_TRUTH_DB_PATH, try_id,
+                                vd["headers"], vd["rows"],
+                            )
+                            cell_accuracy_pct = gt_result.cell_accuracy_pct
+                            break
+                        except KeyError:
+                            continue
                 write_vision_agent_result(
                     con,
                     table_id=table_id,
@@ -2308,8 +2347,294 @@ def _build_vision_extraction_report(db_path: Path) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Selective re-run helpers
+# ---------------------------------------------------------------------------
+
+
+def _load_corpus_items():
+    """Load Zotero items for the corpus (phase 1 only)."""
+    from zotero_chunk_rag.zotero_client import ZoteroClient
+    from zotero_chunk_rag.config import Config
+
+    config = Config.load()
+    zotero = ZoteroClient(config.zotero_data_dir)
+    all_items = zotero.get_all_items_with_pdfs()
+    items_by_key = {i.item_key: i for i in all_items}
+
+    corpus_items = []
+    skipped = []
+    for item_key, short_name, reason, gt in CORPUS:
+        item = items_by_key.get(item_key)
+        if item is None:
+            skipped.append(f"  SKIP {item_key} ({short_name}): not in library")
+            continue
+        if not item.pdf_path or not item.pdf_path.exists():
+            skipped.append(f"  SKIP {item_key} ({short_name}): PDF missing")
+            continue
+        corpus_items.append((item, short_name, gt))
+    return corpus_items, skipped
+
+
+def run_paddle_only(
+    engines: list[str],
+    paper_filter: str | None,
+    db_path: Path,
+):
+    """Re-run paddle extraction for specific engine(s), replacing old rows."""
+    corpus_items, skipped = _load_corpus_items()
+    for msg in skipped:
+        print(msg)
+
+    if paper_filter:
+        corpus_items = [
+            (item, sn, gt) for item, sn, gt in corpus_items
+            if item.item_key == paper_filter
+        ]
+        if not corpus_items:
+            print(f"ERROR: paper {paper_filter} not found in corpus")
+            sys.exit(1)
+
+    print(f"\nPaddle-only re-run: {len(corpus_items)} papers, engines={engines}")
+
+    for engine_name in engines:
+        # Clear old rows for this scope
+        deleted = clear_paddle_results(
+            str(db_path),
+            engine_name=engine_name,
+            item_key=paper_filter,
+        )
+        print(f"  Cleared {deleted} old rows for {engine_name}"
+              + (f" / {paper_filter}" if paper_filter else ""))
+
+        # Also clear paddle test_results from the DB
+        with sqlite3.connect(str(db_path)) as con:
+            if paper_filter:
+                con.execute(
+                    "DELETE FROM test_results WHERE test_name LIKE 'paddle-%' AND paper = ?",
+                    (paper_filter,),
+                )
+            else:
+                con.execute("DELETE FROM test_results WHERE test_name LIKE 'paddle-%'")
+
+        # Extract
+        print(f"  Running {engine_name}...")
+        result = _extract_with_paddle(corpus_items, engine_name=engine_name)
+
+        # Write + GT comparison
+        print(f"  Writing results and GT comparisons...")
+        test_results = _test_paddle_extraction(result, db_path, engine_name=engine_name)
+
+        # Write test_results into the DB
+        with sqlite3.connect(str(db_path)) as con:
+            for tr in test_results:
+                con.execute(
+                    "INSERT INTO test_results (test_name, paper, passed, detail, severity) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (tr.test_name, tr.paper, int(tr.passed), tr.detail, tr.severity),
+                )
+
+        passed = sum(1 for t in test_results if t.passed)
+        print(f"  {engine_name}: {passed}/{len(test_results)} assertions passed")
+
+    print(f"\nDone. Results updated in {db_path}")
+
+
+def run_vision_only(
+    paper_filter: str | None,
+    db_path: Path,
+    *,
+    local_vision_url: str | None = None,
+    local_vision_model: str | None = None,
+):
+    """Re-run vision API extraction, replacing old rows."""
+    corpus_items, skipped = _load_corpus_items()
+    for msg in skipped:
+        print(msg)
+
+    if paper_filter:
+        corpus_items = [
+            (item, sn, gt) for item, sn, gt in corpus_items
+            if item.item_key == paper_filter
+        ]
+        if not corpus_items:
+            print(f"ERROR: paper {paper_filter} not found in corpus")
+            sys.exit(1)
+
+    from zotero_chunk_rag.pdf_processor import extract_document, resolve_pending_vision
+
+    if local_vision_url is not None:
+        from zotero_chunk_rag.feature_extraction.local_vision_api import LocalVisionAPI
+        vision_api = LocalVisionAPI(
+            base_url=local_vision_url,
+            model=local_vision_model or "Qwen/Qwen2.5-VL-7B-Instruct",
+        )
+        print(f"\nVision-only re-run (local): {len(corpus_items)} papers, model={vision_api._model}")
+    else:
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            print("ERROR: ANTHROPIC_API_KEY not set (use --local-vision for local vLLM)")
+            sys.exit(1)
+        from zotero_chunk_rag.feature_extraction.vision_api import VisionAPI
+        vision_api = VisionAPI(api_key=api_key)
+        print(f"\nVision-only re-run: {len(corpus_items)} papers, model={vision_api._model}")
+
+    # Clear old vision rows
+    for item, sn, gt in corpus_items:
+        deleted = clear_vision_results(str(db_path), item_key=item.item_key)
+        if deleted:
+            print(f"  Cleared {deleted} old vision rows for {sn}")
+
+    # Extract documents (needed for vision specs)
+    doc_data: dict[str, tuple] = {}
+    for item, short_name, gt in corpus_items:
+        print(f"  Extracting [{short_name}]...", end=" ", flush=True)
+        extraction = extract_document(
+            item.pdf_path,
+            write_images=True,
+            images_dir=Path(__file__).parent.parent / "_stress_test_figures" / item.item_key,
+            vision_api=vision_api,
+        )
+        n_pending = len(extraction.pending_vision.specs) if extraction.pending_vision else 0
+        print(f"{n_pending} vision specs")
+        doc_data[item.item_key] = (extraction, item, short_name, gt)
+
+    # Resolve vision batch
+    total_specs = sum(
+        len(ext.pending_vision.specs)
+        for ext, _, _, _ in doc_data.values()
+        if ext.pending_vision
+    )
+    print(f"  Resolving vision batch: {total_specs} specs...")
+    resolve_pending_vision(
+        {k: v[0] for k, v in doc_data.items()},
+        vision_api,
+    )
+
+    # Write to DB
+    with sqlite3.connect(str(db_path)) as con:
+        for item_key, (extraction, item, short_name, gt) in doc_data.items():
+            if not extraction.vision_details:
+                continue
+
+            raw_vision_ids = [
+                (make_table_id(item_key, vd["text_layer_caption"], vd["page_num"], vi),
+                 vd["page_num"])
+                for vi, vd in enumerate(extraction.vision_details)
+            ]
+            unique_vision_ids = disambiguate_table_ids(raw_vision_ids)
+
+            for vi, (vd, table_id) in enumerate(
+                zip(extraction.vision_details, unique_vision_ids)
+            ):
+                base_id = raw_vision_ids[vi][0]
+                cell_accuracy_pct = None
+                if Path(GROUND_TRUTH_DB_PATH).exists():
+                    for try_id in (base_id, table_id):
+                        try:
+                            gt_result = compare_extraction(
+                                GROUND_TRUTH_DB_PATH, try_id,
+                                vd["headers"], vd["rows"],
+                            )
+                            cell_accuracy_pct = gt_result.cell_accuracy_pct
+                            break
+                        except KeyError:
+                            continue
+
+                write_vision_agent_result(
+                    con,
+                    table_id=table_id,
+                    agent_idx=0,
+                    model="claude-haiku-4-5-20251001",
+                    raw_response=vd["raw_response"],
+                    headers_json=json.dumps(vd["headers"]),
+                    rows_json=json.dumps(vd["rows"]),
+                    table_label=vd["table_label"],
+                    is_incomplete=vd["is_incomplete"],
+                    incomplete_reason=vd["incomplete_reason"],
+                    parse_success=vd["parse_success"],
+                    execution_time_ms=None,
+                    agent_role="transcriber",
+                    footnotes=vd["footnotes"],
+                    cell_accuracy_pct=cell_accuracy_pct,
+                )
+                write_vision_run_detail(con, table_id=table_id, details_dict=vd)
+
+            print(f"  {short_name}: {len(extraction.vision_details)} vision results written")
+
+    print(f"\nDone. Vision results updated in {db_path}")
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
+def _build_argparser():
+    import argparse
+    p = argparse.ArgumentParser(
+        description="Stress test: real-world researcher workflow simulation",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""\
+Selective re-run examples:
+  # Re-run only pp_structure_v3, replace its rows in the existing DB
+  python stress_test_real_library.py --paddle-only --engine pp_structure_v3
+
+  # Re-run both paddle engines for one paper
+  python stress_test_real_library.py --paddle-only --paper SCPXVBLY
+
+  # Re-run vision API for all papers
+  python stress_test_real_library.py --vision-only
+
+  # Run with local vLLM vision (Qwen2.5-VL-7B)
+  python stress_test_real_library.py --local-vision
+
+  # Run with local vLLM and a different model
+  python stress_test_real_library.py --local-vision --vision-model InternVL2_5-8B
+
+  # Fix duplicate table_ids in existing DB (no extraction)
+  python stress_test_real_library.py --fix-ids
+""",
+    )
+    p.add_argument(
+        "--paddle-only", action="store_true",
+        help="Only re-run paddle extraction (skip full pipeline, vision, indexing)",
+    )
+    p.add_argument(
+        "--engine", action="append", dest="engines",
+        help="Paddle engine(s) to run (default: both). Repeatable.",
+    )
+    p.add_argument(
+        "--vision-only", action="store_true",
+        help="Only re-run vision API extraction (requires ANTHROPIC_API_KEY or --local-vision)",
+    )
+    p.add_argument(
+        "--local-vision", action="store_true",
+        help="Use local vLLM server instead of Anthropic API for vision extraction",
+    )
+    p.add_argument(
+        "--vision-model",
+        default="Qwen/Qwen2.5-VL-7B-Instruct",
+        help="Model name for local vision (default: Qwen/Qwen2.5-VL-7B-Instruct)",
+    )
+    p.add_argument(
+        "--vision-url",
+        default="http://localhost:8118/v1",
+        help="vLLM server URL (default: http://localhost:8118/v1)",
+    )
+    p.add_argument(
+        "--paper",
+        help="Only process this paper (item_key, e.g. SCPXVBLY)",
+    )
+    p.add_argument(
+        "--fix-ids", action="store_true",
+        help="Fix duplicate table_ids in existing DB and exit (no extraction)",
+    )
+    p.add_argument(
+        "--db", type=Path,
+        default=Path(__file__).parent.parent / "_stress_test_debug.db",
+        help="Path to debug database (default: _stress_test_debug.db)",
+    )
+    return p
+
 
 if __name__ == "__main__":
     # Fix Windows console encoding
@@ -2317,19 +2642,62 @@ if __name__ == "__main__":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
+    args = _build_argparser().parse_args()
+
+    # --- Mode: fix duplicate IDs only ---
+    if args.fix_ids:
+        if not args.db.exists():
+            print(f"ERROR: database not found at {args.db}")
+            sys.exit(1)
+        print(f"Fixing duplicate table_ids in {args.db}...")
+        stats = fix_duplicate_table_ids(str(args.db))
+        for table, count in stats.items():
+            print(f"  {table}: {count} rows updated")
+        total = sum(stats.values())
+        if total:
+            print(f"\nFixed {total} duplicate IDs.")
+        else:
+            print("\nNo duplicates found.")
+        sys.exit(0)
+
+    # --- Mode: paddle-only re-run ---
+    if args.paddle_only:
+        if not args.db.exists():
+            print(f"ERROR: database not found at {args.db}")
+            sys.exit(1)
+        engines = args.engines or ["pp_structure_v3", "paddleocr_vl_1.5"]
+        run_paddle_only(engines, args.paper, args.db)
+        sys.exit(0)
+
+    # --- Mode: vision-only re-run ---
+    if args.vision_only:
+        if not args.db.exists():
+            print(f"ERROR: database not found at {args.db}")
+            sys.exit(1)
+        run_vision_only(
+            args.paper, args.db,
+            local_vision_url=args.vision_url if args.local_vision else None,
+            local_vision_model=args.vision_model if args.local_vision else None,
+        )
+        sys.exit(0)
+
+    # --- Mode: full stress test (default) ---
     print("=" * 70)
     print("  STRESS TEST: zotero-chunk-rag")
     print("  Real papers, real searches, real expectations")
     print("=" * 70)
 
-    report, extractions, paddle_results = run_stress_test()
+    report, extractions, paddle_results = run_stress_test(
+        local_vision_url=args.vision_url if args.local_vision else None,
+        local_vision_model=args.vision_model if args.local_vision else None,
+    )
 
     base_dir = Path(__file__).parent.parent
     report_path = base_dir / "STRESS_TEST_REPORT.md"
 
     # Write debug database first so db_path can be set on report before rendering
     if extractions:
-        db_path = base_dir / "_stress_test_debug.db"
+        db_path = args.db
         write_debug_database(extractions, report, db_path)
         print(f"Debug database saved to: {db_path} ({db_path.stat().st_size:,} bytes)")
         print(f"  Query with: sqlite3 {db_path} \"SELECT short_name, quality_grade FROM papers\"")

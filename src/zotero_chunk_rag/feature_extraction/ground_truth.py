@@ -101,6 +101,36 @@ def make_table_id(
     return f"{paper_key}_orphan_p{page_num}_t{table_index}"
 
 
+def disambiguate_table_ids(
+    id_page_pairs: list[tuple[str, int]],
+) -> list[str]:
+    """Append ``_p{page}`` to duplicate table_ids for disambiguation.
+
+    Papers with multi-section numbering (e.g. multiple "TABLE 1" in different
+    sections) produce colliding IDs from :func:`make_table_id`.  This function
+    detects collisions and appends ``_p{page}`` to all occurrences of a
+    colliding base ID.  IDs that already carry a ``_p\\d+`` suffix
+    (continuation tables) are left unchanged.  Non-colliding IDs pass through
+    untouched.
+
+    Args:
+        id_page_pairs: List of ``(table_id, page_num)`` in document order.
+
+    Returns:
+        List of (possibly disambiguated) table_ids, same length and order.
+    """
+    from collections import Counter
+
+    base_counts = Counter(tid for tid, _ in id_page_pairs)
+    result: list[str] = []
+    for tid, page in id_page_pairs:
+        if base_counts[tid] > 1 and not re.search(r"_p\d+$", tid):
+            result.append(f"{tid}_p{page}")
+        else:
+            result.append(tid)
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Insert / query helpers
 # ---------------------------------------------------------------------------
