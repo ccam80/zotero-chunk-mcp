@@ -84,40 +84,41 @@ def _bold_font() -> QFont:
 # -- data loading -------------------------------------------------------------
 
 
-def _load_chroma_data(chroma_path: Path) -> dict:
-    """Load all items from the ChromaDB chunks collection.
+_LOADER_SCRIPT = r'''
+import pickle, sys
 
-    Returns a dict keyed by doc_id, each value being:
-        {
-            "title": str,
-            "authors": str,
-            "year": str,
-            "collections": str,
-            "quality_grade": str,
-            "tables": [{"id": str, "meta": dict, "document": str}, ...],
-            "figures": [{"id": str, "meta": dict, "document": str}, ...],
-            "chunks": [{"id": str, "meta": dict, "document": str}, ...],
-        }
-    """
-    import chromadb
-    from chromadb.config import Settings
+chroma_path = sys.argv[1]
+out_path = sys.argv[2]
 
-    client = chromadb.PersistentClient(
-        path=str(chroma_path),
-        settings=Settings(anonymized_telemetry=False),
+import chromadb
+from chromadb.config import Settings
+
+client = chromadb.PersistentClient(
+    path=chroma_path,
+    settings=Settings(anonymized_telemetry=False),
+)
+collection = client.get_collection("chunks")
+total = collection.count()
+print(f"  {total} chunks in index", flush=True)
+
+papers = {}
+docs_by_id = {}
+PAGE = 5000
+
+for offset in range(0, total, PAGE):
+    result = collection.get(
+        include=["metadatas", "documents"],
+        limit=PAGE,
+        offset=offset,
     )
-    collection = client.get_collection("chunks")
-    result = collection.get(include=["documents", "metadatas"])
-
-    papers: dict[str, dict] = {}
-
     ids = result["ids"] or []
-    documents = result["documents"] or []
     metadatas = result["metadatas"] or []
+    documents = result["documents"] or []
 
-    for item_id, doc, meta in zip(ids, documents, metadatas):
+    for item_id, meta, doc in zip(ids, metadatas, documents):
         if not meta:
             continue
+        docs_by_id[item_id] = doc or ""
         doc_id = meta.get("doc_id", "unknown")
         if doc_id not in papers:
             papers[doc_id] = {
@@ -132,7 +133,7 @@ def _load_chroma_data(chroma_path: Path) -> dict:
             }
         paper = papers[doc_id]
         chunk_type = meta.get("chunk_type", "text")
-        entry = {"id": item_id, "meta": meta, "document": doc or ""}
+        entry = {"id": item_id, "meta": meta}
 
         if chunk_type == "table":
             paper["tables"].append(entry)
@@ -141,29 +142,66 @@ def _load_chroma_data(chroma_path: Path) -> dict:
         else:
             paper["chunks"].append(entry)
 
-    # Sort artifacts within each paper
-    for paper in papers.values():
-        paper["tables"].sort(key=lambda x: (
-            x["meta"].get("page_num", 0),
-            x["meta"].get("table_index", 0),
-        ))
-        paper["figures"].sort(key=lambda x: (
-            x["meta"].get("page_num", 0),
-            x["meta"].get("figure_index", 0),
-        ))
-        paper["chunks"].sort(key=lambda x: (
-            x["meta"].get("page_num", 0),
-            x["meta"].get("chunk_index", 0),
-        ))
+for paper in papers.values():
+    paper["tables"].sort(key=lambda x: (
+        x["meta"].get("page_num", 0), x["meta"].get("table_index", 0)))
+    paper["figures"].sort(key=lambda x: (
+        x["meta"].get("page_num", 0), x["meta"].get("figure_index", 0)))
+    paper["chunks"].sort(key=lambda x: (
+        x["meta"].get("page_num", 0), x["meta"].get("chunk_index", 0)))
 
-    return papers
+print(f"  {len(papers)} papers loaded", flush=True)
+
+with open(out_path, "wb") as f:
+    pickle.dump((papers, docs_by_id), f, protocol=pickle.HIGHEST_PROTOCOL)
+'''
+
+
+def _load_chroma_data(chroma_path: Path) -> tuple[dict, dict]:
+    """Load ChromaDB data in a subprocess to avoid SQLite conflicts with PyQt6.
+
+    Both ChromaDB and PyQt6 bundle their own SQLite which segfaults when
+    loaded in the same process. We run chromadb queries in a clean
+    subprocess (no PyQt6) and transfer results via pickle.
+    """
+    import pickle
+    import subprocess
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as f:
+        tmp_path = f.name
+
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", _LOADER_SCRIPT, str(chroma_path), tmp_path],
+            capture_output=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"ChromaDB loader exited with code {result.returncode}")
+
+        with open(tmp_path, "rb") as f:
+            papers, docs_by_id = pickle.load(f)
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+    return papers, docs_by_id
 
 
 # -- main window --------------------------------------------------------------
 
 
 class IndexViewer(QMainWindow):
-    def __init__(self, chroma_path: Path, zotero_dir: Path):
+    def __init__(
+        self,
+        chroma_path: Path,
+        zotero_dir: Path,
+        *,
+        papers: dict,
+        docs_by_id: dict[str, str],
+    ):
         super().__init__()
         self.chroma_path = chroma_path
         self.zotero_dir = zotero_dir
@@ -175,8 +213,9 @@ class IndexViewer(QMainWindow):
         self._zotero_client = None
         self._pdf_cache: dict[str, Path | None] = {}  # doc_id -> pdf_path
 
-        # Load data
-        self.papers = _load_chroma_data(chroma_path)
+        # Pre-loaded data (ChromaDB must be queried before QApplication)
+        self.papers = papers
+        self._docs_by_id = docs_by_id
 
         # -- layout -----------------------------------------------------------
         central = QWidget()
@@ -305,6 +344,12 @@ class IndexViewer(QMainWindow):
         elif kind == "chunk":
             self._show_chunk(data[1], data[2])
 
+    # -- on-demand document loading -------------------------------------------
+
+    def _get_document(self, chunk_id: str) -> str:
+        """Look up the document text for a chunk ID."""
+        return self._docs_by_id.get(chunk_id, "")
+
     # -- clear content area ---------------------------------------------------
 
     def _clear_content(self) -> None:
@@ -367,7 +412,7 @@ class IndexViewer(QMainWindow):
         text_edit = QTextEdit()
         text_edit.setReadOnly(True)
         text_edit.setFont(QFont("Consolas", 10))
-        text_edit.setPlainText(tbl["document"])
+        text_edit.setPlainText(self._get_document(tbl["id"]))
         splitter.addWidget(text_edit)
 
         # Right: PDF page render
@@ -406,7 +451,7 @@ class IndexViewer(QMainWindow):
         text_edit = QTextEdit()
         text_edit.setReadOnly(True)
         text_edit.setFont(QFont("Consolas", 10))
-        text_edit.setPlainText(fig["document"])
+        text_edit.setPlainText(self._get_document(fig["id"]))
         splitter.addWidget(text_edit)
 
         # Right: figure image
@@ -462,7 +507,7 @@ class IndexViewer(QMainWindow):
         text_edit = QTextEdit()
         text_edit.setReadOnly(True)
         text_edit.setFont(QFont("Consolas", 10))
-        text_edit.setPlainText(chunk["document"])
+        text_edit.setPlainText(self._get_document(chunk["id"]))
         self.content_layout.addWidget(text_edit)
 
     # -- PDF rendering --------------------------------------------------------
@@ -587,9 +632,16 @@ def main():
         print(f"ChromaDB directory not found: {chroma_path}", file=sys.stderr)
         sys.exit(1)
 
+    # Load ALL data from ChromaDB BEFORE creating QApplication.
+    # Both ChromaDB and PyQt6 bundle their own SQLite which segfaults
+    # if ChromaDB queries run after QApplication is created.
+    print(f"Loading index from {chroma_path} ...", flush=True)
+    papers, docs_by_id = _load_chroma_data(chroma_path)
+    print(f"Loaded {len(papers)} papers.", flush=True)
+
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
-    viewer = IndexViewer(chroma_path, zotero_dir)
+    viewer = IndexViewer(chroma_path, zotero_dir, papers=papers, docs_by_id=docs_by_id)
     viewer.show()
     sys.exit(app.exec())
 

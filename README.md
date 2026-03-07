@@ -1,21 +1,36 @@
 # DeepZotero
 
-Passage-level semantic search over a Zotero library. PDFs are extracted, split into overlapping text chunks, embedded via Gemini (or a local model), and stored in ChromaDB. An MCP server exposes the index to Claude Code (or any MCP client) as eleven tool calls covering semantic search, boolean search, context expansion, citation graph lookup, and index inspection.
+Semantic search over a Zotero library. PDFs are extracted (text, tables, figures), chunked, embedded, and stored in ChromaDB. An MCP server exposes the index to Claude Code (or any MCP client) as 13 tools for semantic search, boolean search, table/figure search, context expansion, citation graph lookup, indexing, and cost tracking.
+
+## What it extracts
+
+- **Text** — section-aware chunks with overlap, classified by document section (abstract, methods, results, etc.)
+- **Tables** — vision-based extraction via Claude Haiku 4.5. Each table is rendered to PNG and transcribed to structured markdown (headers, rows, footnotes). Falls back to PyMuPDF heuristics if vision is disabled.
+- **Figures** — detected with captions, extracted as PNGs, searchable by caption text.
+
+## Requirements
+
+- Python 3.10+
+- A [Gemini API key](https://aistudio.google.com/app/apikey) for embeddings (unless using `embedding_provider: "local"`)
+- An [Anthropic API key](https://console.anthropic.com/) for vision-based table extraction (optional but recommended)
+- A Zotero installation with PDFs in `storage/`
 
 ## Install
 
 ```bash
 python -m venv .venv
-.venv\Scripts\python.exe -m pip install -e .
+.venv/Scripts/python.exe -m pip install -e .
 ```
 
-Requires Python 3.10+ and a [Gemini API key](https://aistudio.google.com/app/apikey) (unless using `embedding_provider: "local"`).
+For vision table extraction:
+
+```bash
+.venv/Scripts/python.exe -m pip install -e ".[vision]"
+```
 
 ## Setup
 
 ### 1. Configuration
-
-Copy the example config and fill in your API key:
 
 ```bash
 mkdir -p ~/.config/deep-zotero
@@ -28,169 +43,22 @@ Edit `~/.config/deep-zotero/config.json`:
 {
     "zotero_data_dir": "~/Zotero",
     "chroma_db_path": "~/.local/share/deep-zotero/chroma",
-    "embedding_model": "gemini-embedding-001",
-    "embedding_dimensions": 768,
-    "chunk_size": 400,
-    "chunk_overlap": 100,
-    "gemini_api_key": "YOUR_GEMINI_KEY_HERE",
-    "anthropic_api_key": "YOUR_ANTHROPIC_KEY_HERE"
+    "gemini_api_key": "YOUR_GEMINI_KEY",
+    "anthropic_api_key": "YOUR_ANTHROPIC_KEY"
 }
 ```
 
-Alternatively, set `GEMINI_API_KEY` and `ANTHROPIC_API_KEY` as environment variables and omit those fields from the file.
+All other fields have sensible defaults. You can also set `GEMINI_API_KEY` and `ANTHROPIC_API_KEY` as environment variables instead.
 
-#### Configuration reference
+### 2. API keys
 
-**Zotero**
+**Gemini (required for default embeddings):**
+Get a key at [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey). Set it as `gemini_api_key` in config or `GEMINI_API_KEY` env var. If you don't want to use Gemini, set `"embedding_provider": "local"` to use ChromaDB's built-in all-MiniLM-L6-v2 model (no API key needed, lower quality).
 
-| Field | Default | Description |
-|---|---|---|
-| `zotero_data_dir` | `~/Zotero` | Path to Zotero's data directory (contains `zotero.sqlite` and `storage/`). |
-| `chroma_db_path` | `~/.local/share/deep-zotero/chroma` | Where the ChromaDB vector index is stored on disk. |
+**Anthropic (required for vision table extraction):**
+Get a key at [console.anthropic.com](https://console.anthropic.com/). Set it as `anthropic_api_key` in config or `ANTHROPIC_API_KEY` env var. Without this key, tables are still extracted via PyMuPDF heuristics but accuracy on complex tables is lower. Vision extraction uses the Anthropic Batch API with Claude Haiku 4.5 — cost is roughly $0.016 per table, with prompt caching reducing cost on large batches.
 
-**Embedding**
-
-| Field | Default | Description |
-|---|---|---|
-| `embedding_provider` | `"gemini"` | `"gemini"` for Gemini API embeddings, or `"local"` for ChromaDB's built-in all-MiniLM-L6-v2 (no API key required). |
-| `embedding_model` | `"gemini-embedding-001"` | Gemini embedding model name. Only used when `embedding_provider` is `"gemini"`. |
-| `embedding_dimensions` | `768` | Output dimensionality of the embedding vectors. See notes below. |
-| `gemini_api_key` | `null` | Gemini API key. Falls back to the `GEMINI_API_KEY` environment variable if null. |
-| `embedding_timeout` | `120.0` | Timeout in seconds for embedding API calls. |
-| `embedding_max_retries` | `3` | Maximum retries for failed embedding calls. |
-
-**Chunking**
-
-| Field | Default | Description |
-|---|---|---|
-| `chunk_size` | `400` | Target chunk size in tokens (estimated at 4 characters per token). |
-| `chunk_overlap` | `100` | Overlap between consecutive chunks in tokens. |
-
-**Reranking**
-
-| Field | Default | Description |
-|---|---|---|
-| `rerank_enabled` | `true` | Enable composite score reranking. Set to `false` for raw similarity ranking. |
-| `rerank_alpha` | `0.7` | Similarity exponent (0-1). Lower values give metadata weights more influence. |
-| `rerank_section_weights` | `null` | Override default section weights (see below). |
-| `rerank_journal_weights` | `null` | Override default journal quartile weights. |
-| `oversample_multiplier` | `3` | Oversample factor applied before reranking. Higher values improve reranking quality at the cost of retrieval latency. |
-| `oversample_topic_factor` | `5` | Additional oversample factor applied only for `search_topic`. |
-| `stats_sample_limit` | `10000` | Maximum chunks sampled when computing `get_index_stats`. |
-
-**Vision**
-
-| Field | Default | Description |
-|---|---|---|
-| `vision_enabled` | `true` | Enable vision-based table extraction via Claude Haiku during indexing. |
-| `vision_model` | `"claude-haiku-4-5-20251001"` | Anthropic model used for table transcription. |
-| `anthropic_api_key` | `null` | Anthropic API key. Falls back to the `ANTHROPIC_API_KEY` environment variable if null. |
-
-**OCR**
-
-| Field | Default | Description |
-|---|---|---|
-| `ocr_language` | `"eng"` | Tesseract language code passed through to pymupdf-layout for image-only pages (e.g. `"fra"` for French, `"deu"` for German). |
-
-**OpenAlex**
-
-| Field | Default | Description |
-|---|---|---|
-| `openalex_email` | `null` | Optional email for the OpenAlex polite pool (10 req/sec vs 1 req/sec without). Falls back to the `OPENALEX_EMAIL` environment variable if null. |
-
-#### Embedding dimensions
-
-`gemini-embedding-001` supports output dimensions from 64 to 3072. The default 768 is a good general-purpose setting.
-
-- **Lower values (256-512):** Faster search, smaller index on disk, slightly less precise retrieval. Suitable if your library is small or queries are topically broad.
-- **Higher values (1024-3072):** More expressive embeddings that can distinguish finer semantic differences. Diminishing returns above 1024 for most academic search tasks, and the index grows linearly with dimension count.
-
-Changing this value after indexing requires a full re-index (`--force`), since stored vectors must all share the same dimensionality.
-
-#### Chunk size and overlap
-
-`chunk_size` controls how much text (in approximate tokens) each passage contains. `chunk_overlap` controls how many tokens are shared between consecutive chunks.
-
-- **Smaller chunks (200-300 tokens):** Each result is a tighter, more focused passage. Better for locating specific claims or definitions. Risk: a single idea may be split across chunks, reducing retrieval quality for broader questions.
-- **Larger chunks (500-800 tokens):** Each result carries more context. Better for questions about methods or arguments that span multiple sentences. Risk: irrelevant surrounding text dilutes the embedding, making it harder to match precise queries.
-- **Overlap** ensures that sentence-boundary content is not lost between chunks. Setting overlap to 25-30% of chunk size (the default ratio of 100/400) is a reasonable starting point. Too little overlap risks splitting key sentences at chunk boundaries; too much wastes embedding API calls on redundant text.
-
-Like embedding dimensions, changing chunk size or overlap requires a full re-index.
-
-### 2. Initial indexing
-
-Index your full Zotero library (processes all PDFs, skips items without PDF attachments):
-
-```bash
-python scripts\index_library.py -v
-```
-
-To test with a subset first:
-
-```bash
-python scripts\index_library.py --limit 10 -v
-```
-
-This reads the Zotero SQLite database (read-only; safe to run while Zotero is open), extracts text from each PDF, chunks it, embeds via Gemini, and stores everything in ChromaDB. If vision extraction is enabled and an Anthropic API key is present, tables are also transcribed during this step.
-
-### 3. Register the MCP server
-
-Add to your Claude Code settings (`~/.claude/settings.json`) under `mcpServers`:
-
-```json
-{
-    "mcpServers": {
-        "deep-zotero": {
-            "command": "C:\\path\\to\\zotero_citation_mcp\\.venv\\Scripts\\python.exe",
-            "args": ["-m", "deep_zotero.server"]
-        }
-    }
-}
-```
-
-Restart Claude Code. All eleven tools will be available in every session.
-
----
-
-## User Guide
-
-### Updating from Zotero
-
-Re-run the indexing script whenever you add new papers or attach PDFs to existing items:
-
-```bash
-python scripts\index_library.py -v
-```
-
-The indexer is incremental by default. It compares the set of Zotero items that have PDFs against the set of document IDs already in the vector store, and only processes the difference. This means:
-
-- New items with PDFs are indexed.
-- Existing items that previously had no PDF but now do are indexed.
-- Already-indexed items are skipped entirely (no re-embedding, no API cost).
-
-To force a complete re-index (for example after changing `chunk_size` or `embedding_dimensions`):
-
-```bash
-python scripts\index_library.py --force -v
-```
-
-### Vision table extraction
-
-Tables with detected captions are automatically extracted and transcribed during indexing using Claude Haiku 4.5. No extra steps are required beyond providing an API key.
-
-**Setup:**
-
-Set the `ANTHROPIC_API_KEY` environment variable, or add `"anthropic_api_key": "YOUR_KEY"` to your config file.
-
-**How it works:**
-
-1. During indexing, the pipeline detects table captions on each page.
-2. Each captioned table is rendered to a PNG and sent to Claude Haiku 4.5 via the Anthropic Batch API.
-3. The transcribed table is stored as markdown in ChromaDB and becomes searchable via `search_tables`.
-
-**Cost:** Approximately $0.016 per table. The system prompt is cached (Anthropic prompt caching requires a minimum of 2,048 tokens), which reduces the per-table cost for large batches.
-
-**Disable vision extraction:**
+To disable vision extraction entirely:
 
 ```json
 {
@@ -198,349 +66,232 @@ Set the `ANTHROPIC_API_KEY` environment variable, or add `"anthropic_api_key": "
 }
 ```
 
-Without vision extraction, tables are still extracted by PyMuPDF's heuristic table finder, but accuracy on complex tables is lower.
+### 3. Index your library
 
-### OCR for scanned PDFs
+```bash
+deep-zotero-index -v
+```
 
-OCR is handled automatically by pymupdf-layout for image-only pages — no configuration is required to enable it. The only OCR setting is `ocr_language`, which controls the Tesseract language model used:
+To test with a subset first:
+
+```bash
+deep-zotero-index --limit 10 -v
+```
+
+This reads the Zotero SQLite database (read-only, safe while Zotero is open), extracts text/tables/figures from each PDF, chunks the text, embeds via Gemini, and stores everything in ChromaDB.
+
+CLI options:
+
+| Flag | Description |
+|------|-------------|
+| `--force` | Delete and rebuild index for all matching items |
+| `--limit N` | Only index N items |
+| `--item-key KEY` | Index a single Zotero item |
+| `--title PATTERN` | Regex filter on title (case-insensitive) |
+| `--no-vision` | Skip vision table extraction for this run |
+| `--config PATH` | Use a different config file |
+| `-v` | Debug logging |
+
+The indexer is incremental — it only processes items not already in the index. Use `--force` after changing `chunk_size`, `embedding_dimensions`, or `ocr_language`.
+
+You can also trigger indexing from the MCP client via the `index_library` tool.
+
+### 4. Register the MCP server
+
+Add to your Claude Code settings (`~/.claude/settings.json`):
 
 ```json
 {
-    "ocr_language": "fra"
+    "mcpServers": {
+        "deep-zotero": {
+            "command": "/path/to/.venv/bin/python",
+            "args": ["-m", "deep_zotero.server"]
+        }
+    }
 }
 ```
 
-The default is `"eng"` (English). Use standard Tesseract language codes: `"deu"` (German), `"spa"` (Spanish), `"fra"` (French), etc.
+On Windows:
 
-Re-index with `--force` after changing `ocr_language` to process previously indexed PDFs with the new language model.
-
-### Result reranking
-
-Search results are reranked using a composite score that combines semantic similarity with document metadata:
-
-```
-composite_score = similarity^α × section_weight × journal_weight
-```
-
-Where:
-- **similarity**: Cosine similarity from vector search (0-1)
-- **α (alpha)**: Exponent that compresses similarity range (default 0.7). Lower values give metadata more influence.
-- **section_weight**: Weight based on document section (Results: 1.0, Methods: 0.85, Introduction: 0.5, etc.)
-- **journal_weight**: Weight based on SCImago journal quartile (Q1: 1.0, Q2: 0.85, Q3: 0.65, Q4: 0.45)
-
-This reranking ensures that:
-1. Results from high-impact sections (Results, Conclusions) rank higher than boilerplate (Introduction, References)
-2. Papers from higher-ranked journals receive a boost
-3. Semantic relevance remains the primary factor, with metadata providing tiebreaking
-
-Reranking can be disabled by setting `"rerank_enabled": false` in config.json.
-
-#### Default section weights
-
-| Section | Weight | Description |
-|---------|--------|-------------|
-| `results` | 1.0 | Experimental findings |
-| `conclusion` | 1.0 | Summary and conclusions |
-| `table` | 0.9 | Extracted tables (from `search_tables`) |
-| `methods` | 0.85 | Methodology and procedures |
-| `abstract` | 0.75 | Paper abstract |
-| `background` | 0.7 | Literature review / related work |
-| `unknown` | 0.7 | Undetected sections |
-| `discussion` | 0.65 | Interpretation of results |
-| `introduction` | 0.5 | Background and motivation |
-| `preamble` | 0.3 | Title page, author info |
-| `appendix` | 0.3 | Supplementary material |
-| `references` | 0.1 | Bibliography |
-
-Override any weight by passing `section_weights={"section_name": weight}` to search tools.
-
-#### Understanding scores
-
-- **relevance_score** (0-1): Raw cosine similarity. Higher = more semantically similar to query.
-- **composite_score** (0-1): Weighted product of similarity, section weight, and journal weight.
-
-A result with `relevance_score=0.8`, `section=results` (1.0), `journal_quartile=Q1` (1.0) would have:
-```
-composite_score = 0.8^0.7 × 1.0 × 1.0 ≈ 0.86
+```json
+{
+    "mcpServers": {
+        "deep-zotero": {
+            "command": "C:\\path\\to\\.venv\\Scripts\\python.exe",
+            "args": ["-m", "deep_zotero.server"]
+        }
+    }
+}
 ```
 
-A result with `relevance_score=0.8`, `section=introduction` (0.5), `journal_quartile=Q4` (0.45) would have:
+Restart Claude Code. All 13 tools will be available.
+
+---
+
+## Configuration reference
+
+### Zotero
+
+| Field | Default | Description |
+|---|---|---|
+| `zotero_data_dir` | `~/Zotero` | Path to Zotero's data directory (contains `zotero.sqlite` and `storage/`) |
+| `chroma_db_path` | `~/.local/share/deep-zotero/chroma` | Where the ChromaDB index is stored on disk |
+
+### Embedding
+
+| Field | Default | Description |
+|---|---|---|
+| `embedding_provider` | `"gemini"` | `"gemini"` for Gemini API, `"local"` for ChromaDB's built-in all-MiniLM-L6-v2 (no key needed) |
+| `embedding_model` | `"gemini-embedding-001"` | Gemini model name (only used when provider is `"gemini"`) |
+| `embedding_dimensions` | `768` | Output vector dimensions. `gemini-embedding-001` supports 64-3072. Changing requires `--force` re-index |
+| `gemini_api_key` | `null` | Falls back to `GEMINI_API_KEY` env var |
+| `embedding_timeout` | `120.0` | Timeout in seconds for embedding API calls |
+| `embedding_max_retries` | `3` | Max retries for failed embedding calls |
+
+### Chunking
+
+| Field | Default | Description |
+|---|---|---|
+| `chunk_size` | `400` | Target chunk size in tokens (~4 chars/token). Changing requires `--force` re-index |
+| `chunk_overlap` | `100` | Overlap between consecutive chunks in tokens |
+
+### Vision
+
+| Field | Default | Description |
+|---|---|---|
+| `vision_enabled` | `true` | Enable vision table extraction during indexing |
+| `vision_model` | `"claude-haiku-4-5-20251001"` | Anthropic model for table transcription |
+| `anthropic_api_key` | `null` | Falls back to `ANTHROPIC_API_KEY` env var |
+
+### Reranking
+
+| Field | Default | Description |
+|---|---|---|
+| `rerank_enabled` | `true` | Enable composite score reranking |
+| `rerank_alpha` | `0.7` | Similarity exponent (0-1). Lower = more metadata influence |
+| `rerank_section_weights` | `null` | Override default section weights |
+| `rerank_journal_weights` | `null` | Override default journal quartile weights |
+| `oversample_multiplier` | `3` | Oversample factor before reranking |
+| `oversample_topic_factor` | `5` | Additional factor for `search_topic` |
+| `stats_sample_limit` | `10000` | Max chunks sampled for `get_index_stats` |
+
+### OCR
+
+| Field | Default | Description |
+|---|---|---|
+| `ocr_language` | `"eng"` | Tesseract language code for scanned pages (`"fra"`, `"deu"`, etc.). Changing requires `--force` re-index |
+
+### OpenAlex
+
+| Field | Default | Description |
+|---|---|---|
+| `openalex_email` | `null` | Email for OpenAlex polite pool (10 req/s vs 1 req/s). Falls back to `OPENALEX_EMAIL` env var |
+
+---
+
+## MCP tools
+
+### Semantic search
+
+**`search_papers`** — Passage-level semantic search. Returns matching text with surrounding context, reranked by composite score (similarity × section weight × journal weight). Supports `required_terms` for combining semantic search with exact word matching — each term must appear as a whole word in the passage.
+
+Parameters: `query`, `top_k` (1-50), `context_chunks` (0-3), `year_min`, `year_max`, `author`, `tag`, `collection`, `chunk_types` (text/figure/table), `section_weights`, `journal_weights`, `required_terms` (list of words that must appear in passage).
+
+**`search_topic`** — Paper-level topic search, deduplicated by document. Groups chunks by paper, scores by average and best composite relevance.
+
+Parameters: `query`, `num_papers` (1-50), `year_min`, `year_max`, `author`, `tag`, `collection`, `chunk_types`, `section_weights`, `journal_weights`.
+
+**`search_tables`** — Semantic search over table content (headers, cells, captions). Returns tables as markdown.
+
+Parameters: `query`, `top_k` (1-30), `year_min`, `year_max`, `author`, `tag`, `collection`, `journal_weights`.
+
+**`search_figures`** — Semantic search over figure captions. Returns figure metadata and paths to extracted PNGs.
+
+Parameters: `query`, `top_k` (1-30), `year_min`, `year_max`, `author`, `tag`, `collection`.
+
+### Boolean search
+
+**`search_boolean`** — Exact word matching via Zotero's native full-text index. Returns papers (not passages) matching AND/OR word queries. No phrase search, no stemming.
+
+Parameters: `query` (space-separated terms), `operator` (AND/OR), `year_min`, `year_max`.
+
+### Context expansion
+
+**`get_passage_context`** — Expand context around a passage from `search_papers`. For table results, pass `table_page` and `table_index` to find body text citing the table.
+
+Parameters: `doc_id`, `chunk_index`, `window` (1-5), `table_page`, `table_index`.
+
+### Citation graph (OpenAlex)
+
+Requires the document to have a DOI in Zotero.
+
+**`find_citing_papers`** — Papers that cite a given document. Parameters: `doc_id`, `limit` (1-100).
+
+**`find_references`** — Papers a document cites. Parameters: `doc_id`, `limit` (1-100).
+
+**`get_citation_count`** — Citation and reference counts. Parameters: `doc_id`.
+
+### Index management
+
+**`index_library`** — Trigger indexing from the MCP client. Parameters: `force_reindex`, `limit`, `item_key`, `title_pattern`, `no_vision`.
+
+**`get_index_stats`** — Document/chunk/table/figure counts, section coverage, journal coverage.
+
+**`get_reranking_config`** — Current reranking weights and valid override values.
+
+**`get_vision_costs`** — Vision API batch usage and cost summary. Parameters: `last_n` (recent entries to show).
+
+---
+
+## Reranking
+
+Search results are scored:
+
 ```
-composite_score = 0.8^0.7 × 0.5 × 0.45 ≈ 0.19
+composite_score = similarity^alpha * section_weight * journal_weight
 ```
 
-### MCP tools
+Default section weights:
 
-The MCP server exposes eleven tools to Claude Code, grouped by function.
+| Section | Weight |
+|---------|--------|
+| results | 1.0 |
+| conclusion | 1.0 |
+| table | 0.9 |
+| methods | 0.85 |
+| abstract | 0.75 |
+| background | 0.7 |
+| unknown | 0.7 |
+| discussion | 0.65 |
+| introduction | 0.5 |
+| preamble | 0.3 |
+| appendix | 0.3 |
+| references | 0.1 |
 
-#### Shared filter parameters
+Default journal weights: Q1=1.0, Q2=0.85, Q3=0.65, Q4=0.45.
 
-Most search tools accept these filters. Filters that are not native to ChromaDB (author, tag, collection) are applied in Python after retrieval, so they are exact substring matches against stored metadata.
+Override per-call via `section_weights` and `journal_weights` parameters. Set a section to 0 to exclude it. Disable reranking entirely with `"rerank_enabled": false`.
+
+---
+
+## Shared filter parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `author` | string | Case-insensitive substring match against author names |
 | `tag` | string | Case-insensitive substring match against Zotero tags |
-| `collection` | string | Case-insensitive substring match against Zotero collection names |
-| `year_min` | int | Minimum publication year (ChromaDB-native, applied before retrieval) |
-| `year_max` | int | Maximum publication year (ChromaDB-native, applied before retrieval) |
-| `section_weights` | dict | Override section weights for this call; set a section to 0 to exclude it entirely |
-| `journal_weights` | dict | Override journal quartile weights; use `"unknown"` for papers without quartile data |
-
-Filter availability by tool:
-
-| Tool | author | tag | collection | year | section_weights | journal_weights |
-|------|--------|-----|------------|------|-----------------|-----------------|
-| `search_papers` | yes | yes | yes | yes | yes | yes |
-| `search_topic` | yes | yes | yes | yes | yes | yes |
-| `search_tables` | yes | yes | yes | yes | no | yes |
-| `search_figures` | yes | yes | yes | yes | no | no |
-| `search_boolean` | no | no | no | yes | no | no |
+| `collection` | string | Case-insensitive substring match against collection names |
+| `year_min` / `year_max` | int | Publication year range |
+| `section_weights` | dict | Override section weights for this call |
+| `journal_weights` | dict | Override journal quartile weights |
+| `required_terms` | list | Exact whole-word matches required in passage (`search_papers` only) |
 
 ---
 
-#### Semantic search
+## Debug viewer
 
-##### `search_papers`
+`tools/debug_viewer.py` is a PyQt6 browser for inspecting the ChromaDB index — view papers, tables (rendered markdown vs PDF), figures, and individual chunks.
 
-Passage-level semantic search across all indexed chunks. Returns the matching text, relevance score, document metadata, and optionally surrounding chunks for context.
-
-Parameters:
-- `query` (string, required) -- Natural language search query.
-- `top_k` (int, default 10) -- Number of chunk results to return (1-50).
-- `context_chunks` (int, default 1) -- Adjacent chunks to include before and after each hit (0-3).
-- `year_min` / `year_max` / `author` / `tag` / `collection` / `section_weights` / `journal_weights` -- See shared filter parameters.
-
-Each result includes:
-- `passage` -- The matched chunk text.
-- `context_before` / `context_after` -- Lists of adjacent chunk texts.
-- `full_context` -- All context merged into a single string.
-- `doc_title`, `authors`, `year`, `publication`, `page` -- Bibliographic metadata.
-- `citation_key` -- BetterBibTeX citation key for LaTeX `\cite{}`.
-- `doc_id`, `chunk_index` -- Identifiers for follow-up with `get_passage_context`.
-- `relevance_score` -- Raw cosine similarity (0-1).
-- `composite_score` -- Reranked score incorporating section and journal weights.
-- `section` -- Document section label (abstract, methods, results, etc.).
-- `section_confidence` -- Confidence of section detection (0-1).
-- `journal_quartile` -- SCImago quartile (Q1/Q2/Q3/Q4) or null.
-
-##### `search_topic`
-
-Paper-level topic search, deduplicated by document. Searches across all chunks, then groups by paper. Each paper is scored by both its average composite relevance (overall topical fit) and its best single chunk (strongest individual passage). Results are sorted by average composite score.
-
-Parameters:
-- `query` (string, required) -- Natural language topic description.
-- `num_papers` (int, default 10) -- Number of distinct papers to return (1-50).
-- `year_min` / `year_max` / `author` / `tag` / `collection` / `section_weights` / `journal_weights` -- See shared filter parameters.
-
-Each result includes:
-- `doc_title`, `authors`, `year`, `publication`, `citation_key`, `journal_quartile` -- Bibliographic metadata.
-- `avg_score` -- Average raw similarity across all matching chunks.
-- `best_chunk_score` -- Raw similarity of the single most relevant chunk.
-- `avg_composite_score` -- Average reranked score across matching chunks.
-- `best_composite_score` -- Reranked score of the best chunk.
-- `best_passage_section` -- Section label of the best matching passage.
-- `num_relevant_chunks` -- How many chunks in this paper matched.
-- `best_passage`, `best_passage_page`, `best_passage_context` -- The strongest passage with context.
-
-##### `search_tables`
-
-Semantic search over indexed table content (headers, cells, captions). Returns tables as markdown with bibliographic metadata.
-
-Parameters:
-- `query` (string, required) -- Natural language description of desired table content.
-- `top_k` (int, default 10) -- Number of tables to return (1-30).
-- `year_min` / `year_max` / `author` / `tag` / `collection` / `journal_weights` -- See shared filter parameters.
-
-Each result includes:
-- `table_markdown` -- Full table as markdown.
-- `caption` -- Table caption if detected.
-- `num_rows`, `num_cols` -- Table dimensions.
-- `table_index` -- Index of this table on its page.
-- `page` -- Page number where the table appears.
-- `relevance_score` -- Semantic similarity (0-1).
-- `composite_score` -- Reranked score (tables are assigned `section="table"`, weight 0.9).
-- `doc_id` -- Document ID for use with `get_passage_context`.
-- `doc_title`, `authors`, `year`, `citation_key`, `publication`, `journal_quartile` -- Bibliographic metadata.
-
-To find the body text that references a specific table, use `get_passage_context` with `table_page` and `table_index`.
-
-##### `search_figures`
-
-Semantic search over figure captions. Returns figures with their captions, page numbers, and paths to extracted PNG images. Figures without detected captions are included as orphans with a generic description.
-
-Parameters:
-- `query` (string, required) -- Natural language description of desired figure content.
-- `top_k` (int, default 10) -- Number of figures to return (1-30).
-- `year_min` / `year_max` / `author` / `tag` / `collection` -- See shared filter parameters.
-
-Each result includes:
-- `caption` -- Figure caption (empty string for orphans).
-- `image_path` -- Path to the extracted PNG image on disk.
-- `figure_index` -- Index of this figure on its page.
-- `page_num` -- Page number where the figure appears.
-- `relevance_score` -- Semantic similarity (0-1).
-- `doc_id` -- Document ID.
-- `doc_title`, `authors`, `year`, `citation_key`, `publication` -- Bibliographic metadata.
-
----
-
-#### Boolean search
-
-##### `search_boolean`
-
-Exact word match via Zotero's native word index. Unlike semantic search, this finds exact word matches only — no synonyms, no similar meaning.
-
-Useful for: finding papers that contain a specific term, acronym, or identifier; verifying that a claim from a known paper is in the index; cross-checking against a semantic result set.
-
-Parameters:
-- `query` (string, required) -- Space-separated search terms (case-insensitive).
-- `operator` (string, default `"AND"`) -- `"AND"` (all terms must appear) or `"OR"` (any term matches).
-- `year_min` / `year_max` (int, optional) -- Filter by publication year.
-
-Returns a list of matching papers with bibliographic metadata (no passages). Use `search_papers` with an `author` filter to retrieve passages from a specific paper found here.
-
-Limitations:
-- No phrase search: `"heart rate"` finds papers containing both words anywhere, not the phrase.
-- No stemming: `"running"` will not match `"run"`.
-- Requires Zotero to have indexed the PDFs (Zotero indexes PDFs automatically in the background).
-
----
-
-#### Context expansion
-
-##### `get_passage_context`
-
-Expand the context window around a specific passage returned by `search_papers`. Use this when the initial result is relevant but you need to read more of the surrounding text.
-
-For table results from `search_tables`, pass `table_page` and `table_index` to find the body text that cites the table.
-
-Parameters:
-- `doc_id` (string, required) -- Document ID from a search result.
-- `chunk_index` (int, required) -- Chunk index from a search result.
-- `window` (int, default 2) -- Chunks before/after to include (1-5).
-- `table_page` (int, optional) -- Page number of the table (activates table reference lookup).
-- `table_index` (int, optional) -- Index of the table on its page (activates table reference lookup).
-
-Returns:
-- `doc_id`, `doc_title`, `citation_key` -- Document identifiers.
-- `section`, `section_confidence` -- Section of the center chunk.
-- `journal_quartile` -- SCImago quartile or null.
-- `center_chunk_index`, `window` -- Position and expansion parameters.
-- `passages` -- List of chunks, each with `chunk_index`, `page`, `section`, `text`, `is_center`.
-- `merged_text` -- All passages concatenated.
-
----
-
-#### Citation graph (OpenAlex)
-
-These tools use the OpenAlex API and require the document to have a DOI recorded in Zotero. Rate limit: 1 request/second without `openalex_email`, 10 requests/second with it.
-
-##### `find_citing_papers`
-
-Find papers that cite a given document.
-
-Parameters:
-- `doc_id` (string, required) -- Document ID from a search result.
-- `limit` (int, default 20) -- Maximum citing papers to return (1-100).
-
-Returns a list of citing papers with title, authors, year, DOI, and citation count.
-
-##### `find_references`
-
-Find papers a document cites (its bibliography).
-
-Parameters:
-- `doc_id` (string, required) -- Document ID from a search result.
-- `limit` (int, default 50) -- Maximum references to return (1-100).
-
-Returns a list of referenced papers with title, authors, year, DOI, and citation count.
-
-##### `get_citation_count`
-
-Get the citation and reference counts for a document.
-
-Parameters:
-- `doc_id` (string, required) -- Document ID from a search result.
-
-Returns:
-- `cited_by_count` -- Number of papers that cite this document (per OpenAlex).
-- `reference_count` -- Number of papers this document cites.
-- `openalex_id` -- OpenAlex work identifier.
-- `doi` -- DOI of the document.
-
----
-
-#### Index information
-
-##### `get_index_stats`
-
-Return statistics about the current index. No parameters required.
-
-Returns:
-- `total_documents` -- Number of indexed papers.
-- `total_chunks` -- Total chunk count across all documents.
-- `avg_chunks_per_doc` -- Average chunks per document.
-- `section_coverage` -- Chunk count by section label.
-- `journal_coverage` -- Document count by journal quartile.
-- `chunk_types` -- Chunk count by type (text, table, figure).
-
-Useful for verifying that indexing completed and checking what proportion of the library has been indexed.
-
-##### `get_reranking_config`
-
-Return the current reranking configuration. No parameters required.
-
-Returns:
-- `enabled` -- Whether reranking is active.
-- `alpha` -- Similarity exponent.
-- `section_weights` -- Current section weight map.
-- `journal_weights` -- Current journal quartile weight map.
-- `valid_sections` -- List of recognized section labels for use with `section_weights`.
-- `valid_quartiles` -- List of recognized quartile values for use with `journal_weights`.
-- `oversample_multiplier` -- Current oversample factor.
-
----
-
-### Example session
-
-In Claude Code, ask questions that reference your library. Claude will call the tools automatically when the MCP server is registered:
-
+```bash
+.venv/Scripts/python.exe tools/debug_viewer.py
 ```
-You: Find the 10 most relevant papers on autonomic innervation of the heart.
-
-Claude: [calls search_topic with query="autonomic innervation of the heart", num_papers=10]
-       Here are the top papers from your library, ranked by overall relevance...
-
-You: Find citations for and against using LF/HF ratio as a measure of sympathovagal balance.
-
-Claude: [calls search_papers with query="LF/HF ratio sympathovagal balance", top_k=25, context_chunks=2]
-       Three papers support this interpretation, while two challenge it...
-
-You: Show me more context around that Heathers quote.
-
-Claude: [calls get_passage_context with the doc_id and chunk_index, window=4]
-       The full surrounding argument reads...
-
-You: How many papers cite Heathers 2014?
-
-Claude: [calls get_citation_count with doc_id="<heathers_key>"]
-       [calls find_citing_papers with doc_id="<heathers_key>", limit=20]
-       That paper has 342 citations according to OpenAlex. Here are the 20 most recent...
-
-You: Show me the table of HRV normative values from that Task Force paper.
-
-Claude: [calls search_tables with query="HRV normative values", author="Task Force"]
-       Found Table 3 on page 12: ...
-
-You: Find the text in the paper that discusses that table.
-
-Claude: [calls get_passage_context with doc_id, chunk_index=0, table_page=12, table_index=0]
-       The authors state in the Methods section...
-```
-
----
-
-## Integration with agents and skills
-
-The `zotero-research` skill is an example Claude Code agent designed to use this server. It accepts high-level research requests ("find 10 papers about X", "find citations for and against Y", "what papers cite Z") and returns formatted markdown with verbatim passages, summaries, BetterBibTeX citation keys, and citation graph data. See [`examples/zotero-research/SKILL.md`](examples/zotero-research/SKILL.md) for the full skill specification.

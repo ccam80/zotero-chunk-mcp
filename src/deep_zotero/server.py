@@ -282,6 +282,24 @@ def _has_text_filters(author: str | None, tag: str | None, collection: str | Non
     return bool(author or tag or collection)
 
 
+def _apply_required_terms(results: list, terms: list[str]) -> list:
+    """Filter results to only those containing all required terms as whole words.
+
+    Case-insensitive. Checks the passage text (and full_context if available).
+    """
+    import re
+    patterns = [re.compile(r'\b' + re.escape(t) + r'\b', re.IGNORECASE) for t in terms]
+
+    filtered = []
+    for r in results:
+        text = getattr(r, 'text', '') or ''
+        full_ctx = r.full_context() if hasattr(r, 'full_context') and callable(getattr(r, 'full_context', None)) else ''
+        combined = text + ' ' + full_ctx
+        if all(p.search(combined) for p in patterns):
+            filtered.append(r)
+    return filtered
+
+
 def _result_to_dict(r) -> dict:
     """Convert RetrievalResult to API response dict.
 
@@ -321,6 +339,7 @@ def search_papers(
     chunk_types: list[str] | None = None,
     section_weights: dict[str, float] | None = None,
     journal_weights: dict[str, float] | None = None,
+    required_terms: list[str] | None = None,
 ) -> list[dict]:
     """
     Semantic search over research paper chunks.
@@ -332,6 +351,12 @@ def search_papers(
     are orthogonal dimensions — use chunk_types to select what kind of
     content (text, figures, tables) and section_weights to prefer where
     in the paper it appears.
+
+    Combine semantic search with exact word matching by passing
+    required_terms. Each term must appear as a whole word (case-insensitive)
+    in the passage text for the result to be included. This is useful for
+    ensuring results contain specific acronyms, identifiers, or keywords
+    that semantic search alone might miss.
 
     Args:
         query: Natural language search query
@@ -351,6 +376,9 @@ def search_papers(
             unknown. Values are 0.0-1.0. Set a section to 0 to exclude it.
         journal_weights: Override journal quartile weights. Keys: Q1, Q2,
             Q3, Q4, unknown. Values are 0.0-1.0.
+        required_terms: List of words that must appear in the passage text
+            (case-insensitive whole-word match). All terms must be present.
+            Use this to combine semantic search with exact keyword filtering.
 
     Returns:
         List of results with passage text, context, and metadata
@@ -381,9 +409,10 @@ def search_papers(
     retriever = _get_retriever()
     reranker = _get_reranker()
 
-    # Oversample for reranking; double if text filters will reduce results
+    # Oversample for reranking; increase if post-retrieval filters will reduce results
     base_fetch = min(top_k * _config.oversample_multiplier, 150)
-    fetch_k = base_fetch * 2 if _has_text_filters(author, tag, collection) else base_fetch
+    has_post_filters = _has_text_filters(author, tag, collection) or required_terms
+    fetch_k = base_fetch * 3 if has_post_filters else base_fetch
 
     results = retriever.search(
         query=query,
@@ -392,6 +421,8 @@ def search_papers(
         filters=_build_chromadb_filters(year_min, year_max, chunk_types)
     )
     results = _apply_text_filters(results, author, tag, collection)
+    if required_terms:
+        results = _apply_required_terms(results, required_terms)
 
     # Rerank (or bypass if disabled)
     if _config.rerank_enabled:
