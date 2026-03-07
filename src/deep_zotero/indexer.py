@@ -2,7 +2,7 @@
 import hashlib
 import json
 import logging
-import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from tqdm import tqdm
@@ -67,12 +67,12 @@ class Indexer:
         self.journal_ranker = JournalRanker()
         self._empty_docs_path = config.chroma_db_path / "empty_docs.json"
         self._config_hash_path = config.chroma_db_path / "config_hash.txt"
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if api_key:
+        if config.vision_enabled and config.anthropic_api_key:
             from .feature_extraction.vision_api import VisionAPI
             cost_log_path = config.chroma_db_path.parent / "vision_costs.json"
             self._vision_api = VisionAPI(
-                api_key=api_key,
+                api_key=config.anthropic_api_key,
+                model=config.vision_model,
                 cost_log_path=cost_log_path,
             )
         else:
@@ -148,6 +148,7 @@ class Indexer:
         """
         items = self.zotero.get_all_items_with_pdfs()
         items = [i for i in items if i.pdf_path and i.pdf_path.exists()]
+        logger.info(f"Discovered {len(items)} papers with PDFs in Zotero library")
 
         # Apply filters
         if item_key:
@@ -160,10 +161,11 @@ class Indexer:
             import re
             pattern = re.compile(title_pattern, re.IGNORECASE)
             items = [i for i in items if pattern.search(i.title)]
-            logger.info(f"Filtered to {len(items)} items matching pattern '{title_pattern}'")
+            logger.info(f"Title filter: {len(items)} papers match '{title_pattern}'")
 
         if limit:
             items = items[:limit]
+            logger.info(f"Limit applied: processing at most {limit} papers")
 
         if force_reindex:
             existing = self.store.get_indexed_doc_ids()
@@ -187,8 +189,6 @@ class Indexer:
                 "Config has changed since last index (chunk_size, overlap, embedding, or section settings). "
                 "Run with --force to re-index, otherwise results may be inconsistent."
             )
-
-        logger.info(f"Found {len(items)} items with PDFs")
 
         results: list[IndexResult] = []
         to_index: list[ZoteroItem] = []
@@ -219,13 +219,15 @@ class Indexer:
             to_index.append(item)
 
         reindex_count = len(reindex_reasons)
+        n_skipped = sum(1 for r in results if r.status == "skipped")
         logger.info(
-            f"Already indexed: {len(indexed_ids)}, "
-            f"to reindex (PDF changed): {reindex_count}, "
-            f"skipped (empty/unchanged): "
-            f"{sum(1 for r in results if r.status == 'skipped')}, "
-            f"to index: {len(to_index)}"
+            f"Index plan: {len(to_index)} to index, "
+            f"{reindex_count} to reindex (PDF changed), "
+            f"{len(indexed_ids)} already indexed, "
+            f"{n_skipped} skipped (empty/unchanged)"
         )
+        if not to_index:
+            logger.info("Nothing to index — all papers are up to date")
 
         quality_distribution: dict[str, int] = {"A": 0, "B": 0, "C": 0, "D": 0, "F": 0}
         aggregated_extraction_stats = {
@@ -239,7 +241,13 @@ class Indexer:
         figures_dir = self.config.chroma_db_path.parent / "figures"
         doc_extractions: dict[str, tuple[ZoteroItem, object]] = {}  # item_key -> (item, extraction)
 
-        for item in tqdm(to_index, desc="Extracting"):
+        total_to_extract = len(to_index)
+        extraction_times: list[float] = []
+        phase1_start = time.perf_counter()
+        log_interval = 5  # log every N papers
+
+        for i, item in enumerate(tqdm(to_index, desc="Extracting"), 1):
+            t0 = time.perf_counter()
             try:
                 logger.debug(
                     f"Starting extraction {item.item_key}: "
@@ -259,16 +267,67 @@ class Indexer:
                     item.item_key, item.title, "failed",
                     reason=f"{type(e).__name__}: {e}"))
 
+            elapsed = time.perf_counter() - t0
+            extraction_times.append(elapsed)
+
+            if i % log_interval == 0 or i == total_to_extract:
+                avg_time = sum(extraction_times) / len(extraction_times)
+                remaining = total_to_extract - i
+                eta_secs = avg_time * remaining
+                if eta_secs >= 60:
+                    eta_str = f"{eta_secs / 60:.1f}m"
+                else:
+                    eta_str = f"{eta_secs:.0f}s"
+                logger.info(
+                    f"Extraction: {i}/{total_to_extract} papers "
+                    f"({avg_time:.1f}s avg, ETA {eta_str})"
+                )
+
+        phase1_elapsed = time.perf_counter() - phase1_start
+        if total_to_extract > 0:
+            logger.info(
+                f"Extraction complete: {total_to_extract} papers in "
+                f"{phase1_elapsed:.1f}s ({phase1_elapsed / total_to_extract:.1f}s avg)"
+            )
+
         # ---- Phase 2: Resolve vision batch (one API call for all papers) ----
         if self._vision_api and doc_extractions:
-            from .pdf_processor import resolve_pending_vision
+            from .pdf_processor import resolve_pending_vision, PendingVisionWork
+            pending_count = sum(
+                len(v[1].pending_vision.specs)
+                for v in doc_extractions.values()
+                if v[1].pending_vision is not None and v[1].pending_vision.specs
+            )
+            pending_docs = sum(
+                1 for v in doc_extractions.values()
+                if v[1].pending_vision is not None and v[1].pending_vision.specs
+            )
+            if pending_count > 0:
+                logger.info(
+                    f"Vision: {pending_count} tables across {pending_docs} papers "
+                    f"queued for Batch API (up to 3 waves, est. 10-30min per wave)"
+                )
+            phase2_start = time.perf_counter()
             resolve_pending_vision(
                 {k: v[1] for k, v in doc_extractions.items()},
                 self._vision_api,
             )
+            phase2_elapsed = time.perf_counter() - phase2_start
+            if pending_count > 0:
+                logger.info(
+                    f"Vision complete: {pending_count} tables in "
+                    f"{phase2_elapsed / 60:.1f}min ({phase2_elapsed / max(pending_count, 1):.1f}s avg/table)"
+                )
 
         # ---- Phase 3: Index each document (chunk, store, etc.) ----
-        for item_key, (item, extraction) in doc_extractions.items():
+        total_to_index = len(doc_extractions)
+        index_times: list[float] = []
+        phase3_start = time.perf_counter()
+        if total_to_index > 0:
+            logger.info(f"Indexing: chunking and storing {total_to_index} papers")
+
+        for idx, (item_key, (item, extraction)) in enumerate(doc_extractions.items(), 1):
+            t0 = time.perf_counter()
             try:
                 n_chunks, n_tables, reason, extraction_stats, quality_grade = self._index_extraction(item, extraction)
 
@@ -296,6 +355,24 @@ class Indexer:
                 results.append(IndexResult(
                     item.item_key, item.title, "failed",
                     reason=f"{type(e).__name__}: {e}"))
+
+            index_times.append(time.perf_counter() - t0)
+            if idx % log_interval == 0 or idx == total_to_index:
+                avg_t = sum(index_times) / len(index_times)
+                remaining = total_to_index - idx
+                eta_secs = avg_t * remaining
+                eta_str = f"{eta_secs / 60:.1f}m" if eta_secs >= 60 else f"{eta_secs:.0f}s"
+                logger.info(
+                    f"Indexing: {idx}/{total_to_index} papers "
+                    f"({avg_t:.1f}s avg, ETA {eta_str})"
+                )
+
+        phase3_elapsed = time.perf_counter() - phase3_start
+        if total_to_index > 0:
+            logger.info(
+                f"Indexing complete: {total_to_index} papers in "
+                f"{phase3_elapsed:.1f}s ({phase3_elapsed / total_to_index:.1f}s avg)"
+            )
 
         self._save_empty_docs(empty_docs)
 

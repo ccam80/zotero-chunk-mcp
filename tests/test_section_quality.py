@@ -82,7 +82,7 @@ def test_noname1_non_keyword_sections_are_unknown(extracted_papers):
         if s.label not in ("preamble", "unknown", "introduction", "conclusion", "references", "abstract"):
             # This section was classified by keyword. Verify the keyword actually exists.
             heading_lower = s.heading_text.lower()
-            from zotero_chunk_rag.section_classifier import categorize_heading
+            from deep_zotero.section_classifier import categorize_heading
             cat, _ = categorize_heading(heading_lower)
             assert cat is not None, (
                 f"Section {s.heading_text[:40]!r} labelled {s.label!r} "

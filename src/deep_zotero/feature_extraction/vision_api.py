@@ -230,12 +230,49 @@ class VisionAPI:
     def _submit_and_poll(
         self,
         requests: list[dict],
+        max_batch_bytes: int = 200_000_000,  # 200MB safety margin under 256MB limit
     ) -> dict[str, str]:
-        """Submit a batch, poll until done, return {custom_id: response_text}."""
+        """Submit request(s) as one or more batches, poll each, merge results.
+
+        Splits into sub-batches if the serialized size would exceed
+        ``max_batch_bytes`` (the Batch API limit is 256MB).
+        """
         if not requests:
             return {}
-        batch_id = self._create_batch(requests)
-        return self._poll_batch(batch_id, len(requests))
+
+        # Split requests into sub-batches that fit under the size limit
+        batches: list[list[dict]] = []
+        current_batch: list[dict] = []
+        current_size = 0
+
+        for req in requests:
+            # Estimate serialized size (json length in bytes is a good proxy)
+            req_size = len(json.dumps(req))
+            if current_batch and current_size + req_size > max_batch_bytes:
+                batches.append(current_batch)
+                current_batch = []
+                current_size = 0
+            current_batch.append(req)
+            current_size += req_size
+
+        if current_batch:
+            batches.append(current_batch)
+
+        if len(batches) > 1:
+            logger.info(
+                "Splitting %d requests into %d sub-batches to stay under 256MB limit",
+                len(requests), len(batches),
+            )
+
+        all_results: dict[str, str] = {}
+        for i, batch_requests in enumerate(batches, 1):
+            if len(batches) > 1:
+                logger.info("Submitting sub-batch %d/%d (%d requests)", i, len(batches), len(batch_requests))
+            batch_id = self._create_batch(batch_requests)
+            results = self._poll_batch(batch_id, len(batch_requests))
+            all_results.update(results)
+
+        return all_results
 
     # ------------------------------------------------------------------
     # Table rendering

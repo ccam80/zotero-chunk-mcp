@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from zotero_chunk_rag.feature_extraction.postprocessors.cell_cleaning import (
+from deep_zotero.feature_extraction.postprocessors.cell_cleaning import (
     clean_cells,
     _map_control_chars,
     _normalize_ligatures,

@@ -21,22 +21,22 @@ from pathlib import Path
 
 import pytest
 
-from zotero_chunk_rag.feature_extraction.captions import DetectedCaption
-from zotero_chunk_rag.feature_extraction.debug_db import (
+from deep_zotero.feature_extraction.captions import DetectedCaption
+from deep_zotero.feature_extraction.debug_db import (
     write_paddle_gt_diff,
     write_paddle_result,
 )
-from zotero_chunk_rag.feature_extraction.paddle_extract import (
+from deep_zotero.feature_extraction.paddle_extract import (
     MatchedPaddleTable,
     PaddleEngine,
     RawPaddleTable,
     get_engine,
     match_tables_to_captions,
 )
-from zotero_chunk_rag.feature_extraction.paddle_engines.pp_structure import (
+from deep_zotero.feature_extraction.paddle_engines.pp_structure import (
     _parse_html_table,
 )
-from zotero_chunk_rag.feature_extraction.paddle_engines.paddleocr_vl import (
+from deep_zotero.feature_extraction.paddle_engines.paddleocr_vl import (
     _parse_markdown_table,
 )
 
@@ -505,7 +505,7 @@ class TestDebugDB:
     """Verify write_paddle_result and write_paddle_gt_diff round-trip correctly."""
 
     def test_write_paddle_result(self, tmp_path: Path) -> None:
-        from zotero_chunk_rag.feature_extraction.debug_db import write_paddle_result
+        from deep_zotero.feature_extraction.debug_db import write_paddle_result
 
         db_path = str(tmp_path / "test.db")
         row = {
@@ -541,7 +541,7 @@ class TestDebugDB:
         assert result["item_key"] == "ABC123"
 
     def test_write_paddle_gt_diff(self, tmp_path: Path) -> None:
-        from zotero_chunk_rag.feature_extraction.debug_db import write_paddle_gt_diff
+        from deep_zotero.feature_extraction.debug_db import write_paddle_gt_diff
 
         db_path = str(tmp_path / "test.db")
         row = {

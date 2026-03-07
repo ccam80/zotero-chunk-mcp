@@ -1,6 +1,6 @@
 """Tests for reference matcher."""
-from zotero_chunk_rag._reference_matcher import match_references, get_reference_context
-from zotero_chunk_rag.models import Chunk, ExtractedTable, ExtractedFigure
+from deep_zotero._reference_matcher import match_references, get_reference_context
+from deep_zotero.models import Chunk, ExtractedTable, ExtractedFigure
 
 
 def _make_chunks(texts_with_pages):

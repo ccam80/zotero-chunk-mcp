@@ -35,10 +35,6 @@ class Config:
     # Vision extraction settings
     vision_enabled: bool
     vision_model: str
-    vision_num_agents: int
-    vision_dpi: int
-    vision_consensus_threshold: float
-    vision_padding_px: int
     anthropic_api_key: str | None
 
     @classmethod
@@ -47,7 +43,7 @@ class Config:
         if path is not None:
             config_path = Path(path).expanduser()
         else:
-            config_path = Path("~/.config/zotero-chunk-rag/config.json").expanduser()
+            config_path = Path("~/.config/deep-zotero/config.json").expanduser()
 
         data = {}
         if config_path.exists():
@@ -56,7 +52,7 @@ class Config:
 
         return cls(
             zotero_data_dir=Path(data.get("zotero_data_dir", "~/Zotero")).expanduser(),
-            chroma_db_path=Path(data.get("chroma_db_path", "~/.local/share/zotero-chunk-rag/chroma")).expanduser(),
+            chroma_db_path=Path(data.get("chroma_db_path", "~/.local/share/deep-zotero/chroma")).expanduser(),
             embedding_model=data.get("embedding_model", "gemini-embedding-001"),
             embedding_dimensions=data.get("embedding_dimensions", 768),
             chunk_size=data.get("chunk_size", 400),
@@ -82,10 +78,6 @@ class Config:
             # Vision extraction settings
             vision_enabled=data.get("vision_enabled", True),
             vision_model=data.get("vision_model", "claude-haiku-4-5-20251001"),
-            vision_num_agents=data.get("vision_num_agents", 3),
-            vision_dpi=data.get("vision_dpi", 300),
-            vision_consensus_threshold=data.get("vision_consensus_threshold", 0.6),
-            vision_padding_px=data.get("vision_padding_px", 20),
             anthropic_api_key=data.get("anthropic_api_key") or os.environ.get("ANTHROPIC_API_KEY"),
         )
 

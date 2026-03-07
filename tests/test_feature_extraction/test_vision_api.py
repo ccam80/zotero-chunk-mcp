@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from zotero_chunk_rag.feature_extraction.vision_api import (
+from deep_zotero.feature_extraction.vision_api import (
     VisionAPI,
     TableVisionSpec,
     _append_cost_entry,
@@ -23,7 +23,7 @@ from zotero_chunk_rag.feature_extraction.vision_api import (
 
 def _make_api(cache: bool = True) -> VisionAPI:
     """Construct a VisionAPI without a real Anthropic client."""
-    with patch("zotero_chunk_rag.feature_extraction.vision_api.anthropic") as mock_anthropic:
+    with patch("deep_zotero.feature_extraction.vision_api.anthropic") as mock_anthropic:
         mock_anthropic.Anthropic.return_value = MagicMock()
         api = VisionAPI(api_key="test-key", cache=cache)
     return api
@@ -62,7 +62,7 @@ class TestSyncConversion:
 
     def test_no_asyncio_import(self):
         """asyncio must not appear as an import in vision_api.py."""
-        import zotero_chunk_rag.feature_extraction.vision_api as mod
+        import deep_zotero.feature_extraction.vision_api as mod
         source_path = Path(mod.__file__)
         source = source_path.read_text(encoding="utf-8")
         # Check that 'import asyncio' is not present as a top-level import
@@ -84,14 +84,14 @@ class TestSyncConversion:
 
     def test_init_no_concurrency_param(self):
         """VisionAPI.__init__ must not accept a 'concurrency' parameter."""
-        with patch("zotero_chunk_rag.feature_extraction.vision_api.anthropic") as mock_anthropic:
+        with patch("deep_zotero.feature_extraction.vision_api.anthropic") as mock_anthropic:
             mock_anthropic.Anthropic.return_value = MagicMock()
             with pytest.raises(TypeError):
                 VisionAPI(api_key="test-key", concurrency=10)
 
     def test_init_no_dpi_param(self):
         """VisionAPI.__init__ must not accept a 'dpi' parameter."""
-        with patch("zotero_chunk_rag.feature_extraction.vision_api.anthropic") as mock_anthropic:
+        with patch("deep_zotero.feature_extraction.vision_api.anthropic") as mock_anthropic:
             mock_anthropic.Anthropic.return_value = MagicMock()
             with pytest.raises(TypeError):
                 VisionAPI(api_key="test-key", dpi=300)
@@ -112,8 +112,8 @@ class TestPrepareTable:
         mock_page = MagicMock()
         mock_doc.__getitem__ = MagicMock(return_value=mock_page)
 
-        with patch("zotero_chunk_rag.feature_extraction.vision_api.pymupdf") as mock_pymupdf, \
-             patch("zotero_chunk_rag.feature_extraction.vision_api.render_table_region") as mock_render:
+        with patch("deep_zotero.feature_extraction.vision_api.pymupdf") as mock_pymupdf, \
+             patch("deep_zotero.feature_extraction.vision_api.render_table_region") as mock_render:
             mock_pymupdf.open.return_value = mock_doc
             mock_render.return_value = [(b"fake_png", "image/png")]
 
@@ -131,8 +131,8 @@ class TestPrepareTable:
         mock_page = MagicMock()
         mock_doc.__getitem__ = MagicMock(return_value=mock_page)
 
-        with patch("zotero_chunk_rag.feature_extraction.vision_api.pymupdf") as mock_pymupdf, \
-             patch("zotero_chunk_rag.feature_extraction.vision_api.render_table_region") as mock_render:
+        with patch("deep_zotero.feature_extraction.vision_api.pymupdf") as mock_pymupdf, \
+             patch("deep_zotero.feature_extraction.vision_api.render_table_region") as mock_render:
             mock_pymupdf.open.return_value = mock_doc
             mock_render.return_value = [(b"fake_png_bytes", "image/png")]
 
@@ -151,8 +151,8 @@ class TestPrepareTable:
         mock_page = MagicMock()
         mock_doc.__getitem__ = MagicMock(return_value=mock_page)
 
-        with patch("zotero_chunk_rag.feature_extraction.vision_api.pymupdf") as mock_pymupdf, \
-             patch("zotero_chunk_rag.feature_extraction.vision_api.render_table_region") as mock_render:
+        with patch("deep_zotero.feature_extraction.vision_api.pymupdf") as mock_pymupdf, \
+             patch("deep_zotero.feature_extraction.vision_api.render_table_region") as mock_render:
             mock_pymupdf.open.return_value = mock_doc
             mock_render.return_value = [
                 (b"strip1", "image/png"),
@@ -177,8 +177,8 @@ class TestPrepareTable:
         mock_page = MagicMock()
         mock_doc.__getitem__ = MagicMock(return_value=mock_page)
 
-        with patch("zotero_chunk_rag.feature_extraction.vision_api.pymupdf") as mock_pymupdf, \
-             patch("zotero_chunk_rag.feature_extraction.vision_api.render_table_region") as mock_render:
+        with patch("deep_zotero.feature_extraction.vision_api.pymupdf") as mock_pymupdf, \
+             patch("deep_zotero.feature_extraction.vision_api.render_table_region") as mock_render:
             mock_pymupdf.open.return_value = mock_doc
             mock_render.return_value = [(b"data", "image/png")]
 
@@ -195,8 +195,8 @@ class TestPrepareTable:
         mock_page = MagicMock()
         mock_doc.__getitem__ = MagicMock(return_value=mock_page)
 
-        with patch("zotero_chunk_rag.feature_extraction.vision_api.pymupdf") as mock_pymupdf, \
-             patch("zotero_chunk_rag.feature_extraction.vision_api.render_table_region") as mock_render:
+        with patch("deep_zotero.feature_extraction.vision_api.pymupdf") as mock_pymupdf, \
+             patch("deep_zotero.feature_extraction.vision_api.render_table_region") as mock_render:
             mock_pymupdf.open.return_value = mock_doc
             mock_render.side_effect = RuntimeError("render failed")
 
@@ -276,7 +276,7 @@ class TestBuildRequest:
 
     def test_model_matches_init(self):
         """params.model must match the model passed to __init__."""
-        with patch("zotero_chunk_rag.feature_extraction.vision_api.anthropic") as mock_anthropic:
+        with patch("deep_zotero.feature_extraction.vision_api.anthropic") as mock_anthropic:
             mock_anthropic.Anthropic.return_value = MagicMock()
             api = VisionAPI(api_key="test-key", model="claude-haiku-4-5-20251001")
         images = [(base64.b64encode(b"img").decode("ascii"), "image/png")]

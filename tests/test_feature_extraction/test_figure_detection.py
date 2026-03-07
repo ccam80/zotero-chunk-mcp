@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 import pymupdf
 import pytest
 
-from zotero_chunk_rag.feature_extraction.captions import DetectedCaption
-from zotero_chunk_rag.feature_extraction.methods.figure_detection import (
+from deep_zotero.feature_extraction.captions import DetectedCaption
+from deep_zotero.feature_extraction.methods.figure_detection import (
     detect_figures,
     render_figure,
 )
@@ -170,7 +170,7 @@ class TestRenderFigure:
 class TestCanonicalImports:
     def test_figure_detection_exports(self) -> None:
         """Verify all figure detection functions are importable from the canonical location."""
-        from zotero_chunk_rag.feature_extraction.methods.figure_detection import (
+        from deep_zotero.feature_extraction.methods.figure_detection import (
             _euclidean_match,
             _has_side_by_side,
             _match_by_proximity,

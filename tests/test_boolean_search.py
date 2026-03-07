@@ -192,7 +192,7 @@ def mock_zotero_db_with_fulltext(tmp_path: Path) -> Path:
 @pytest.fixture
 def zotero_client_with_fulltext(mock_zotero_db_with_fulltext: Path):
     """Create a ZoteroClient with the mock database."""
-    from zotero_chunk_rag.zotero_client import ZoteroClient
+    from deep_zotero.zotero_client import ZoteroClient
 
     # ZoteroClient expects a data_dir, not db_path
     data_dir = mock_zotero_db_with_fulltext.parent

@@ -54,9 +54,9 @@ class LocalVisionAPI:
     def __init__(
         self,
         base_url: str = "http://localhost:8118/v1",
-        model: str = "Qwen/Qwen2.5-VL-7B-Instruct",
+        model: str = "Qwen/Qwen2-VL-2B-Instruct",
         api_key: str = "EMPTY",
-        max_tokens: int = 4096,
+        max_tokens: int = 2048,
         max_workers: int = 4,
         timeout: float = 120.0,
     ) -> None:
@@ -65,7 +65,7 @@ class LocalVisionAPI:
         except ImportError:
             raise ImportError(
                 "openai package required for LocalVisionAPI: "
-                "pip install 'zotero-chunk-rag[vision]'"
+                "pip install 'deep-zotero[vision]'"
             )
 
         self._base_url = os.environ.get("LOCAL_VISION_URL", base_url)

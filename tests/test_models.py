@@ -1,6 +1,6 @@
-"""Tests for zotero_chunk_rag.models dataclasses."""
+"""Tests for deep_zotero.models dataclasses."""
 import pytest
-from zotero_chunk_rag.models import (
+from deep_zotero.models import (
     DocumentExtraction,
     PageExtraction,
     ExtractedTable,

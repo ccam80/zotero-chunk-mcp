@@ -1,5 +1,5 @@
 """
-Shared pytest fixtures for zotero-chunk-rag tests.
+Shared pytest fixtures for deep-zotero tests.
 
 All fixtures that need to be shared across test modules should be defined here.
 """
@@ -34,7 +34,7 @@ def real_papers_dir() -> Path:
 @pytest.fixture(scope="session")
 def extracted_papers():
     """Extract all fixture PDFs once per session. Returns dict keyed by filename."""
-    from zotero_chunk_rag.pdf_processor import extract_document
+    from deep_zotero.pdf_processor import extract_document
 
     return {
         name: extract_document(_FIXTURES_DIR / name)
@@ -45,7 +45,7 @@ def extracted_papers():
 @pytest.fixture(scope="session")
 def chunked_papers(extracted_papers):
     """Chunk all fixture PDFs once per session. Returns dict keyed by filename."""
-    from zotero_chunk_rag.chunker import Chunker
+    from deep_zotero.chunker import Chunker
 
     chunker = Chunker(chunk_size=400, overlap=100)
     return {
@@ -199,7 +199,7 @@ def mock_config(temp_db_path: Path, tmp_path: Path):
 
     Uses local embeddings to avoid needing API keys in tests.
     """
-    from zotero_chunk_rag.config import Config
+    from deep_zotero.config import Config
 
     # Create minimal Zotero directory structure for config validation
     zotero_dir = tmp_path / "zotero"
@@ -228,10 +228,6 @@ def mock_config(temp_db_path: Path, tmp_path: Path):
         openalex_email=None,
         vision_enabled=False,
         vision_model="claude-haiku-4-5-20251001",
-        vision_num_agents=3,
-        vision_dpi=300,
-        vision_consensus_threshold=0.6,
-        vision_padding_px=20,
         anthropic_api_key=None,
     )
 

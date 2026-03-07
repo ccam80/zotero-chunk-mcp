@@ -1,4 +1,4 @@
-"""Zotero Chunk-Level RAG System."""
+"""DeepZotero."""
 from .models import (
     ZoteroItem,
     PageExtraction,

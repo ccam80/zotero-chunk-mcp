@@ -1,15 +1,14 @@
 {
     "zotero_data_dir": "~/Zotero",
-    "chroma_db_path": "~/.local/share/zotero-chunk-rag/chroma",
+    "chroma_db_path": "~/.local/share/deep-zotero/chroma",
+    "embedding_provider": "gemini",
     "embedding_model": "gemini-embedding-001",
     "embedding_dimensions": 768,
     "chunk_size": 400,
     "chunk_overlap": 100,
     "gemini_api_key": "YOUR_GEMINI_KEY",
     "ocr_language": "eng",
-    "table_strategy": "lines_strict",
-    "image_size_limit": 0.05,
-    "tables_enabled": false,
-    "figures_enabled": false,
-    "figures_min_size": 100
+    "vision_enabled": true,
+    "vision_model": "claude-haiku-4-5-20251001",
+    "anthropic_api_key": "YOUR_ANTHROPIC_KEY"
 }

@@ -117,7 +117,7 @@ def test_no_body_text_as_figure_caption(extracted_papers):
 
 def test_image_extraction_writes_files(tmp_path):
     """When write_images=True, figures must have real PNG files on disk."""
-    from zotero_chunk_rag.pdf_processor import extract_document
+    from deep_zotero.pdf_processor import extract_document
 
     pdf_path = FIXTURES / "noname1.pdf"
     result = extract_document(

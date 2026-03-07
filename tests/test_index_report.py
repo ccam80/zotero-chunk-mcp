@@ -23,7 +23,7 @@ import pytest
 @pytest.fixture
 def sample_index_result():
     """Create a sample IndexResult for testing."""
-    from zotero_chunk_rag.indexer import IndexResult
+    from deep_zotero.indexer import IndexResult
 
     return IndexResult(
         item_key="ABC123",
@@ -39,7 +39,7 @@ def sample_index_result():
 @pytest.fixture
 def failed_index_result():
     """Create a failed IndexResult for testing."""
-    from zotero_chunk_rag.indexer import IndexResult
+    from deep_zotero.indexer import IndexResult
 
     return IndexResult(
         item_key="DEF456",
@@ -55,7 +55,7 @@ def failed_index_result():
 @pytest.fixture
 def empty_index_result():
     """Create an empty (no text) IndexResult."""
-    from zotero_chunk_rag.indexer import IndexResult
+    from deep_zotero.indexer import IndexResult
 
     return IndexResult(
         item_key="GHI789",
@@ -71,7 +71,7 @@ def empty_index_result():
 @pytest.fixture
 def sample_report(sample_index_result, failed_index_result, empty_index_result):
     """Create a sample IndexReport with mixed results."""
-    from zotero_chunk_rag.models import IndexReport
+    from deep_zotero.models import IndexReport
 
     return IndexReport(
         total_items=10,
@@ -197,7 +197,7 @@ class TestIndexReportToDictEdgeCases:
 
     def test_empty_results(self):
         """Empty results should produce valid dict."""
-        from zotero_chunk_rag.models import IndexReport
+        from deep_zotero.models import IndexReport
 
         report = IndexReport(
             total_items=0,
@@ -220,7 +220,7 @@ class TestIndexReportToDictEdgeCases:
 
     def test_all_failures(self, failed_index_result):
         """Report with only failures should work."""
-        from zotero_chunk_rag.models import IndexReport
+        from deep_zotero.models import IndexReport
 
         report = IndexReport(
             total_items=3,
@@ -306,8 +306,8 @@ class TestIndexReportToMarkdown:
 
     def test_long_title_truncated(self):
         """Long titles should be truncated in tables."""
-        from zotero_chunk_rag.indexer import IndexResult
-        from zotero_chunk_rag.models import IndexReport
+        from deep_zotero.indexer import IndexResult
+        from deep_zotero.models import IndexReport
 
         long_title = "A" * 100  # 100 character title
 
@@ -339,8 +339,8 @@ class TestIndexReportToMarkdown:
 
     def test_pipe_characters_escaped(self):
         """Pipe characters in title/reason should be escaped."""
-        from zotero_chunk_rag.indexer import IndexResult
-        from zotero_chunk_rag.models import IndexReport
+        from deep_zotero.indexer import IndexResult
+        from deep_zotero.models import IndexReport
 
         result = IndexResult(
             item_key="PIPE",
@@ -373,7 +373,7 @@ class TestIndexReportToMarkdownEdgeCases:
 
     def test_empty_extraction_stats_omits_section(self):
         """Empty extraction stats should omit the section."""
-        from zotero_chunk_rag.models import IndexReport
+        from deep_zotero.models import IndexReport
 
         report = IndexReport(
             total_items=1,
@@ -393,7 +393,7 @@ class TestIndexReportToMarkdownEdgeCases:
 
     def test_empty_quality_distribution_omits_section(self):
         """Empty quality distribution should omit the section."""
-        from zotero_chunk_rag.models import IndexReport
+        from deep_zotero.models import IndexReport
 
         report = IndexReport(
             total_items=1,
@@ -413,7 +413,7 @@ class TestIndexReportToMarkdownEdgeCases:
 
     def test_zero_quality_counts_omits_section(self):
         """All-zero quality distribution should omit the section."""
-        from zotero_chunk_rag.models import IndexReport
+        from deep_zotero.models import IndexReport
 
         report = IndexReport(
             total_items=1,
@@ -433,7 +433,7 @@ class TestIndexReportToMarkdownEdgeCases:
 
     def test_no_failures_omits_failures_section(self):
         """No failures should omit failures section."""
-        from zotero_chunk_rag.models import IndexReport
+        from deep_zotero.models import IndexReport
 
         report = IndexReport(
             total_items=1,
@@ -462,8 +462,8 @@ class TestCLIReportFlag:
 
     def test_json_report_output(self, tmp_path):
         """--report file.json should produce JSON output."""
-        from zotero_chunk_rag.models import IndexReport
-        from zotero_chunk_rag.indexer import IndexResult
+        from deep_zotero.models import IndexReport
+        from deep_zotero.indexer import IndexResult
 
         report = IndexReport(
             total_items=5,
@@ -490,7 +490,7 @@ class TestCLIReportFlag:
 
     def test_markdown_report_output(self, tmp_path):
         """--report file.md should produce Markdown output."""
-        from zotero_chunk_rag.models import IndexReport
+        from deep_zotero.models import IndexReport
 
         report = IndexReport(
             total_items=5,
@@ -514,7 +514,7 @@ class TestCLIReportFlag:
 
     def test_report_suffix_determines_format(self, tmp_path):
         """File suffix should determine output format."""
-        from zotero_chunk_rag.models import IndexReport
+        from deep_zotero.models import IndexReport
 
         report = IndexReport(
             total_items=1,

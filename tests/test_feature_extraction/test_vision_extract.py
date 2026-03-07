@@ -10,8 +10,8 @@ from unittest.mock import MagicMock
 import pymupdf
 import pytest
 
-from zotero_chunk_rag.feature_extraction.captions import DetectedCaption
-from zotero_chunk_rag.feature_extraction.vision_extract import (
+from deep_zotero.feature_extraction.captions import DetectedCaption
+from deep_zotero.feature_extraction.vision_extract import (
     EXTRACTION_EXAMPLES,
     VISION_FIRST_SYSTEM,
     AgentResponse,
@@ -235,7 +235,7 @@ class TestComputeRecropBbox:
 class TestDeletedRenderTablePng:
     def test_not_importable(self):
         with pytest.raises(ImportError):
-            from zotero_chunk_rag.feature_extraction.vision_extract import (  # noqa: F401
+            from deep_zotero.feature_extraction.vision_extract import (  # noqa: F401
                 render_table_png,
             )
 

@@ -9,7 +9,7 @@ from .indexer import Indexer
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="zotero-index",
+        prog="deep-zotero-index",
         description="Index Zotero PDFs into the chunk-RAG vector store.",
     )
     parser.add_argument(
@@ -34,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--config", type=str, default=None,
-        help="Path to config JSON file (default: ~/.config/zotero-chunk-rag/config.json)",
+        help="Path to config JSON file (default: ~/.config/deep-zotero/config.json)",
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true",

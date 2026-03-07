@@ -76,7 +76,7 @@ class TestPDFHash:
 
     def test_hash_is_deterministic(self, sample_pdf: Path):
         """Same file should produce same hash."""
-        from zotero_chunk_rag.indexer import Indexer
+        from deep_zotero.indexer import Indexer
 
         hash1 = Indexer._pdf_hash(sample_pdf)
         hash2 = Indexer._pdf_hash(sample_pdf)
@@ -87,7 +87,7 @@ class TestPDFHash:
         self, sample_pdf: Path, modified_pdf: Path
     ):
         """Different content should produce different hash."""
-        from zotero_chunk_rag.indexer import Indexer
+        from deep_zotero.indexer import Indexer
 
         hash1 = Indexer._pdf_hash(sample_pdf)
         hash2 = Indexer._pdf_hash(modified_pdf)
@@ -96,7 +96,7 @@ class TestPDFHash:
 
     def test_hash_is_hex_string(self, sample_pdf: Path):
         """Hash should be a valid hex string."""
-        from zotero_chunk_rag.indexer import Indexer
+        from deep_zotero.indexer import Indexer
 
         pdf_hash = Indexer._pdf_hash(sample_pdf)
 
@@ -109,7 +109,7 @@ class TestPDFHash:
 
     def test_hash_uses_first_64kb(self, tmp_path: Path):
         """Hash should be computed from first 64KB only (for speed)."""
-        from zotero_chunk_rag.indexer import Indexer
+        from deep_zotero.indexer import Indexer
 
         # Create a large file (>64KB)
         pdf_path = tmp_path / "large.pdf"
@@ -143,8 +143,8 @@ class TestNeedsReindex:
         self, sample_pdf: Path, mock_vector_store
     ):
         """New document (not in store) should need indexing."""
-        from zotero_chunk_rag.indexer import Indexer
-        from zotero_chunk_rag.models import ZoteroItem
+        from deep_zotero.indexer import Indexer
+        from deep_zotero.models import ZoteroItem
 
         # Create mock item
         item = ZoteroItem(
@@ -169,8 +169,8 @@ class TestNeedsReindex:
         self, sample_pdf: Path, mock_vector_store
     ):
         """Document with matching hash should not need reindex."""
-        from zotero_chunk_rag.indexer import Indexer
-        from zotero_chunk_rag.models import ZoteroItem
+        from deep_zotero.indexer import Indexer
+        from deep_zotero.models import ZoteroItem
 
         item = ZoteroItem(
             item_key="EXISTING_DOC",
@@ -199,8 +199,8 @@ class TestNeedsReindex:
         self, sample_pdf: Path, modified_pdf: Path, mock_vector_store
     ):
         """Document with different PDF hash should need reindex."""
-        from zotero_chunk_rag.indexer import Indexer
-        from zotero_chunk_rag.models import ZoteroItem
+        from deep_zotero.indexer import Indexer
+        from deep_zotero.models import ZoteroItem
 
         item = ZoteroItem(
             item_key="CHANGED_DOC",
@@ -229,8 +229,8 @@ class TestNeedsReindex:
         self, sample_pdf: Path, mock_vector_store
     ):
         """Document indexed without hash should need reindex."""
-        from zotero_chunk_rag.indexer import Indexer
-        from zotero_chunk_rag.models import ZoteroItem
+        from deep_zotero.indexer import Indexer
+        from deep_zotero.models import ZoteroItem
 
         item = ZoteroItem(
             item_key="LEGACY_DOC",
@@ -266,8 +266,8 @@ class TestVectorStoreHashStorage:
 
     def test_add_chunks_stores_hash(self, temp_db_path: Path):
         """add_chunks should store pdf_hash in metadata."""
-        from zotero_chunk_rag.vector_store import VectorStore
-        from zotero_chunk_rag.models import Chunk
+        from deep_zotero.vector_store import VectorStore
+        from deep_zotero.models import Chunk
 
         # Create mock embedder
         mock_embedder = MagicMock()
@@ -304,8 +304,8 @@ class TestVectorStoreHashStorage:
 
     def test_get_document_meta_returns_hash(self, temp_db_path: Path):
         """get_document_meta should return pdf_hash."""
-        from zotero_chunk_rag.vector_store import VectorStore
-        from zotero_chunk_rag.models import Chunk
+        from deep_zotero.vector_store import VectorStore
+        from deep_zotero.models import Chunk
 
         mock_embedder = MagicMock()
         mock_embedder.embed = MagicMock(return_value=[[0.1] * 768])
@@ -337,7 +337,7 @@ class TestVectorStoreHashStorage:
         self, temp_db_path: Path
     ):
         """get_document_meta for nonexistent doc should return None."""
-        from zotero_chunk_rag.vector_store import VectorStore
+        from deep_zotero.vector_store import VectorStore
 
         mock_embedder = MagicMock()
         store = VectorStore(temp_db_path, mock_embedder)
@@ -356,8 +356,8 @@ class TestDeleteAndReindexFlow:
 
     def test_delete_document_removes_all_chunks(self, temp_db_path: Path):
         """delete_document should remove all chunks for a document."""
-        from zotero_chunk_rag.vector_store import VectorStore
-        from zotero_chunk_rag.models import Chunk
+        from deep_zotero.vector_store import VectorStore
+        from deep_zotero.models import Chunk
 
         mock_embedder = MagicMock()
         mock_embedder.embed = MagicMock(return_value=[[0.1] * 768] * 3)
@@ -394,8 +394,8 @@ class TestDeleteAndReindexFlow:
 
     def test_reindex_replaces_content(self, temp_db_path: Path):
         """Reindexing should replace old content with new."""
-        from zotero_chunk_rag.vector_store import VectorStore
-        from zotero_chunk_rag.models import Chunk
+        from deep_zotero.vector_store import VectorStore
+        from deep_zotero.models import Chunk
 
         mock_embedder = MagicMock()
         mock_embedder.embed = MagicMock(return_value=[[0.1] * 768])

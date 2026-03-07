@@ -7,9 +7,9 @@ import pytest
 from unittest.mock import Mock, MagicMock, patch
 from dataclasses import dataclass
 
-from zotero_chunk_rag.models import ZoteroItem, Chunk, StoredChunk
-from zotero_chunk_rag.vector_store import VectorStore
-from zotero_chunk_rag.server import _build_chromadb_filters, _apply_text_filters, _has_text_filters
+from deep_zotero.models import ZoteroItem, Chunk, StoredChunk
+from deep_zotero.vector_store import VectorStore
+from deep_zotero.server import _build_chromadb_filters, _apply_text_filters, _has_text_filters
 
 
 class TestChromaDBFilterBuilder:
@@ -393,7 +393,7 @@ class TestServerToolsAcceptFilters:
 
     def test_search_papers_has_filter_params_in_description(self):
         """search_papers tool description should mention filter params."""
-        from zotero_chunk_rag.server import search_papers
+        from deep_zotero.server import search_papers
 
         # FastMCP tools have a description attribute
         desc = search_papers.description if hasattr(search_papers, 'description') else str(search_papers)
@@ -404,7 +404,7 @@ class TestServerToolsAcceptFilters:
 
     def test_search_topic_has_filter_params_in_description(self):
         """search_topic tool description should mention filter params."""
-        from zotero_chunk_rag.server import search_topic
+        from deep_zotero.server import search_topic
 
         desc = search_topic.description if hasattr(search_topic, 'description') else str(search_topic)
 
@@ -414,7 +414,7 @@ class TestServerToolsAcceptFilters:
 
     def test_search_tables_has_filter_params_in_description(self):
         """search_tables tool description should mention filter params."""
-        from zotero_chunk_rag.server import search_tables
+        from deep_zotero.server import search_tables
 
         desc = search_tables.description if hasattr(search_tables, 'description') else str(search_tables)
 
@@ -424,7 +424,7 @@ class TestServerToolsAcceptFilters:
 
     def test_build_chromadb_filters_only_handles_years(self):
         """_build_chromadb_filters should only handle year filters."""
-        from zotero_chunk_rag.server import _build_chromadb_filters
+        from deep_zotero.server import _build_chromadb_filters
 
         # Year filters work
         result = _build_chromadb_filters(year_min=2020, year_max=2023)
@@ -441,7 +441,7 @@ class TestServerToolsAcceptFilters:
 
     def test_apply_text_filters_signature(self):
         """_apply_text_filters should have the expected signature."""
-        from zotero_chunk_rag.server import _apply_text_filters
+        from deep_zotero.server import _apply_text_filters
         import inspect
 
         sig = inspect.signature(_apply_text_filters)

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from zotero_chunk_rag.feature_extraction.vision_extract import AgentResponse
+from deep_zotero.feature_extraction.vision_extract import AgentResponse
 
 
 def test_layout_import_order():
@@ -86,7 +86,7 @@ def _make_agent_response(
 
 def _make_detected_caption(text="Table 1", caption_type="table", bbox=None, y_center=100.0):
     """Build a DetectedCaption instance with the correct fields."""
-    from zotero_chunk_rag.feature_extraction.captions import DetectedCaption
+    from deep_zotero.feature_extraction.captions import DetectedCaption
     return DetectedCaption(
         text=text,
         bbox=bbox or (0.0, 50.0, 400.0, 70.0),
@@ -124,7 +124,7 @@ def _make_mock_api(responses):
 
 def _extract_and_resolve(pdf, vision_api):
     """Call extract_document + resolve_pending_vision (must be called under mocks)."""
-    from zotero_chunk_rag.pdf_processor import extract_document, resolve_pending_vision
+    from deep_zotero.pdf_processor import extract_document, resolve_pending_vision
     extraction = extract_document(pdf, vision_api=vision_api)
     if extraction.pending_vision is not None:
         resolve_pending_vision({"test": extraction}, vision_api)
@@ -144,16 +144,16 @@ def _make_page_chunk(page_num=1):
 # Shared patch targets
 # ---------------------------------------------------------------------------
 
-_PYMUPDF4LLM = "zotero_chunk_rag.pdf_processor.pymupdf4llm"
-_PYMUPDF_OPEN = "zotero_chunk_rag.pdf_processor.pymupdf.open"
-_FIND_ALL_CAPTIONS = "zotero_chunk_rag.pdf_processor.find_all_captions"
-_DETECT_SECTIONS = "zotero_chunk_rag.pdf_processor._detect_sections"
-_DETECT_ABSTRACT = "zotero_chunk_rag.pdf_processor._detect_abstract"
-_COMPUTE_STATS = "zotero_chunk_rag.pdf_processor._compute_stats"
-_COMPUTE_COMPLETENESS = "zotero_chunk_rag.pdf_processor._compute_completeness"
-_ASSIGN_HEADING = "zotero_chunk_rag.pdf_processor._assign_heading_captions"
-_ASSIGN_CONTINUATION = "zotero_chunk_rag.pdf_processor._assign_continuation_captions"
-_EXTRACT_FIGURES = "zotero_chunk_rag.pdf_processor._extract_figures_for_page"
+_PYMUPDF4LLM = "deep_zotero.pdf_processor.pymupdf4llm"
+_PYMUPDF_OPEN = "deep_zotero.pdf_processor.pymupdf.open"
+_FIND_ALL_CAPTIONS = "deep_zotero.pdf_processor.find_all_captions"
+_DETECT_SECTIONS = "deep_zotero.pdf_processor._detect_sections"
+_DETECT_ABSTRACT = "deep_zotero.pdf_processor._detect_abstract"
+_COMPUTE_STATS = "deep_zotero.pdf_processor._compute_stats"
+_COMPUTE_COMPLETENESS = "deep_zotero.pdf_processor._compute_completeness"
+_ASSIGN_HEADING = "deep_zotero.pdf_processor._assign_heading_captions"
+_ASSIGN_CONTINUATION = "deep_zotero.pdf_processor._assign_continuation_captions"
+_EXTRACT_FIGURES = "deep_zotero.pdf_processor._extract_figures_for_page"
 
 
 def _make_completeness_mock(grade="A"):
@@ -187,7 +187,7 @@ class TestExtractDocument:
 
     def test_vision_api_none_returns_empty_tables(self, tmp_path):
         """When vision_api is None, tables == [] and vision_details is None."""
-        from zotero_chunk_rag.pdf_processor import extract_document
+        from deep_zotero.pdf_processor import extract_document
 
         pdf = tmp_path / "test.pdf"
         pdf.write_bytes(b"fake")
@@ -213,7 +213,7 @@ class TestExtractDocument:
 
     def test_vision_api_populates_tables(self, tmp_path):
         """With vision_api, tables are populated from vision responses."""
-        from zotero_chunk_rag.pdf_processor import extract_document
+        from deep_zotero.pdf_processor import extract_document
 
         pdf = tmp_path / "test.pdf"
         pdf.write_bytes(b"fake")
@@ -250,7 +250,7 @@ class TestExtractDocument:
 
     def test_vision_caption_used(self, tmp_path):
         """Vision caption is used for ExtractedTable.caption."""
-        from zotero_chunk_rag.pdf_processor import extract_document
+        from deep_zotero.pdf_processor import extract_document
 
         pdf = tmp_path / "test.pdf"
         pdf.write_bytes(b"fake")
@@ -283,7 +283,7 @@ class TestExtractDocument:
 
     def test_vision_caption_fallback_to_text_layer(self, tmp_path):
         """When vision caption is empty, text-layer caption is used."""
-        from zotero_chunk_rag.pdf_processor import extract_document
+        from deep_zotero.pdf_processor import extract_document
 
         pdf = tmp_path / "test.pdf"
         pdf.write_bytes(b"fake")
@@ -312,7 +312,7 @@ class TestExtractDocument:
 
     def test_recrop_replaces_response(self, tmp_path):
         """When recrop response is not incomplete, it replaces the original."""
-        from zotero_chunk_rag.pdf_processor import extract_document
+        from deep_zotero.pdf_processor import extract_document
 
         pdf = tmp_path / "test.pdf"
         pdf.write_bytes(b"fake")
@@ -359,7 +359,7 @@ class TestExtractDocument:
 
     def test_recrop_keeps_original_when_incomplete(self, tmp_path):
         """When recrop response has is_incomplete=True, original is kept."""
-        from zotero_chunk_rag.pdf_processor import extract_document
+        from deep_zotero.pdf_processor import extract_document
 
         pdf = tmp_path / "test.pdf"
         pdf.write_bytes(b"fake")
@@ -406,7 +406,7 @@ class TestExtractDocument:
 
     def test_failed_parse_skipped(self, tmp_path):
         """Responses with parse_success=False are not converted to ExtractedTable."""
-        from zotero_chunk_rag.pdf_processor import extract_document
+        from deep_zotero.pdf_processor import extract_document
 
         pdf = tmp_path / "test.pdf"
         pdf.write_bytes(b"fake")
@@ -435,7 +435,7 @@ class TestExtractDocument:
 
     def test_vision_details_populated(self, tmp_path):
         """vision_details is populated with one entry per table crop."""
-        from zotero_chunk_rag.pdf_processor import extract_document
+        from deep_zotero.pdf_processor import extract_document
 
         pdf = tmp_path / "test.pdf"
         pdf.write_bytes(b"fake")
@@ -477,7 +477,7 @@ class TestExtractDocument:
 
     def test_cell_cleaning_applied(self, tmp_path):
         """Ligatures and leading zeros in vision output are cleaned."""
-        from zotero_chunk_rag.pdf_processor import extract_document
+        from deep_zotero.pdf_processor import extract_document
 
         pdf = tmp_path / "test.pdf"
         pdf.write_bytes(b"fake")

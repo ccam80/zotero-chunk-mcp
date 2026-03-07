@@ -1,7 +1,7 @@
 """OCR extraction tests — verify pymupdf-layout OCR works on image-only pages."""
 from pathlib import Path
 import pymupdf
-from zotero_chunk_rag.pdf_processor import extract_document
+from deep_zotero.pdf_processor import extract_document
 
 
 def _create_scanned_pdf(output_path: Path) -> Path:

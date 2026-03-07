@@ -1,7 +1,7 @@
 /.venv/
 /.claude/
-/pytest_cache/
-/__pycache__/
+pytest_cache/
+__pycache__/
 *.pyc
 *.pyo
 
@@ -14,3 +14,4 @@ STRESS_TEST_REPORT.md
 # Agent QA workspace (generated, not checked in)
 tests/agent_qa/workspace/
 NUL
+.omc/

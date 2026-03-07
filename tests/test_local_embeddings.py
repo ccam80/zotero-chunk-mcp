@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from zotero_chunk_rag.config import Config
-from zotero_chunk_rag.embedder import LocalEmbedder, Embedder, create_embedder
-from zotero_chunk_rag.vector_store import VectorStore, EmbeddingDimensionMismatchError
+from deep_zotero.config import Config
+from deep_zotero.embedder import LocalEmbedder, Embedder, create_embedder
+from deep_zotero.vector_store import VectorStore, EmbeddingDimensionMismatchError
 
 
 def _make_config(tmp_path, **overrides):
@@ -42,10 +42,6 @@ def _make_config(tmp_path, **overrides):
         openalex_email=None,
         vision_enabled=False,
         vision_model="claude-haiku-4-5-20251001",
-        vision_num_agents=3,
-        vision_dpi=300,
-        vision_consensus_threshold=0.6,
-        vision_padding_px=20,
         anthropic_api_key=None,
     )
     defaults.update(overrides)
@@ -210,7 +206,7 @@ class TestDimensionMismatch:
         store1 = VectorStore(db_path, local_embedder)
 
         # Add some data
-        from zotero_chunk_rag.models import Chunk
+        from deep_zotero.models import Chunk
         chunks = [Chunk(text="test content", page_num=1, chunk_index=0,
                        char_start=0, char_end=12, section="intro", section_confidence=1.0)]
         store1.add_chunks("doc1", {"title": "Test"}, chunks)
@@ -243,7 +239,7 @@ class TestDimensionMismatch:
         store1 = VectorStore(db_path, local_embedder)
 
         # Add some data
-        from zotero_chunk_rag.models import Chunk
+        from deep_zotero.models import Chunk
         chunks = [Chunk(text="test content", page_num=1, chunk_index=0,
                        char_start=0, char_end=12, section="intro", section_confidence=1.0)]
         store1.add_chunks("doc1", {"title": "Test"}, chunks)
@@ -277,7 +273,7 @@ class TestVectorStoreWithLocalEmbeddings:
         embedder = LocalEmbedder()
         store = VectorStore(db_path, embedder)
 
-        from zotero_chunk_rag.models import Chunk
+        from deep_zotero.models import Chunk
         chunks = [
             Chunk(text="The heart rate variability analysis showed significant changes.",
                   page_num=1, chunk_index=0, char_start=0, char_end=60,

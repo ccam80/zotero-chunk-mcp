@@ -1,9 +1,9 @@
 """End-to-end tests against real academic papers."""
 from pathlib import Path
-from zotero_chunk_rag.config import Config
-from zotero_chunk_rag.embedder import create_embedder
-from zotero_chunk_rag.vector_store import VectorStore
-from zotero_chunk_rag.retriever import Retriever
+from deep_zotero.config import Config
+from deep_zotero.embedder import create_embedder
+from deep_zotero.vector_store import VectorStore
+from deep_zotero.retriever import Retriever
 
 
 def _create_test_config(tmp_path: Path) -> Config:
@@ -32,10 +32,6 @@ def _create_test_config(tmp_path: Path) -> Config:
         openalex_email=None,
         vision_enabled=False,
         vision_model="claude-haiku-4-5-20251001",
-        vision_num_agents=3,
-        vision_dpi=300,
-        vision_consensus_threshold=0.6,
-        vision_padding_px=20,
         anthropic_api_key=None,
     )
 

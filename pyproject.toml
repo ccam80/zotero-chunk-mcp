@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "zotero-chunk-rag"
+name = "deep-zotero"
 version = "0.1.0"
-description = "Chunk-level semantic search for Zotero libraries"
+description = "Deep semantic search for Zotero libraries"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -37,7 +37,8 @@ dev = [
 ]
 
 [project.scripts]
-zotero-chunk-rag = "zotero_chunk_rag.server:mcp.run"
+deep-zotero = "deep_zotero.server:mcp.run"
+deep-zotero-index = "deep_zotero.cli:main"
 
 [tool.pytest.ini_options]
 addopts = "-m 'not vision_api'"
@@ -49,4 +50,4 @@ markers = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-zotero_chunk_rag = ["data/*.csv"]
+deep_zotero = ["data/*.csv"]

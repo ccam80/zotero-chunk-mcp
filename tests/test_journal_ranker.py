@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from zotero_chunk_rag.journal_ranker import (
+from deep_zotero.journal_ranker import (
     JournalRanker,
     _expand_abbreviations,
     _normalize_title,
@@ -259,10 +259,10 @@ class TestBundledCSV:
 
     def test_bundled_csv_exists(self):
         """Bundled CSV must exist in package data directory."""
-        import zotero_chunk_rag
+        import deep_zotero
 
         csv_path = (
-            Path(zotero_chunk_rag.__file__).parent / "data" / "scimago_quartiles.csv"
+            Path(deep_zotero.__file__).parent / "data" / "scimago_quartiles.csv"
         )
         assert csv_path.exists(), (
             f"CRITICAL: Bundled SCImago CSV not found at {csv_path}. "
@@ -273,10 +273,10 @@ class TestBundledCSV:
 
     def test_bundled_csv_is_valid(self):
         """Bundled CSV must have correct format and data."""
-        import zotero_chunk_rag
+        import deep_zotero
 
         csv_path = (
-            Path(zotero_chunk_rag.__file__).parent / "data" / "scimago_quartiles.csv"
+            Path(deep_zotero.__file__).parent / "data" / "scimago_quartiles.csv"
         )
 
         if not csv_path.exists():
@@ -352,10 +352,10 @@ class TestBundledCSV:
 
     def test_bundled_overrides_exists(self):
         """Bundled overrides CSV must exist (can be empty)."""
-        import zotero_chunk_rag
+        import deep_zotero
 
         overrides_path = (
-            Path(zotero_chunk_rag.__file__).parent / "data" / "journal_overrides.csv"
+            Path(deep_zotero.__file__).parent / "data" / "journal_overrides.csv"
         )
         assert overrides_path.exists(), (
             f"CRITICAL: Bundled overrides CSV not found at {overrides_path}. "

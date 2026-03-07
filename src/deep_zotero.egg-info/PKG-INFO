@@ -1,3 +1,31 @@
+Metadata-Version: 2.4
+Name: deep-zotero
+Version: 0.1.0
+Summary: Deep semantic search for Zotero libraries
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: chromadb>=0.4.0
+Requires-Dist: google-genai>=1.0.0
+Requires-Dist: pymupdf>=1.25.0
+Requires-Dist: pymupdf-layout
+Requires-Dist: pymupdf4llm>=0.0.17
+Requires-Dist: fastmcp>=2.0.0
+Requires-Dist: tqdm>=4.0.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: rapidfuzz>=3.0.0
+Requires-Dist: opencv-python>=4.0.0
+Requires-Dist: camelot-py>=0.11.0
+Requires-Dist: pdfplumber>=0.11.0
+Requires-Dist: paddlepaddle-gpu>=3.0.0
+Requires-Dist: paddleocr>=3.0.0
+Provides-Extra: vision
+Requires-Dist: anthropic>=0.40.0; extra == "vision"
+Requires-Dist: openai>=1.0.0; extra == "vision"
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0.0; extra == "dev"
+Requires-Dist: anthropic>=0.40.0; extra == "dev"
+
 # DeepZotero
 
 Passage-level semantic search over a Zotero library. PDFs are extracted, split into overlapping text chunks, embedded via Gemini (or a local model), and stored in ChromaDB. An MCP server exposes the index to Claude Code (or any MCP client) as eleven tool calls covering semantic search, boolean search, context expansion, citation graph lookup, and index inspection.

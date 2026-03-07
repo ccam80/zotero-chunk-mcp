@@ -1,5 +1,5 @@
 """Unit tests for content quality detection functions."""
-from zotero_chunk_rag.pdf_processor import (
+from deep_zotero.pdf_processor import (
     _detect_garbled_spacing,
     _detect_interleaved_chars,
     _detect_encoding_artifacts,
@@ -8,10 +8,10 @@ from zotero_chunk_rag.pdf_processor import (
     _classify_artifact,
     SYNTHETIC_CAPTION_PREFIX,
 )
-from zotero_chunk_rag.feature_extraction.postprocessors.cell_cleaning import (
+from deep_zotero.feature_extraction.postprocessors.cell_cleaning import (
     _looks_numeric,
 )
-from zotero_chunk_rag.models import ExtractedTable
+from deep_zotero.models import ExtractedTable
 
 
 # ---- _detect_garbled_spacing ----

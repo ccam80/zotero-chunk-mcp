@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1772656896103,
+  "lastScanned": 1772769442572,
   "projectRoot": "C:\\local_working_projects\\zotero_citation_mcp",
   "techStack": {
     "languages": [
@@ -53,67 +53,58 @@
       "path": "examples",
       "purpose": "Example code",
       "fileCount": 0,
-      "lastAccessed": 1772656896077,
+      "lastAccessed": 1772769442543,
       "keyFiles": []
     },
     "spec": {
       "path": "spec",
       "purpose": "Test specifications",
-      "fileCount": 8,
-      "lastAccessed": 1772656896078,
-      "keyFiles": [
-        "b1-b2-engine-foundation.md",
-        "b3-caption-matching.md",
-        "b4-evaluation.md",
-        "b5-report-integration.md",
-        "b6-production-integration.md"
-      ]
+      "fileCount": 1,
+      "lastAccessed": 1772769442544,
+      "keyFiles": []
     },
     "src": {
       "path": "src",
       "purpose": "Source code",
       "fileCount": 0,
-      "lastAccessed": 1772656896079,
+      "lastAccessed": 1772769442545,
       "keyFiles": []
     },
     "tests": {
       "path": "tests",
       "purpose": "Test files",
-      "fileCount": 31,
-      "lastAccessed": 1772656896079,
+      "fileCount": 24,
+      "lastAccessed": 1772769442545,
       "keyFiles": [
-        "audit_captions.py",
         "conftest.py",
-        "create_ground_truth.py",
-        "extract_table_text.py",
-        "ground_truth.db"
+        "ground_truth.db",
+        "stress_test_real_library.py",
+        "test_boolean_search.py",
+        "test_content_quality.py"
       ]
     },
     "tools": {
       "path": "tools",
       "purpose": null,
-      "fileCount": 5,
-      "lastAccessed": 1772656896080,
+      "fileCount": 2,
+      "lastAccessed": 1772769442546,
       "keyFiles": [
         "debug_viewer.py",
-        "diag_vl.py",
-        "diag_vl_content.py",
-        "engine_compare.py",
-        "test_vl_backend.py"
+        "engine_compare.py"
       ]
     },
     "_stress_test_figures": {
       "path": "_stress_test_figures",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1772656896080,
+      "lastAccessed": 1772769442546,
       "keyFiles": []
     },
     "__pycache__": {
       "path": "__pycache__",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1772656896081,
+      "lastAccessed": 1772769442547,
       "keyFiles": [
         "_audit_matching.cpython-312.pyc"
       ]
@@ -122,148 +113,310 @@
       "path": "tests\\fixtures",
       "purpose": "Test fixtures",
       "fileCount": 0,
-      "lastAccessed": 1772656896082,
+      "lastAccessed": 1772769442548,
       "keyFiles": []
     }
   },
   "hotPaths": [
     {
+      "path": "src\\zotero_chunk_rag\\server.py",
+      "accessCount": 33,
+      "lastAccessed": 1772841821102,
+      "type": "file"
+    },
+    {
       "path": "tests\\stress_test_real_library.py",
-      "accessCount": 58,
-      "lastAccessed": 1772681784084,
+      "accessCount": 23,
+      "lastAccessed": 1772842231003,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\indexer.py",
+      "accessCount": 19,
+      "lastAccessed": 1772841575589,
+      "type": "file"
+    },
+    {
+      "path": "tools\\debug_viewer.py",
+      "accessCount": 13,
+      "lastAccessed": 1772842452624,
       "type": "file"
     },
     {
       "path": "src\\zotero_chunk_rag\\feature_extraction\\debug_db.py",
-      "accessCount": 13,
-      "lastAccessed": 1772673640015,
-      "type": "file"
-    },
-    {
-      "path": "src\\zotero_chunk_rag\\pdf_processor.py",
-      "accessCount": 5,
-      "lastAccessed": 1772681656365,
-      "type": "directory"
-    },
-    {
-      "path": "pyproject.toml",
-      "accessCount": 4,
-      "lastAccessed": 1772681698297,
-      "type": "file"
-    },
-    {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\ground_truth.py",
-      "accessCount": 3,
-      "lastAccessed": 1772657485379,
-      "type": "file"
-    },
-    {
-      "path": "src\\zotero_chunk_rag",
-      "accessCount": 3,
-      "lastAccessed": 1772658028708,
-      "type": "directory"
-    },
-    {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\paddle_engines\\paddleocr_vl.py",
-      "accessCount": 3,
-      "lastAccessed": 1772680850404,
-      "type": "file"
-    },
-    {
-      "path": "src",
-      "accessCount": 3,
-      "lastAccessed": 1772680853262,
-      "type": "directory"
-    },
-    {
-      "path": "tools",
-      "accessCount": 3,
-      "lastAccessed": 1772680865244,
-      "type": "directory"
-    },
-    {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\vision_extract.py",
-      "accessCount": 3,
-      "lastAccessed": 1772681599778,
-      "type": "file"
-    },
-    {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\vision_api.py",
-      "accessCount": 3,
-      "lastAccessed": 1772681599883,
-      "type": "file"
-    },
-    {
-      "path": "tools\\docker\\docker-compose.paddleocr-vl.yml",
-      "accessCount": 3,
-      "lastAccessed": 1772681611244,
-      "type": "file"
-    },
-    {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\paddle_extract.py",
-      "accessCount": 2,
-      "lastAccessed": 1772680290088,
-      "type": "file"
-    },
-    {
-      "path": "tests",
-      "accessCount": 1,
-      "lastAccessed": 1772657057057,
-      "type": "directory"
-    },
-    {
-      "path": "src\\zotero_chunk_rag\\indexer.py",
-      "accessCount": 1,
-      "lastAccessed": 1772658028677,
-      "type": "directory"
-    },
-    {
-      "path": "src/zotero_chunk_rag/feature_extraction",
-      "accessCount": 1,
-      "lastAccessed": 1772680284505,
-      "type": "directory"
-    },
-    {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\paddle_engines\\pp_structure.py",
-      "accessCount": 1,
-      "lastAccessed": 1772680296795,
-      "type": "file"
-    },
-    {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\paddle_engines\\__init__.py",
-      "accessCount": 1,
-      "lastAccessed": 1772680297922,
+      "accessCount": 11,
+      "lastAccessed": 1772841820447,
       "type": "file"
     },
     {
       "path": "",
-      "accessCount": 1,
-      "lastAccessed": 1772680358419,
+      "accessCount": 11,
+      "lastAccessed": 1772842637016,
       "type": "directory"
     },
     {
-      "path": "tools\\engine_compare.py",
-      "accessCount": 1,
-      "lastAccessed": 1772680859218,
+      "path": "pyproject.toml",
+      "accessCount": 10,
+      "lastAccessed": 1772842700460,
       "type": "file"
     },
     {
-      "path": "src\\zotero_chunk_rag\\feature_extraction\\local_vision_api.py",
-      "accessCount": 1,
-      "lastAccessed": 1772681693346,
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\vision_api.py",
+      "accessCount": 9,
+      "lastAccessed": 1772841576494,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\config.py",
+      "accessCount": 9,
+      "lastAccessed": 1772841820086,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\pdf_processor.py",
+      "accessCount": 9,
+      "lastAccessed": 1772842270328,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 9,
+      "lastAccessed": 1772842714163,
+      "type": "file"
+    },
+    {
+      "path": "examples\\zotero-research\\SKILL.md",
+      "accessCount": 8,
+      "lastAccessed": 1772842713781,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag",
+      "accessCount": 6,
+      "lastAccessed": 1772841807927,
+      "type": "directory"
+    },
+    {
+      "path": "config.example.json",
+      "accessCount": 6,
+      "lastAccessed": 1772842411085,
+      "type": "file"
+    },
+    {
+      "path": "tests",
+      "accessCount": 6,
+      "lastAccessed": 1772842510922,
+      "type": "directory"
+    },
+    {
+      "path": ".mcp.json",
+      "accessCount": 6,
+      "lastAccessed": 1772842700859,
       "type": "file"
     },
     {
       "path": "tools\\docker\\docker-compose.local-vision.yml",
-      "accessCount": 1,
-      "lastAccessed": 1772681697367,
+      "accessCount": 5,
+      "lastAccessed": 1772775651442,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\vector_store.py",
+      "accessCount": 5,
+      "lastAccessed": 1772841753275,
+      "type": "file"
+    },
+    {
+      "path": "CLAUDE.md",
+      "accessCount": 5,
+      "lastAccessed": 1772842695334,
+      "type": "file"
+    },
+    {
+      "path": "tests\\test_indexer_vision.py",
+      "accessCount": 4,
+      "lastAccessed": 1772770954712,
       "type": "file"
     },
     {
       "path": "tools\\docker\\docker-compose.internvl.yml",
-      "accessCount": 1,
-      "lastAccessed": 1772682982814,
+      "accessCount": 4,
+      "lastAccessed": 1772771341171,
       "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\local_vision_api.py",
+      "accessCount": 3,
+      "lastAccessed": 1772771343041,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\cli.py",
+      "accessCount": 3,
+      "lastAccessed": 1772841577446,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\models.py",
+      "accessCount": 3,
+      "lastAccessed": 1772841830427,
+      "type": "file"
+    },
+    {
+      "path": "src\\deep_zotero\\cli.py",
+      "accessCount": 3,
+      "lastAccessed": 1772842368241,
+      "type": "file"
+    },
+    {
+      "path": ".claude\\settings.local.json",
+      "accessCount": 3,
+      "lastAccessed": 1772842741038,
+      "type": "file"
+    },
+    {
+      "path": "tests\\conftest.py",
+      "accessCount": 2,
+      "lastAccessed": 1772770917161,
+      "type": "file"
+    },
+    {
+      "path": "tests\\test_extraction_integration.py",
+      "accessCount": 2,
+      "lastAccessed": 1772770920308,
+      "type": "file"
+    },
+    {
+      "path": "tests\\test_local_embeddings.py",
+      "accessCount": 2,
+      "lastAccessed": 1772770923346,
+      "type": "file"
+    },
+    {
+      "path": "tests\\test_real_papers.py",
+      "accessCount": 2,
+      "lastAccessed": 1772770925162,
+      "type": "file"
+    },
+    {
+      "path": "spec\\progress.md",
+      "accessCount": 2,
+      "lastAccessed": 1772771003088,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\vision_extract.py",
+      "accessCount": 2,
+      "lastAccessed": 1772841577272,
+      "type": "file"
+    },
+    {
+      "path": "src",
+      "accessCount": 2,
+      "lastAccessed": 1772841646947,
+      "type": "directory"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\zotero_client.py",
+      "accessCount": 2,
+      "lastAccessed": 1772841826929,
+      "type": "directory"
+    },
+    {
+      "path": "src\\deep_zotero\\__init__.py",
+      "accessCount": 2,
+      "lastAccessed": 1772842335667,
+      "type": "file"
+    },
+    {
+      "path": "src\\deep_zotero\\server.py",
+      "accessCount": 2,
+      "lastAccessed": 1772842340076,
+      "type": "file"
+    },
+    {
+      "path": "src\\deep_zotero\\config.py",
+      "accessCount": 2,
+      "lastAccessed": 1772842351863,
+      "type": "file"
+    },
+    {
+      "path": "src\\deep_zotero\\feature_extraction\\local_vision_api.py",
+      "accessCount": 2,
+      "lastAccessed": 1772842373157,
+      "type": "file"
+    },
+    {
+      "path": "src\\deep_zotero",
+      "accessCount": 2,
+      "lastAccessed": 1772842486932,
+      "type": "directory"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\retriever.py",
+      "accessCount": 1,
+      "lastAccessed": 1772769589609,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\paddle_extract.py",
+      "accessCount": 1,
+      "lastAccessed": 1772769650949,
+      "type": "file"
+    },
+    {
+      "path": "spec\\plan.md",
+      "accessCount": 1,
+      "lastAccessed": 1772770118548,
+      "type": "file"
+    },
+    {
+      "path": "vision_stress_costs.json",
+      "accessCount": 1,
+      "lastAccessed": 1772836113211,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\reranker.py",
+      "accessCount": 1,
+      "lastAccessed": 1772839143337,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\__init__.py",
+      "accessCount": 1,
+      "lastAccessed": 1772841568620,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\ground_truth.py",
+      "accessCount": 1,
+      "lastAccessed": 1772841569840,
+      "type": "file"
+    },
+    {
+      "path": "tools\\engine_compare.py",
+      "accessCount": 1,
+      "lastAccessed": 1772841688187,
+      "type": "file"
+    },
+    {
+      "path": "tests\\test_feature_extraction\\test_debug_db.py",
+      "accessCount": 1,
+      "lastAccessed": 1772841688635,
+      "type": "file"
+    },
+    {
+      "path": "src\\zotero_chunk_rag\\feature_extraction\\__init__.py",
+      "accessCount": 1,
+      "lastAccessed": 1772842270744,
+      "type": "file"
+    },
+    {
+      "path": "tools",
+      "accessCount": 1,
+      "lastAccessed": 1772842330988,
+      "type": "directory"
     }
   ],
   "userDirectives": []

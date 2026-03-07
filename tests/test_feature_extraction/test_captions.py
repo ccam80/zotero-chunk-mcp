@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from zotero_chunk_rag.feature_extraction.captions import (
+from deep_zotero.feature_extraction.captions import (
     DetectedCaption,
     _FIG_CAPTION_RE,
     _FIG_CAPTION_RE_RELAXED,
@@ -327,7 +327,7 @@ class TestFindAllCaptions:
 class TestIsInReferences:
     def test_in_references(self) -> None:
         """Page within references section returns True."""
-        from zotero_chunk_rag.models import SectionSpan, PageExtraction
+        from deep_zotero.models import SectionSpan, PageExtraction
 
         sections = [
             SectionSpan(label="introduction", char_start=0, char_end=1000, heading_text="Introduction", confidence=1.0),
@@ -341,7 +341,7 @@ class TestIsInReferences:
 
     def test_not_in_references(self) -> None:
         """Page before references returns False."""
-        from zotero_chunk_rag.models import SectionSpan, PageExtraction
+        from deep_zotero.models import SectionSpan, PageExtraction
 
         sections = [
             SectionSpan(label="introduction", char_start=0, char_end=1000, heading_text="Introduction", confidence=1.0),
@@ -357,7 +357,7 @@ class TestIsInReferences:
 class TestCanonicalImports:
     def test_captions_module_exports(self) -> None:
         """Verify all caption functions are importable from the canonical location."""
-        from zotero_chunk_rag.feature_extraction.captions import (
+        from deep_zotero.feature_extraction.captions import (
             _FIG_CAPTION_RE,
             _FIG_CAPTION_RE_RELAXED,
             _FIG_LABEL_ONLY_RE,
@@ -372,7 +372,7 @@ class TestCanonicalImports:
         )
         exported = dir(
             __import__(
-                "zotero_chunk_rag.feature_extraction.captions",
+                "deep_zotero.feature_extraction.captions",
                 fromlist=["captions"],
             )
         )

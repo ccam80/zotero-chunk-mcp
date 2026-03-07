@@ -463,13 +463,24 @@ def resolve_pending_vision(
                 _finalize_document_no_tables(ext)
         return
 
+    import time as _time
+
     n_docs = len({dk for dk, _ in mapping})
     logger.info(
-        "Vision batch: %d tables across %d documents", len(all_specs), n_docs,
+        "Vision wave 1/3: submitting %d tables across %d documents "
+        "(est. 10-30min for batch processing)",
+        len(all_specs), n_docs,
     )
 
     # --- Single batch call for all tables ---
+    _w1_start = _time.perf_counter()
     all_responses = vision_api.extract_tables_batch(all_specs)
+    _w1_elapsed = _time.perf_counter() - _w1_start
+    n_parse_ok = sum(1 for r in all_responses if r.parse_success)
+    logger.info(
+        "Vision wave 1/3 complete: %d/%d parsed OK in %.1fmin",
+        n_parse_ok, len(all_responses), _w1_elapsed / 60,
+    )
 
     # Distribute responses back to per-document lists
     per_doc_responses: dict[str, list] = defaultdict(list)
@@ -550,10 +561,16 @@ def resolve_pending_vision(
         n_recrop = sum(1 for _, _, k in b2_mapping if k == "recrop")
         n_fullpage = len(b2_specs) - n_recrop
         logger.info(
-            "Vision batch 2: %d tables (%d recrop + %d full-page)",
+            "Vision wave 2/3: %d tables (%d recrop + %d full-page) "
+            "(est. 10-30min for batch processing)",
             len(b2_specs), n_recrop, n_fullpage,
         )
+        _w2_start = _time.perf_counter()
         b2_responses = vision_api.extract_tables_batch(b2_specs)
+        _w2_elapsed = _time.perf_counter() - _w2_start
+        logger.info(
+            "Vision wave 2/3 complete in %.1fmin", _w2_elapsed / 60,
+        )
         for (doc_key, local_idx, kind), resp in zip(b2_mapping, b2_responses):
             if kind == "recrop":
                 per_doc_recrop[doc_key][local_idx] = resp
@@ -602,17 +619,21 @@ def resolve_pending_vision(
 
     if b3_specs:
         logger.info(
-            "Vision batch 3 (failed-recrop follow-up): %d tables", len(b3_specs),
+            "Vision wave 3/3 (failed-recrop follow-up): %d tables "
+            "(est. 10-30min for batch processing)",
+            len(b3_specs),
         )
+        _w3_start = _time.perf_counter()
         b3_responses = vision_api.extract_tables_batch(b3_specs)
         n_recovered = 0
         for (doc_key, local_idx), resp in zip(b3_mapping, b3_responses):
             per_doc_fullpage[doc_key][local_idx] = resp
             if resp.parse_success and (resp.headers or resp.rows):
                 n_recovered += 1
+        _w3_elapsed = _time.perf_counter() - _w3_start
         logger.info(
-            "Vision batch 3 recovered %d / %d failed recrops",
-            n_recovered, len(b3_specs),
+            "Vision wave 3/3 complete in %.1fmin: recovered %d/%d failed recrops",
+            _w3_elapsed / 60, n_recovered, len(b3_specs),
         )
 
     # --- Build tables and finalize each document ---

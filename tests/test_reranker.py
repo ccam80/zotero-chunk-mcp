@@ -1,7 +1,7 @@
 """Tests for composite reranking."""
 import pytest
-from zotero_chunk_rag.models import RetrievalResult
-from zotero_chunk_rag.reranker import (
+from deep_zotero.models import RetrievalResult
+from deep_zotero.reranker import (
     Reranker,
     validate_section_weights,
     validate_journal_weights,

@@ -122,7 +122,7 @@ def _start_parent_monitor():
 # Start parent monitor before anything else
 _start_parent_monitor()
 
-mcp = FastMCP("zotero-chunk-rag")
+mcp = FastMCP("deep-zotero")
 
 # Lazy initialization
 _retriever = None
@@ -179,11 +179,15 @@ def _stored_chunk_to_retrieval_result(chunk) -> RetrievalResult:
     )
 
 
+VALID_CHUNK_TYPES = {"text", "figure", "table"}
+
+
 def _build_chromadb_filters(
     year_min: int | None = None,
     year_max: int | None = None,
+    chunk_types: list[str] | None = None,
 ) -> dict | None:
-    """Build ChromaDB where clause for year range filters.
+    """Build ChromaDB where clause for year range and chunk_type filters.
 
     IMPORTANT: ChromaDB only supports: $eq, $ne, $gt, $gte, $lt, $lte, $in, $nin
     It does NOT support substring/contains operations on metadata.
@@ -192,6 +196,7 @@ def _build_chromadb_filters(
     Args:
         year_min: Minimum publication year
         year_max: Maximum publication year
+        chunk_types: Filter to specific chunk types (text, figure, table)
 
     Returns:
         ChromaDB where clause dict, or None if no filters
@@ -201,6 +206,11 @@ def _build_chromadb_filters(
         conditions.append({"year": {"$gte": year_min}})
     if year_max:
         conditions.append({"year": {"$lte": year_max}})
+    if chunk_types:
+        if len(chunk_types) == 1:
+            conditions.append({"chunk_type": {"$eq": chunk_types[0]}})
+        else:
+            conditions.append({"chunk_type": {"$in": chunk_types}})
 
     if not conditions:
         return None
@@ -308,6 +318,7 @@ def search_papers(
     author: str | None = None,
     tag: str | None = None,
     collection: str | None = None,
+    chunk_types: list[str] | None = None,
     section_weights: dict[str, float] | None = None,
     journal_weights: dict[str, float] | None = None,
 ) -> list[dict]:
@@ -317,11 +328,10 @@ def search_papers(
     Returns relevant passages with surrounding context.
 
     Results are reranked by a composite score combining semantic similarity,
-    document section (e.g. Results, Methods), and journal quartile (Q1-Q4).
-    Pass section_weights to override default section preferences — keys are
-    section labels (abstract, introduction, background, methods, results,
-    discussion, conclusion, references, appendix, preamble, table, unknown),
-    values are 0.0-1.0. Set a section to 0 to exclude it entirely.
+    document section, and journal quartile. chunk_types and section_weights
+    are orthogonal dimensions — use chunk_types to select what kind of
+    content (text, figures, tables) and section_weights to prefer where
+    in the paper it appears.
 
     Args:
         query: Natural language search query
@@ -332,12 +342,29 @@ def search_papers(
         author: Filter by author name (case-insensitive substring match)
         tag: Filter by Zotero tag (case-insensitive substring match)
         collection: Filter by Zotero collection name (substring match)
-        section_weights: Override section weights (optional)
+        chunk_types: Filter by content type. Valid values: text, figure,
+            table. Pass a list to include multiple (e.g. ["text", "table"]).
+            Omit or pass null to search all types.
+        section_weights: Override section relevance weights. Keys are section
+            labels: abstract, introduction, background, methods, results,
+            discussion, conclusion, references, appendix, preamble, table,
+            unknown. Values are 0.0-1.0. Set a section to 0 to exclude it.
+        journal_weights: Override journal quartile weights. Keys: Q1, Q2,
+            Q3, Q4, unknown. Values are 0.0-1.0.
 
     Returns:
         List of results with passage text, context, and metadata
     """
     start = time.perf_counter()
+
+    # Validate chunk_types if provided
+    if chunk_types is not None:
+        invalid = set(chunk_types) - VALID_CHUNK_TYPES
+        if invalid:
+            raise ToolError(
+                f"Invalid chunk_types: {invalid}. "
+                f"Valid values: {', '.join(sorted(VALID_CHUNK_TYPES))}"
+            )
 
     # Validate section_weights if provided
     if section_weights is not None:
@@ -362,7 +389,7 @@ def search_papers(
         query=query,
         top_k=fetch_k,
         context_window=min(context_chunks, 3),
-        filters=_build_chromadb_filters(year_min, year_max)
+        filters=_build_chromadb_filters(year_min, year_max, chunk_types)
     )
     results = _apply_text_filters(results, author, tag, collection)
 
@@ -390,6 +417,7 @@ def search_topic(
     author: str | None = None,
     tag: str | None = None,
     collection: str | None = None,
+    chunk_types: list[str] | None = None,
     section_weights: dict[str, float] | None = None,
     journal_weights: dict[str, float] | None = None,
 ) -> list[dict]:
@@ -401,7 +429,9 @@ def search_topic(
     Results are sorted by average composite score.
 
     Papers are scored using composite relevance combining similarity, section,
-    and journal quality. Pass section_weights to adjust section preferences.
+    and journal quality. chunk_types and section_weights are orthogonal —
+    use chunk_types to select content kind and section_weights to prefer
+    where in the paper it appears.
 
     Args:
         query: Natural language topic description
@@ -411,12 +441,29 @@ def search_topic(
         author: Filter by author name (case-insensitive substring match)
         tag: Filter by Zotero tag (case-insensitive substring match)
         collection: Filter by Zotero collection name (substring match)
-        section_weights: Override section weights (optional)
+        chunk_types: Filter by content type. Valid values: text, figure,
+            table. Pass a list to include multiple (e.g. ["text", "figure"]).
+            Omit or pass null to search all types.
+        section_weights: Override section relevance weights. Keys are section
+            labels: abstract, introduction, background, methods, results,
+            discussion, conclusion, references, appendix, preamble, table,
+            unknown. Values are 0.0-1.0. Set a section to 0 to exclude it.
+        journal_weights: Override journal quartile weights. Keys: Q1, Q2,
+            Q3, Q4, unknown. Values are 0.0-1.0.
 
     Returns:
         List of per-paper results with scores and best passage
     """
     start = time.perf_counter()
+
+    # Validate chunk_types if provided
+    if chunk_types is not None:
+        invalid = set(chunk_types) - VALID_CHUNK_TYPES
+        if invalid:
+            raise ToolError(
+                f"Invalid chunk_types: {invalid}. "
+                f"Valid values: {', '.join(sorted(VALID_CHUNK_TYPES))}"
+            )
 
     # Validate section_weights if provided
     if section_weights is not None:
@@ -444,7 +491,7 @@ def search_topic(
         query=query,
         top_k=fetch_k,
         context_window=1,
-        filters=_build_chromadb_filters(year_min, year_max)
+        filters=_build_chromadb_filters(year_min, year_max, chunk_types)
     )
     results = _apply_text_filters(results, author, tag, collection)
 
@@ -514,10 +561,12 @@ def search_tables(
     Search for tables in indexed papers.
 
     Searches table content (headers, cells, captions) semantically.
-    Returns tables as markdown with metadata.
+    Returns tables as markdown with metadata. Use this for table-specific
+    searches; for mixed content searches (e.g. tables in results sections),
+    use search_papers with chunk_types=["table"] and section_weights.
 
     Results are reranked by composite score combining semantic similarity
-    and journal quartile (Q1-Q4). Tables are assigned section="table" with
+    and journal quartile. Tables are assigned section="table" with
     default weight 0.9.
 
     Args:
@@ -528,7 +577,8 @@ def search_tables(
         author: Filter by author name (case-insensitive substring match)
         tag: Filter by Zotero tag (case-insensitive substring match)
         collection: Filter by Zotero collection name (substring match)
-        journal_weights: Override journal quartile weights (optional)
+        journal_weights: Override journal quartile weights. Keys: Q1, Q2,
+            Q3, Q4, unknown. Values are 0.0-1.0.
 
     Returns:
         List of matching tables with:
@@ -539,7 +589,7 @@ def search_tables(
         - table_markdown: Full table as markdown
         - num_rows, num_cols: Table dimensions
         - relevance_score: Semantic similarity (0-1)
-        - composite_score: Reranked score (similarity × section × journal)
+        - composite_score: Reranked score (similarity * section * journal)
         - doc_id: Document ID for use with get_passage_context
     """
     start = time.perf_counter()
@@ -625,6 +675,9 @@ def search_figures(
 
     Searches figure captions semantically. Returns figures with
     their captions, page numbers, and paths to extracted images.
+    Use this for figure-specific searches; for mixed content searches
+    (e.g. figures in results sections), use search_papers with
+    chunk_types=["figure"] and section_weights.
 
     Figures without detected captions are included as "orphans"
     with a generic description like "Figure on page X".
@@ -864,6 +917,79 @@ def _get_table_reference_context(
             for c in context_chunks
         ],
         "merged_text": "\n\n".join(c.text for c in context_chunks),
+    }
+
+
+@mcp.tool()
+def index_library(
+    force_reindex: bool = False,
+    limit: int | None = None,
+    item_key: str | None = None,
+    title_pattern: str | None = None,
+    no_vision: bool = False,
+) -> dict:
+    """
+    Index Zotero PDFs into the vector store.
+
+    Extracts text, tables, and figures from PDFs, chunks them, and stores
+    embeddings in ChromaDB. Incrementally indexes only new/changed documents
+    unless force_reindex is True.
+
+    Args:
+        force_reindex: Delete and rebuild index for all matching items
+        limit: Maximum number of items to index (None = all)
+        item_key: Index only this specific Zotero item key
+        title_pattern: Regex pattern to filter items by title (case-insensitive)
+        no_vision: Disable vision-based table extraction for this run
+
+    Returns:
+        Summary with counts of indexed/failed/skipped items and quality stats
+    """
+    from .indexer import Indexer
+
+    global _config
+    if _config is None:
+        _config = Config.load()
+
+    errors = _config.validate()
+    if errors:
+        raise ToolError(f"Config errors: {'; '.join(errors)}")
+
+    config = _config
+    if no_vision:
+        from dataclasses import replace as dc_replace
+        config = dc_replace(_config, vision_enabled=False)
+
+    indexer = Indexer(config)
+    result = indexer.index_all(
+        force_reindex=force_reindex,
+        limit=limit,
+        item_key=item_key,
+        title_pattern=title_pattern,
+    )
+
+    # Serialize IndexResult objects
+    serialized_results = []
+    for r in result["results"]:
+        serialized_results.append({
+            "item_key": r.item_key,
+            "title": r.title,
+            "status": r.status,
+            "reason": r.reason,
+            "n_chunks": r.n_chunks,
+            "n_tables": r.n_tables,
+            "quality_grade": r.quality_grade,
+        })
+
+    return {
+        "results": serialized_results,
+        "indexed": result["indexed"],
+        "failed": result["failed"],
+        "empty": result["empty"],
+        "skipped": result["skipped"],
+        "already_indexed": result["already_indexed"],
+        "quality_distribution": result.get("quality_distribution"),
+        "extraction_stats": result.get("extraction_stats"),
     }
 
 
@@ -1148,6 +1274,114 @@ def get_citation_count(doc_id: str) -> dict:
         "openalex_id": work.openalex_id,
         "cited_by_count": work.cited_by_count,
         "reference_count": len(work.references),
+    }
+
+
+@mcp.tool()
+def get_vision_costs(last_n: int = 10) -> dict:
+    """
+    Get vision API batch usage and cost summary.
+
+    Reads the vision cost log written during table extraction and returns
+    a summary of token usage, costs, and per-session breakdowns.
+
+    Args:
+        last_n: Number of most recent log entries to include in detail (default 10)
+
+    Returns:
+        Dict with:
+        - total_cost_usd: Total spend across all runs
+        - total_tables: Total number of table extractions logged
+        - avg_cost_per_table_usd: Mean cost per table
+        - tokens: Breakdown of input, output, cache_write, cache_read totals
+        - sessions: Per-session summary (session_id, first_timestamp, table_count, cost_usd)
+        - recent_entries: Last N log entries in chronological order
+        - log_path: Absolute path to the cost log file
+    """
+    import json
+    from pathlib import Path
+
+    global _config
+    if _config is None:
+        _config = Config.load()
+
+    log_path = Path(_config.chroma_db_path).parent / "vision_costs.json"
+
+    if not log_path.exists():
+        return {
+            "message": "Vision API has not been used yet — no cost log found.",
+            "log_path": str(log_path),
+        }
+
+    try:
+        with open(log_path, "r", encoding="utf-8") as f:
+            entries = json.load(f)
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ToolError(f"Failed to read vision cost log: {exc}")
+
+    if not entries:
+        return {
+            "message": "Vision cost log exists but contains no entries.",
+            "log_path": str(log_path),
+        }
+
+    # Aggregate totals
+    total_cost = 0.0
+    total_input = 0
+    total_output = 0
+    total_cache_write = 0
+    total_cache_read = 0
+
+    # Per-session tracking: session_id -> {first_ts, count, cost}
+    session_map: dict[str, dict] = {}
+
+    for entry in entries:
+        total_cost += entry.get("cost_usd", 0.0)
+        total_input += entry.get("input_tokens", 0)
+        total_output += entry.get("output_tokens", 0)
+        total_cache_write += entry.get("cache_write_tokens", 0)
+        total_cache_read += entry.get("cache_read_tokens", 0)
+
+        sid = entry.get("session_id", "unknown")
+        ts = entry.get("timestamp", "")
+        if sid not in session_map:
+            session_map[sid] = {"session_id": sid, "first_timestamp": ts, "table_count": 0, "cost_usd": 0.0}
+        session_map[sid]["table_count"] += 1
+        session_map[sid]["cost_usd"] += entry.get("cost_usd", 0.0)
+        # Keep earliest timestamp
+        if ts and ts < session_map[sid]["first_timestamp"]:
+            session_map[sid]["first_timestamp"] = ts
+
+    total_tables = len(entries)
+    avg_cost = total_cost / total_tables if total_tables else 0.0
+
+    # Round session costs
+    sessions = []
+    for s in session_map.values():
+        sessions.append({
+            "session_id": s["session_id"],
+            "first_timestamp": s["first_timestamp"],
+            "table_count": s["table_count"],
+            "cost_usd": round(s["cost_usd"], 6),
+        })
+    # Sort sessions by first timestamp ascending
+    sessions.sort(key=lambda x: x["first_timestamp"])
+
+    recent = entries[-last_n:] if last_n > 0 else []
+
+    return {
+        "total_cost_usd": round(total_cost, 6),
+        "total_tables": total_tables,
+        "avg_cost_per_table_usd": round(avg_cost, 6),
+        "tokens": {
+            "input": total_input,
+            "output": total_output,
+            "cache_write": total_cache_write,
+            "cache_read": total_cache_read,
+        },
+        "sessions": sessions,
+        "recent_entries": recent,
+        "log_path": str(log_path),
     }
 
 

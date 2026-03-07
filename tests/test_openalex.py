@@ -22,7 +22,7 @@ class TestOpenAlexClient:
 
     def test_init_without_email_uses_slow_rate_limit(self):
         """Without email, rate limit should be 1 req/sec."""
-        from zotero_chunk_rag.openalex_client import OpenAlexClient
+        from deep_zotero.openalex_client import OpenAlexClient
 
         client = OpenAlexClient(email=None)
         assert client._rate_limit_delay == 1.0
@@ -30,7 +30,7 @@ class TestOpenAlexClient:
 
     def test_init_with_email_uses_fast_rate_limit(self):
         """With email, rate limit should be 0.1 sec (10 req/sec)."""
-        from zotero_chunk_rag.openalex_client import OpenAlexClient
+        from deep_zotero.openalex_client import OpenAlexClient
 
         client = OpenAlexClient(email="test@example.com")
         assert client._rate_limit_delay == 0.1
@@ -42,7 +42,7 @@ class TestDOINormalization:
 
     @pytest.fixture
     def client(self):
-        from zotero_chunk_rag.openalex_client import OpenAlexClient
+        from deep_zotero.openalex_client import OpenAlexClient
         return OpenAlexClient()
 
     def test_doi_with_https_prefix(self, client):
@@ -86,7 +86,7 @@ class TestGetWorkByDoi:
 
     @pytest.fixture
     def client(self):
-        from zotero_chunk_rag.openalex_client import OpenAlexClient
+        from deep_zotero.openalex_client import OpenAlexClient
         # Use email to speed up tests (shorter rate limit delay)
         return OpenAlexClient(email="test@example.com")
 
@@ -153,7 +153,7 @@ class TestGetCitingWorks:
 
     @pytest.fixture
     def client(self):
-        from zotero_chunk_rag.openalex_client import OpenAlexClient
+        from deep_zotero.openalex_client import OpenAlexClient
         return OpenAlexClient(email="test@example.com")
 
     def test_returns_citing_papers(self, client):
@@ -210,7 +210,7 @@ class TestGetReferences:
 
     @pytest.fixture
     def client(self):
-        from zotero_chunk_rag.openalex_client import OpenAlexClient
+        from deep_zotero.openalex_client import OpenAlexClient
         return OpenAlexClient(email="test@example.com")
 
     def test_returns_referenced_papers(self, client):
@@ -261,7 +261,7 @@ class TestFormatWork:
 
     def test_formats_work_with_authors(self):
         """Should format work with author names."""
-        from zotero_chunk_rag.openalex_client import OpenAlexClient
+        from deep_zotero.openalex_client import OpenAlexClient
 
         work = {
             "id": "https://openalex.org/W12345",
@@ -284,7 +284,7 @@ class TestFormatWork:
 
     def test_handles_missing_fields(self):
         """Should handle works with missing optional fields."""
-        from zotero_chunk_rag.openalex_client import OpenAlexClient
+        from deep_zotero.openalex_client import OpenAlexClient
 
         work = {"id": "W1"}  # Minimal work
 
@@ -297,7 +297,7 @@ class TestFormatWork:
 
     def test_limits_authors_to_three(self):
         """Should only include first 3 authors."""
-        from zotero_chunk_rag.openalex_client import OpenAlexClient
+        from deep_zotero.openalex_client import OpenAlexClient
 
         work = {
             "authorships": [
@@ -316,7 +316,7 @@ class TestRateLimiting:
 
     def test_rate_limiting_enforced(self):
         """Should enforce rate limiting between requests."""
-        from zotero_chunk_rag.openalex_client import OpenAlexClient
+        from deep_zotero.openalex_client import OpenAlexClient
 
         # Use no email = 1 second rate limit
         client = OpenAlexClient(email=None)
@@ -351,15 +351,15 @@ class TestFindCitingPapersLogic:
 
     def test_document_not_found_raises_error(self):
         """Should raise ToolError when document not found."""
-        from zotero_chunk_rag.server import ToolError
+        from deep_zotero.server import ToolError
 
         mock_store = MagicMock()
         mock_store.get_document_meta.return_value = None
 
-        with patch("zotero_chunk_rag.server._get_store", return_value=mock_store):
-            with patch("zotero_chunk_rag.server._config", MagicMock(openalex_email=None)):
+        with patch("deep_zotero.server._get_store", return_value=mock_store):
+            with patch("deep_zotero.server._config", MagicMock(openalex_email=None)):
                 # Access the underlying function from the module
-                import zotero_chunk_rag.server as server_module
+                import deep_zotero.server as server_module
 
                 # The function is wrapped, but we can test the logic by
                 # replicating what it does
@@ -374,8 +374,8 @@ class TestFindCitingPapersLogic:
         mock_store = MagicMock()
         mock_store.get_document_meta.return_value = {"title": "Test", "doi": ""}
 
-        with patch("zotero_chunk_rag.server._get_store", return_value=mock_store):
-            import zotero_chunk_rag.server as server_module
+        with patch("deep_zotero.server._get_store", return_value=mock_store):
+            import deep_zotero.server as server_module
 
             store = server_module._get_store()
             meta = store.get_document_meta("NO_DOI_DOC")
@@ -386,7 +386,7 @@ class TestFindCitingPapersLogic:
 
     def test_openalex_client_initialization(self):
         """OpenAlexClient should be initialized with config email."""
-        from zotero_chunk_rag.openalex_client import OpenAlexClient
+        from deep_zotero.openalex_client import OpenAlexClient
 
         # Without email
         client = OpenAlexClient(email=None)
@@ -408,8 +408,8 @@ class TestFindReferencesLogic:
             "doi": "10.1234/test",
         }
 
-        with patch("zotero_chunk_rag.server._get_store", return_value=mock_store):
-            import zotero_chunk_rag.server as server_module
+        with patch("deep_zotero.server._get_store", return_value=mock_store):
+            import deep_zotero.server as server_module
 
             store = server_module._get_store()
             meta = store.get_document_meta("DOC_ID")
@@ -421,8 +421,8 @@ class TestFindReferencesLogic:
         mock_store = MagicMock()
         mock_store.get_document_meta.return_value = {"title": "Test", "doi": None}
 
-        with patch("zotero_chunk_rag.server._get_store", return_value=mock_store):
-            import zotero_chunk_rag.server as server_module
+        with patch("deep_zotero.server._get_store", return_value=mock_store):
+            import deep_zotero.server as server_module
 
             store = server_module._get_store()
             meta = store.get_document_meta("NO_DOI")
@@ -436,7 +436,7 @@ class TestCitationToolsIntegration:
 
     def test_openalex_work_lookup(self):
         """Should look up work by DOI."""
-        from zotero_chunk_rag.openalex_client import OpenAlexClient
+        from deep_zotero.openalex_client import OpenAlexClient
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -457,7 +457,7 @@ class TestCitationToolsIntegration:
 
     def test_citing_works_retrieval(self):
         """Should retrieve citing works."""
-        from zotero_chunk_rag.openalex_client import OpenAlexClient
+        from deep_zotero.openalex_client import OpenAlexClient
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -477,7 +477,7 @@ class TestCitationToolsIntegration:
 
     def test_format_work_output(self):
         """Should format work output correctly."""
-        from zotero_chunk_rag.openalex_client import OpenAlexClient
+        from deep_zotero.openalex_client import OpenAlexClient
 
         work = {
             "id": "https://openalex.org/W12345",
